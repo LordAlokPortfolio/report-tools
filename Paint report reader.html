@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paint Report Reader</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+      min-height: 100vh;
+      padding: 20px;
+      color: #fff;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+      padding: 30px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      margin-bottom: 8px;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .header p {
+      font-size: 14px;
+      opacity: 0.95;
+      font-weight: 500;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.25);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      margin-top: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .content {
+      padding: 40px;
+      color: #333;
+    }
+
+    .upload-zone {
+      border: 3px dashed #ccc;
+      border-radius: 8px;
+      padding: 50px 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: #f9f9f9;
+      margin-bottom: 30px;
+    }
+
+    .upload-zone:hover {
+      border-color: #ff6b35;
+      background: #fff5f2;
+    }
+
+    .upload-zone.dragover {
+      border-color: #ff6b35;
+      background: #fff5f2;
+      transform: scale(1.02);
+    }
+
+    .upload-icon {
+      font-size: 64px;
+      margin-bottom: 15px;
+    }
+
+    .upload-text {
+      font-size: 18px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+
+    .upload-hint {
+      font-size: 14px;
+      color: #888;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+      color: white;
+      border: none;
+      padding: 15px 40px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+      transition: all 0.3s ease;
+      width: 100%;
+      margin-top: 20px;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4);
+    }
+
+    .btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .file-info {
+      background: #e8f4f8;
+      padding: 15px;
+      border-radius: 6px;
+      margin: 20px 0;
+      border-left: 4px solid #3498db;
+    }
+
+    .file-name {
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+
+    .file-size {
+      font-size: 14px;
+      color: #7f8c8d;
+    }
+
+    .status {
+      padding: 15px;
+      border-radius: 6px;
+      margin: 15px 0;
+      font-weight: 500;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border-left: 4px solid #28a745;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border-left: 4px solid #dc3545;
+    }
+
+    .status.warning {
+      background: #fff3cd;
+      color: #856404;
+      border-left: 4px solid #ffc107;
+    }
+
+    .results {
+      margin-top: 30px;
+    }
+
+    .result-header {
+      background: #2c3e50;
+      color: white;
+      padding: 15px 20px;
+      border-radius: 6px 6px 0 0;
+      font-weight: 600;
+      font-size: 18px;
+    }
+
+    .result-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .result-table th {
+      background: #34495e;
+      color: white;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .result-table td {
+      padding: 12px;
+      border-bottom: 1px solid #ecf0f1;
+      font-size: 14px;
+    }
+
+    .result-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .result-table tr:hover {
+      background: #f8f9fa;
+    }
+
+    .totals-row {
+      background: #e8f4f8 !important;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    .totals-row td {
+      border-top: 2px solid #3498db;
+    }
+
+    .raw-text-section {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .raw-text-section h3 {
+      color: #2c3e50;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .raw-text-section pre {
+      background: white;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #333;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎨 PAINT REPORT READER</h1>
+      <p>VINYL EXTRUSION TRACKER</p>
+      <div class="badge">100% LOCAL - NO DATA LEAVES YOUR COMPUTER - NO INTERNET REQUIRED AFTER LOAD</div>
+    </div>
+
+    <div class="content">
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">DROP PAINT REPORT HERE</div>
+        <div class="upload-hint">PDF (text or scanned) · JPG · PNG · Any photo of the report</div>
+      </div>
+
+      <input type="file" id="fileInput" class="file-input" accept=".pdf,.jpg,.jpeg,.png">
+
+      <div id="fileInfo" style="display: none;"></div>
+      <div id="status"></div>
+
+      <button id="readBtn" class="btn" style="display: none;">READ REPORT</button>
+      <button id="exportBtn" class="btn" style="display: none;">EXPORT TO EXCEL</button>
+
+      <div id="results" class="results" style="display: none;"></div>
+      <div id="rawTextSection" class="raw-text-section" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let currentFile = null;
+    let extractedData = null;
+    let rawExtractedText = '';
+
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const readBtn = document.getElementById('readBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const fileInfo = document.getElementById('fileInfo');
+    const statusDiv = document.getElementById('status');
+    const resultsDiv = document.getElementById('results');
+    const rawTextSection = document.getElementById('rawTextSection');
+
+    // Upload zone interactions
+    uploadZone.addEventListener('click', () => fileInput.click());
+    
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      currentFile = file;
+      
+      fileInfo.innerHTML = `
+        <div class="file-name">✓ ${file.name}</div>
+        <div class="file-size">${(file.size / 1024).toFixed(2)} KB</div>
+      `;
+      fileInfo.style.display = 'block';
+      
+      readBtn.style.display = 'block';
+      exportBtn.style.display = 'none';
+      resultsDiv.style.display = 'none';
+      rawTextSection.style.display = 'none';
+      statusDiv.innerHTML = '';
+    }
+
+    readBtn.addEventListener('click', async () => {
+      if (!currentFile) return;
+
+      readBtn.disabled = true;
+      statusDiv.innerHTML = '<div class="status warning">⏳ Processing report...</div>';
+
+      try {
+        const fileType = currentFile.type;
+        let text = '';
+
+        if (fileType === 'application/pdf') {
+          text = await extractTextFromPDF(currentFile);
+        } else if (fileType.startsWith('image/')) {
+          text = await extractTextFromImage(currentFile);
+        } else {
+          throw new Error('Unsupported file type');
+        }
+
+        rawExtractedText = text;
+        console.log('RAW EXTRACTED TEXT:');
+        console.log('='.repeat(80));
+        console.log(text);
+        console.log('='.repeat(80));
+        console.log(`Raw text extracted: ${text.length} characters`);
+
+        extractedData = parseReport(text);
+
+        if (extractedData && extractedData.entries.length > 0) {
+          displayResults(extractedData);
+          displayRawText(text);
+          statusDiv.innerHTML = '<div class="status success">✓ Done.</div>';
+          exportBtn.style.display = 'block';
+        } else {
+          statusDiv.innerHTML = `
+            <div class="status error">⚠ Could not detect paint data in this report.</div>
+            <div class="status warning">
+              The text was extracted but no ExType / color pattern was found.<br><br>
+              <strong>Check the raw text below</strong> — if the text looks correct, the report format may differ from expected.
+            </div>
+          `;
+          displayRawText(text);
+        }
+      } catch (error) {
+        console.error('Processing error:', error);
+        statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+      } finally {
+        readBtn.disabled = false;
+      }
+    });
+
+    // Extract text from PDF
+    async function extractTextFromPDF(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        
+        // Check if text is actually present
+        if (textContent.items.length > 0 && textContent.items.some(item => item.str.trim())) {
+          // Text-based PDF - use text extraction
+          console.log(`Page ${pageNum}: Text-based PDF detected`);
+          
+          // Reconstruct text by Y-position (lines)
+          const itemsByY = {};
+          textContent.items.forEach(item => {
+            const y = Math.round(item.transform[5]);
+            if (!itemsByY[y]) itemsByY[y] = [];
+            itemsByY[y].push(item);
+          });
+          
+          const sortedYs = Object.keys(itemsByY).map(Number).sort((a, b) => b - a);
+          
+          for (const y of sortedYs) {
+            const items = itemsByY[y].sort((a, b) => a.transform[4] - b.transform[4]);
+            const lineText = items.map(item => item.str).join(' ');
+            fullText += lineText + '\n';
+          }
+        } else {
+          // Scanned PDF - use OCR
+          console.log(`Page ${pageNum}: Scanned PDF detected, using OCR`);
+          const viewport = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const context = canvas.getContext('2d');
+          
+          await page.render({ canvasContext: context, viewport: viewport }).promise;
+          
+          const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
+            logger: m => console.log(m)
+          });
+          
+          fullText += text + '\n';
+        }
+      }
+      
+      return fullText;
+    }
+
+    // Extract text from image
+    async function extractTextFromImage(file) {
+      statusDiv.innerHTML = '<div class="status warning">⏳ Running OCR on image...</div>';
+      
+      const { data: { text } } = await Tesseract.recognize(file, 'eng', {
+        logger: m => console.log(m)
+      });
+      
+      return text;
+    }
+
+    // Parse line-by-line format (scanned PDFs / older format)
+    function parseLineByLine(text) {
+      console.log('Trying line-by-line format parser...');
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+      const entries = [];
+      
+      let currentEntry = null;
+      
+      for (const line of lines) {
+        // Production number
+        const prodMatch = line.match(/Production[:\s]+(\d+)/i);
+        if (prodMatch) {
+          productionNumber = prodMatch[1];
+          console.log(`Found production number: ${productionNumber}`);
+          continue;
+        }
+        
+        // Die number and color
+        const dieMatch = line.match(/^(\d{4}(?:Int|Ext)?)[^\d]*(.+)/);
+        if (dieMatch && !line.toLowerCase().includes('extype') && !line.toLowerCase().includes('total')) {
+          if (currentEntry && currentEntry.die) {
+            entries.push(currentEntry);
+          }
+          currentEntry = { die: dieMatch[1], color: dieMatch[2].trim() };
+          continue;
+        }
+        
+        // ExType description
+        const exTypeMatch = line.match(/ExType\s+\d+\s+(.+)/i);
+        if (exTypeMatch && currentEntry) {
+          currentEntry.description = exTypeMatch[1].replace(/Lengths?\s+\d+/i, '').trim();
+          continue;
+        }
+        
+        // Lengths
+        const lengthsMatch = line.match(/Lengths?\s+(\d+)/i);
+        if (lengthsMatch && currentEntry) {
+          currentEntry.lengths = parseInt(lengthsMatch[1]);
+          continue;
+        }
+        
+        // Total footage
+        const footageMatch = line.match(/Total\s+Length.*?([\d.]+)/i);
+        if (footageMatch && currentEntry) {
+          currentEntry.footage = parseFloat(footageMatch[1]);
+          continue;
+        }
+      }
+      
+      if (currentEntry && currentEntry.die) {
+        entries.push(currentEntry);
+      }
+      
+      if (entries.length > 0) {
+        console.log(`Line-by-line format: Found ${entries.length} entries`);
+        return entries;
+      }
+      
+      return null;
+    }
+
+    // Parse jumbled format (newer PDFs with scrambled columns)
+    function parseJumbledFormat(text) {
+      console.log('Trying jumbled-column format parser...');
+      const entries = [];
+      
+      // Pattern: die-color, ExType, description, Lengths X, footage all on same line
+      // Example: "4175-KV Black~Standard Profile ExType 4175 7/8" Glazing Stop Lengths 15 Total Length(ft) 241.2"
+      const jumbledPattern = /(\d{4}(?:Int|Ext)?)-(\w+)\s+([\w~\s]+?)\s+ExType\s+\d+\s+(.+?)\s+Lengths\s+(\d+)\s+Total Length\(ft\)\s+([\d.]+)/gi;
+      
+      let match;
+      while ((match = jumbledPattern.exec(text)) !== null) {
+        const [_, die, color, profile, description, lengths, footage] = match;
+        entries.push({
+          die: die.trim(),
+          color: color.trim(),
+          profile: profile.trim(),
+          description: description.trim(),
+          lengths: parseInt(lengths),
+          footage: parseFloat(footage)
+        });
+      }
+      
+      if (entries.length > 0) {
+        console.log(`Jumbled format: Found ${entries.length} entries`);
+        return entries;
+      }
+      
+      return null;
+    }
+
+    // Parse clean line-separated format (April 27 2026 format)
+    function parseCleanFormat(text) {
+      console.log('Trying clean line-separated format parser...');
+      const entries = [];
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+      
+      for (let i = 0; i < lines.length; i++) {
+        // Line 1: Die-Color~Profile (e.g., "1122-KV Black~Standard Profile")
+        const headerMatch = lines[i].match(/^(\d{4}(?:Int|Ext)?)-(\w+)\s+(.+?)~(.+)$/);
+        if (!headerMatch) continue;
+        
+        const [_, die, color, colorName, profile] = headerMatch;
+        
+        // Line 2: ExType description Lengths X (e.g., "ExType 1122 Wood Adapter 3/4 in Lengths 4")
+        if (i + 1 >= lines.length) continue;
+        const exTypeMatch = lines[i + 1].match(/^ExType\s+\d+\s+(.+?)\s+Lengths\s+(\d+)$/);
+        if (!exTypeMatch) continue;
+        
+        const [__, description, lengths] = exTypeMatch;
+        
+        // Line 3: Total Length(ft) value (e.g., "Total Length(ft) 65.0")
+        if (i + 2 >= lines.length) continue;
+        const footageMatch = lines[i + 2].match(/^Total Length\(ft\)\s+([\d.]+)$/);
+        if (!footageMatch) continue;
+        
+        const footage = parseFloat(footageMatch[1]);
+        
+        entries.push({
+          die: die.trim(),
+          color: (color + ' ' + colorName).trim(),
+          profile: profile.trim(),
+          description: description.trim(),
+          lengths: parseInt(lengths),
+          footage: footage
+        });
+        
+        i += 2; // Skip the next 2 lines we just processed
+      }
+      
+      if (entries.length > 0) {
+        console.log(`Clean format: Found ${entries.length} entries`);
+        return entries;
+      }
+      
+      return null;
+    }
+
+    // Main parsing function - tries all formats in cascade
+    function parseReport(text) {
+      let productionNumber = '';
+      let reportDate = '';
+      
+      // Extract production number (common to all formats)
+      const prodMatch = text.match(/Production[:\s]+(\d+)/i);
+      if (prodMatch) {
+        productionNumber = prodMatch[1];
+      }
+      
+      // Extract date (common format at bottom: "Monday, April 27, 2026 Page 1 of 1")
+      const dateMatch = text.match(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/i);
+      if (dateMatch) {
+        reportDate = dateMatch[2];
+      }
+      
+      // Try parsers in order: clean → jumbled → line-by-line
+      let entries = parseCleanFormat(text);
+      if (!entries) entries = parseJumbledFormat(text);
+      if (!entries) entries = parseLineByLine(text);
+      
+      if (!entries || entries.length === 0) {
+        console.log('No parser succeeded');
+        return null;
+      }
+      
+      // Calculate gallons (400 ft = 1 gallon)
+      const totalFootage = entries.reduce((sum, e) => sum + (e.footage || 0), 0);
+      const totalGallons = totalFootage / 400;
+      
+      return {
+        productionNumber,
+        reportDate,
+        entries,
+        totalFootage,
+        totalGallons
+      };
+    }
+
+    function displayResults(data) {
+      let html = `<div class="result-header">Production ${data.productionNumber}`;
+      if (data.reportDate) {
+        html += ` — ${data.reportDate}`;
+      }
+      html += `</div>`;
+      
+      html += `<table class="result-table">
+        <thead>
+          <tr>
+            <th>Die</th>
+            <th>Color</th>
+            <th>Description</th>
+            <th>Lengths</th>
+            <th>Footage</th>
+            <th>Gallons</th>
+          </tr>
+        </thead>
+        <tbody>`;
+      
+      data.entries.forEach(entry => {
+        const gallons = (entry.footage / 400).toFixed(3);
+        html += `
+          <tr>
+            <td>${entry.die}</td>
+            <td>${entry.color}</td>
+            <td>${entry.description || '-'}</td>
+            <td>${entry.lengths || '-'}</td>
+            <td>${entry.footage.toFixed(2)}</td>
+            <td>${gallons}</td>
+          </tr>`;
+      });
+      
+      html += `
+          <tr class="totals-row">
+            <td colspan="4"><strong>TOTALS</strong></td>
+            <td><strong>${data.totalFootage.toFixed(2)} ft</strong></td>
+            <td><strong>${data.totalGallons.toFixed(3)} gal</strong></td>
+          </tr>
+        </tbody>
+      </table>`;
+      
+      resultsDiv.innerHTML = html;
+      resultsDiv.style.display = 'block';
+    }
+
+    function displayRawText(text) {
+      rawTextSection.innerHTML = `
+        <h3>Raw Extracted Text (first 721 characters):</h3>
+        <pre>${text.substring(0, 721)}</pre>
+      `;
+      rawTextSection.style.display = 'block';
+    }
+
+    exportBtn.addEventListener('click', () => {
+      if (!extractedData) return;
+
+      const data = extractedData.entries.map(entry => ({
+        'Die': entry.die,
+        'Color': entry.color,
+        'Description': entry.description || '',
+        'Lengths': entry.lengths || 0,
+        'Footage': entry.footage,
+        'Gallons': (entry.footage / 400).toFixed(3)
+      }));
+
+      // Add totals row
+      data.push({
+        'Die': '',
+        'Color': '',
+        'Description': 'TOTAL',
+        'Lengths': '',
+        'Footage': extractedData.totalFootage.toFixed(2),
+        'Gallons': extractedData.totalGallons.toFixed(3)
+      });
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
+
+      const fileName = `PaintReport_${extractedData.productionNumber}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      statusDiv.innerHTML = `<div class="status success">✓ Exported to ${fileName}</div>`;
+    });
+  </script>
+</body>
+</html>

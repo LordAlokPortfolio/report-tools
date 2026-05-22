@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NCR Generator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --surface: #ffffff;
+      --background: #f8fafc;
+      --border: #e2e8f0;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --success: #10b981;
+      --error: #ef4444;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--background);
+      color: var(--text-primary);
+      line-height: 1.6;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .tab {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--text-secondary);
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--primary);
+    }
+
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-content {
+      display: none;
+      background: var(--surface);
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    h2 {
+      font-size: 20px;
+      margin-bottom: 24px;
+      color: var(--text-primary);
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="date"],
+    input[type="number"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text-secondary);
+      border: 1.5px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 24px 0 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .section-header h3 {
+      font-size: 15px;
+      margin: 0;
+    }
+
+    .po-line {
+      background: var(--background);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1.5px solid var(--border);
+    }
+
+    .po-line-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .line-number {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      padding: 16px;
+      background: var(--background);
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--primary);
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--background);
+    }
+
+    .drop-zone:hover {
+      border-color: var(--primary);
+      background: rgba(37, 99, 235, 0.02);
+    }
+
+    .image-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .image-item {
+      position: relative;
+      aspect-ratio: 4/3;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1.5px solid var(--border);
+    }
+
+    .image-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .remove-image {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      background: rgba(239, 68, 68, 0.95);
+      border: none;
+      color: white;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .form-actions .btn {
+      flex: 1;
+    }
+
+    .ncr-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .ncr-item {
+      background: var(--background);
+      padding: 16px;
+      border-radius: 6px;
+      border: 1.5px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .ncr-info h4 {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .ncr-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .ncr-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .status {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-top: 16px;
+      display: none;
+    }
+
+    .status.success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      display: block;
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--error);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      display: block;
+    }
+
+    @media (max-width: 640px) {
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+      
+      .tabs {
+        overflow-x: auto;
+      }
+      
+      .tab {
+        white-space: nowrap;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+      
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="tabs no-print">
+      <button class="tab active" onclick="switchTab('create')">Create NCR</button>
+      <button class="tab" onclick="switchTab('history')">History</button>
+      <button class="tab" onclick="switchTab('settings')">Settings</button>
+    </div>
+
+    <!-- CREATE NCR TAB -->
+    <div id="create-tab" class="tab-content active">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+        <h2 id="ncrTitle" style="margin:0;">New NCR</h2>
+        <div id="ncrNumberDisplay" style="font-size:18px;font-weight:700;color:#2563eb;font-family:monospace;background:rgba(37,99,235,0.1);padding:8px 16px;border-radius:6px;">NCR#0000</div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>Vendor Name *</label>
+          <input type="text" id="vendorName" required>
+        </div>
+        <div class="form-group">
+          <label>Date *</label>
+          <input type="date" id="date" required>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <h3>PO Line Items</h3>
+        <button class="btn btn-secondary btn-small" onclick="addPoLine()">+ Add Row</button>
+      </div>
+
+      <div id="poLinesContainer"></div>
+
+      <div class="checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="rmaRequest">
+          <span>RMA Request</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="creditIssued">
+          <span>Credit Issued</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="itemsReturn">
+          <span>Items need to be returned</span>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label>Notes / Comments</label>
+        <textarea id="notes"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Attach Images</label>
+        <div class="drop-zone" id="dropZone">
+          <p>📁 Drag & drop images or click to browse</p>
+          <p style="font-size:12px;color:#64748b;margin-top:8px;">Images will be compressed automatically</p>
+          <input type="file" id="fileInput" accept="image/*" multiple hidden>
+        </div>
+        <div id="imagePreview" class="image-preview"></div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" onclick="clearForm()">Clear</button>
+        <button class="btn btn-primary" onclick="saveAndPreview()">Save & Preview PDF</button>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div id="history-tab" class="tab-content">
+      <h2>NCR History</h2>
+      <div id="ncrList" class="ncr-list"></div>
+    </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="settings-tab" class="tab-content">
+      <h2>Company Settings</h2>
+      
+      <div class="form-group">
+        <label>Company Logo</label>
+        <input type="file" id="logoInput" accept="image/*">
+        <div id="logoPreview" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="form-group">
+        <label>Company Name</label>
+        <input type="text" id="companyName">
+      </div>
+
+      <div class="form-group">
+        <label>Company Address</label>
+        <textarea id="companyAddress" rows="3"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Purchaser Name</label>
+        <input type="text" id="purchaserName">
+      </div>
+
+      <div class="form-group">
+        <label>Purchaser Email</label>
+        <input type="email" id="purchaserEmail">
+      </div>
+
+      <div class="form-group">
+        <label>Starting NCR Number</label>
+        <input type="number" id="ncrStartNumber" value="60" min="1">
+      </div>
+
+      <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      
+      <div id="settingsStatus" class="status"></div>
+    </div>
+  </div>
+
+  <script>
+    // Global state
+    let poLineCounter = 0;
+    let uploadedImages = [];
+    let currentEditId = null;
+    let settings = {};
+
+    // Initialize
+    window.onload = function() {
+      loadSettings();
+      setTodayDate();
+      addPoLine();
+      loadHistory();
+      setupDropZone();
+    };
+
+    function loadSettings() {
+      const saved = localStorage.getItem('ncrSettings');
+      if (saved) {
+        settings = JSON.parse(saved);
+        // Initialize ncrCounter from ncrStartNumber if not set
+        if (!settings.ncrCounter) {
+          settings.ncrCounter = settings.ncrStartNumber || 60;
+        }
+      } else {
+        // First time - create default settings
+        settings = {
+          companyLogo: null,
+          companyName: '',
+          companyAddress: '',
+          purchaserName: '',
+          purchaserEmail: '',
+          ncrStartNumber: 60,
+          ncrCounter: 60
+        };
+      }
+
+      // Populate settings form
+      document.getElementById('companyName').value = settings.companyName || '';
+      document.getElementById('companyAddress').value = settings.companyAddress || '';
+      document.getElementById('purchaserName').value = settings.purchaserName || '';
+      document.getElementById('purchaserEmail').value = settings.purchaserEmail || '';
+      document.getElementById('ncrStartNumber').value = settings.ncrStartNumber || 60;
+
+      if (settings.companyLogo) {
+        document.getElementById('logoPreview').innerHTML = `<img src="${settings.companyLogo}" style="max-width:200px;max-height:100px;border:1px solid #e2e8f0;border-radius:4px;">`;
+      }
+
+      // Update NCR number display
+      updateNcrNumberDisplay();
+    }
+
+    function updateNcrNumberDisplay(customNumber) {
+      const ncrNum = customNumber || `NCR#${String(settings.ncrCounter).padStart(4, '0')}`;
+      document.getElementById('ncrNumberDisplay').textContent = ncrNum;
+    }
+
+    function saveSettings() {
+      const newStartNumber = parseInt(document.getElementById('ncrStartNumber').value) || 60;
+      const oldStartNumber = settings.ncrStartNumber;
+      
+      settings.companyName = document.getElementById('companyName').value;
+      settings.companyAddress = document.getElementById('companyAddress').value;
+      settings.purchaserName = document.getElementById('purchaserName').value;
+      settings.purchaserEmail = document.getElementById('purchaserEmail').value;
+      settings.ncrStartNumber = newStartNumber;
+
+      // If counter doesn't exist OR user changed the start number, reset counter to new start
+      if (!settings.ncrCounter || oldStartNumber !== newStartNumber) {
+        settings.ncrCounter = newStartNumber;
+      }
+
+      localStorage.setItem('ncrSettings', JSON.stringify(settings));
+      
+      // Update the display immediately
+      updateNcrNumberDisplay();
+      
+      showStatus('settingsStatus', 'Settings saved successfully!', 'success');
+    }
+
+    document.getElementById('logoInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        compressImage(file, 200, (compressed) => {
+          settings.companyLogo = compressed;
+          document.getElementById('logoPreview').innerHTML = `<img src="${compressed}" style="max-width:200px;max-height:100px;border:1px solid #e2e8f0;border-radius:4px;">`;
+        });
+      }
+    });
+
+    function setTodayDate() {
+      document.getElementById('date').value = new Date().toISOString().split('T')[0];
+    }
+
+    function setupDropZone() {
+      const dropZone = document.getElementById('dropZone');
+      const fileInput = document.getElementById('fileInput');
+
+      dropZone.onclick = () => fileInput.click();
+
+      dropZone.ondragover = (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#2563eb';
+      };
+
+      dropZone.ondragleave = () => {
+        dropZone.style.borderColor = '#e2e8f0';
+      };
+
+      dropZone.ondrop = (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#e2e8f0';
+        handleFiles(e.dataTransfer.files);
+      };
+
+      fileInput.onchange = (e) => handleFiles(e.target.files);
+    }
+
+    function handleFiles(files) {
+      Array.from(files).forEach(file => {
+        if (file.type.startsWith('image/')) {
+          compressImage(file, 800, (compressed) => {
+            uploadedImages.push({
+              name: file.name,
+              data: compressed
+            });
+            renderImagePreview();
+          });
+        }
+      });
+    }
+
+    function compressImage(file, maxWidth, callback) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          callback(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderImagePreview() {
+      const preview = document.getElementById('imagePreview');
+      preview.innerHTML = uploadedImages.map((img, i) => `
+        <div class="image-item">
+          <img src="${img.data}" alt="${img.name}">
+          <button class="remove-image" onclick="removeImage(${i})">×</button>
+        </div>
+      `).join('');
+    }
+
+    function removeImage(index) {
+      uploadedImages.splice(index, 1);
+      renderImagePreview();
+    }
+
+    function addPoLine() {
+      poLineCounter++;
+      const container = document.getElementById('poLinesContainer');
+      const html = `
+        <div class="po-line" id="line${poLineCounter}">
+          ${poLineCounter > 1 ? `
+          <div class="po-line-header">
+            <span class="line-number">Line ${poLineCounter}</span>
+            <button class="btn btn-secondary btn-small" onclick="removeLine(${poLineCounter})">Remove</button>
+          </div>
+          ` : ''}
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label>PO Number *</label>
+              <input type="text" class="po-field" data-field="poNumber" required>
+            </div>
+            <div class="form-group">
+              <label>Product Code *</label>
+              <input type="text" class="po-field" data-field="productCode" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Description *</label>
+            <input type="text" class="po-field" data-field="description" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Quantity *</label>
+              <input type="number" class="po-field" data-field="quantity" min="1" required>
+            </div>
+            <div class="form-group">
+              <label>UoM *</label>
+              <select class="po-field" data-field="uom" required>
+                <option value="">Select</option>
+                <option value="EA">EA</option>
+                <option value="BOX">BOX</option>
+                <option value="CTN">CTN</option>
+                <option value="PLT">PLT</option>
+                <option value="PCS">PCS</option>
+                <option value="KG">KG</option>
+                <option value="LBS">LBS</option>
+                <option value="FT">FT</option>
+                <option value="M">M</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Reason *</label>
+            <select class="po-field" data-field="reason" required>
+              <option value="">Select</option>
+              <option value="Wrong quantity received">Wrong quantity received</option>
+              <option value="Wrong merchandise received">Wrong merchandise received</option>
+              <option value="Damaged in shipping">Damaged in shipping</option>
+              <option value="Duplicate order">Duplicate order</option>
+              <option value="Product defective">Product defective</option>
+              <option value="Customer not satisfied">Customer not satisfied</option>
+              <option value="Incorrect item ordered">Incorrect item ordered</option>
+              <option value="Incorrect quantity ordered">Incorrect quantity ordered</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', html);
+    }
+
+    function removeLine(id) {
+      document.getElementById(`line${id}`).remove();
+    }
+
+    function collectPoLines() {
+      const lines = [];
+      document.querySelectorAll('.po-line').forEach(line => {
+        const data = {};
+        line.querySelectorAll('.po-field').forEach(field => {
+          data[field.dataset.field] = field.value;
+        });
+        lines.push(data);
+      });
+      return lines;
+    }
+
+    function saveAndPreview() {
+      if (!settings.companyName) {
+        showStatus('status', 'Please configure company settings first', 'error');
+        switchTab('settings');
+        return;
+      }
+
+      const poLines = collectPoLines();
+      
+      // Validate
+      for (let i = 0; i < poLines.length; i++) {
+        const line = poLines[i];
+        if (!line.poNumber || !line.productCode || !line.description || !line.quantity || !line.uom || !line.reason) {
+          showStatus('status', `Please fill all required fields in Line ${i + 1}`, 'error');
+          return;
+        }
+      }
+
+      const ncrData = {
+        id: currentEditId || Date.now(),
+        ncrNumber: `NCR#${String(settings.ncrCounter).padStart(4, '0')}`,
+        vendorName: document.getElementById('vendorName').value,
+        date: document.getElementById('date').value,
+        poLines: poLines,
+        rmaRequest: document.getElementById('rmaRequest').checked,
+        creditIssued: document.getElementById('creditIssued').checked,
+        itemsReturn: document.getElementById('itemsReturn').checked,
+        notes: document.getElementById('notes').value,
+        images: uploadedImages,
+        createdAt: currentEditId ? null : new Date().toISOString()
+      };
+
+      // Save to history
+      let history = JSON.parse(localStorage.getItem('ncrHistory') || '[]');
+      
+      if (currentEditId) {
+        const index = history.findIndex(n => n.id === currentEditId);
+        if (index >= 0) {
+          history[index] = ncrData;
+        }
+      } else {
+        history.push(ncrData);
+        settings.ncrCounter++;
+        localStorage.setItem('ncrSettings', JSON.stringify(settings));
+      }
+
+      localStorage.setItem('ncrHistory', JSON.stringify(history));
+
+      // Generate PDF
+      generatePDF(ncrData);
+
+      showStatus('status', 'NCR saved! Opening preview...', 'success');
+      
+      setTimeout(() => {
+        clearForm();
+        loadHistory();
+      }, 1500);
+    }
+
+    function generatePDF(data) {
+      const tableRows = data.poLines.map(line => `
+        <tr>
+          <td>${line.poNumber}</td>
+          <td>${line.productCode}</td>
+          <td>${line.description}</td>
+          <td>${line.quantity}</td>
+          <td>${line.uom}</td>
+          <td>${line.reason}</td>
+        </tr>
+      `).join('');
+
+      const imagesHTML = data.images.length > 0 ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:10px;">
+          ${data.images.map(img => `
+            <div style="page-break-inside:avoid;">
+              <img src="${img.data}" style="width:100%;max-height:250px;object-fit:contain;border:1px solid #ddd;">
+            </div>
+          `).join('')}
+        </div>
+      ` : '';
+
+      const [year, month, day] = data.date.split('-');
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const formattedDate = `${day}-${months[parseInt(month)-1]}-${year}`;
+
+      const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1024">
+  <title>${data.ncrNumber} - ${data.vendorName}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { 
+      size: letter;
+      margin: 0.5in;
+    }
+    html, body {
+      width: 8.5in;
+      margin: 0 auto;
+    }
+    body { 
+      font-family: Arial, sans-serif; 
+      font-size: 11pt; 
+      line-height: 1.4;
+      background: white;
+    }
+    .header { display: flex; justify-content: space-between; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #000; }
+    .logo { max-width: 150px; max-height: 80px; }
+    .company-info { text-align: center; flex: 1; }
+    .company-info h1 { font-size: 18pt; margin-bottom: 8px; }
+    .purchaser-info { text-align: right; font-size: 9pt; flex: 1; }
+    .vendor-info { background: #f5f5f5; padding: 12px; margin-bottom: 15px; border-left: 4px solid #2563eb; }
+    .status-row { display: flex; gap: 30px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; margin-bottom: 15px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th, td { border: 1px solid #000; padding: 8px; text-align: left; font-size: 10pt; }
+    th { background: #e8e8e8; font-weight: bold; }
+    .notes { border: 1px solid #ddd; padding: 12px; background: #f9f9f9; margin: 20px 0; white-space: pre-wrap; }
+    @media print { 
+      body { 
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      @page {
+        size: letter;
+        margin: 0.5in;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>${settings.companyLogo ? `<img src="${settings.companyLogo}" class="logo">` : '<div style="width:150px;height:60px;border:1px dashed #999;display:flex;align-items:center;justify-content:center;font-size:9pt;color:#999;">logo</div>'}</div>
+    <div class="company-info">
+      <h1>NON CONFORMANCE REPORT</h1>
+      <p>${settings.companyName || 'company name'}</p>
+      <p style="font-size:9pt;color:#666;">${settings.companyAddress || 'company address'}</p>
+    </div>
+    <div class="purchaser-info">
+      <p><strong>REF: ${data.ncrNumber}</strong></p>
+      <p>${settings.purchaserName || 'purchaser name'}</p>
+      <p>${settings.purchaserEmail || 'purchaser email'}</p>
+      <p><strong>Date:</strong> ${formattedDate}</p>
+    </div>
+  </div>
+
+  <div class="vendor-info">
+    <strong>VENDOR:</strong> ${data.vendorName} &nbsp;&nbsp; <span style="font-size:9pt;color:#666;">${data.poLines.length} Line Item(s)</span>
+  </div>
+
+  <div class="status-row">
+    <div><strong>RMA Request:</strong> ${data.rmaRequest ? 'Yes' : 'No'}</div>
+    <div><strong>Credit Issued:</strong> ${data.creditIssued ? 'Yes' : 'No'}</div>
+    <div><strong>Items Return:</strong> ${data.itemsReturn ? 'Yes' : 'No'}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>PO Number</th>
+        <th>Product Code</th>
+        <th>Description</th>
+        <th>QUANTITY</th>
+        <th>UoM</th>
+        <th>Reason</th>
+      </tr>
+    </thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+
+  ${data.notes ? `<div class="notes"><strong>NOTES:</strong><br>${data.notes}</div>` : ''}
+  ${data.images.length > 0 ? `<h3 style="margin:20px 0 10px;">ATTACHED IMAGES:</h3>${imagesHTML}` : ''}
+
+  <div style="margin-top:30px;padding-top:10px;border-top:1px solid #ddd;text-align:center;font-size:8pt;color:#666;">
+    ©${new Date().getFullYear()} ${settings.companyName || 'company name'}
+  </div>
+</body>
+</html>
+      `;
+
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    }
+
+    function loadHistory() {
+      const history = JSON.parse(localStorage.getItem('ncrHistory') || '[]');
+      const list = document.getElementById('ncrList');
+      
+      if (history.length === 0) {
+        list.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px;">No NCRs yet</p>';
+        return;
+      }
+
+      list.innerHTML = history.reverse().map(ncr => `
+        <div class="ncr-item">
+          <div class="ncr-info">
+            <h4>${ncr.ncrNumber} - ${ncr.vendorName}</h4>
+            <div class="ncr-meta">${ncr.date} • ${ncr.poLines.length} line(s)</div>
+          </div>
+          <div class="ncr-actions">
+            <button class="btn btn-secondary btn-small" onclick="editNCR(${ncr.id})">Edit</button>
+            <button class="btn btn-primary btn-small" onclick="viewNCR(${ncr.id})">View PDF</button>
+            <button class="btn btn-secondary btn-small" onclick="deleteNCR(${ncr.id})">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function editNCR(id) {
+      const history = JSON.parse(localStorage.getItem('ncrHistory') || '[]');
+      const ncr = history.find(n => n.id === id);
+      
+      if (!ncr) return;
+
+      currentEditId = id;
+      
+      document.getElementById('ncrTitle').textContent = `Edit ${ncr.ncrNumber}`;
+      document.getElementById('vendorName').value = ncr.vendorName;
+      document.getElementById('date').value = ncr.date;
+      document.getElementById('notes').value = ncr.notes || '';
+      document.getElementById('rmaRequest').checked = ncr.rmaRequest;
+      document.getElementById('creditIssued').checked = ncr.creditIssued;
+      document.getElementById('itemsReturn').checked = ncr.itemsReturn;
+
+      // Load PO lines
+      document.getElementById('poLinesContainer').innerHTML = '';
+      poLineCounter = 0;
+      ncr.poLines.forEach((lineData, i) => {
+        addPoLine();
+        const line = document.querySelectorAll('.po-line')[i];
+        line.querySelectorAll('.po-field').forEach(field => {
+          field.value = lineData[field.dataset.field] || '';
+        });
+      });
+
+      // Load images
+      uploadedImages = ncr.images || [];
+      renderImagePreview();
+
+      // Update NCR number display
+      updateNcrNumberDisplay(ncr.ncrNumber);
+
+      switchTab('create');
+    }
+
+    function viewNCR(id) {
+      const history = JSON.parse(localStorage.getItem('ncrHistory') || '[]');
+      const ncr = history.find(n => n.id === id);
+      if (ncr) generatePDF(ncr);
+    }
+
+    function deleteNCR(id) {
+      if (!confirm('Delete this NCR?')) return;
+      
+      let history = JSON.parse(localStorage.getItem('ncrHistory') || '[]');
+      history = history.filter(n => n.id !== id);
+      localStorage.setItem('ncrHistory', JSON.stringify(history));
+      loadHistory();
+    }
+
+    function clearForm() {
+      currentEditId = null;
+      document.getElementById('ncrTitle').textContent = 'New NCR';
+      document.getElementById('vendorName').value = '';
+      document.getElementById('notes').value = '';
+      document.getElementById('rmaRequest').checked = false;
+      document.getElementById('creditIssued').checked = false;
+      document.getElementById('itemsReturn').checked = false;
+      
+      document.getElementById('poLinesContainer').innerHTML = '';
+      poLineCounter = 0;
+      addPoLine();
+      
+      uploadedImages = [];
+      renderImagePreview();
+      
+      setTodayDate();
+      
+      // Reset NCR number display
+      updateNcrNumberDisplay();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      
+      event.target.classList.add('active');
+      document.getElementById(`${tab}-tab`).classList.add('active');
+    }
+
+    function showStatus(elementId, message, type) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      el.className = `status ${type}`;
+      
+      if (type === 'success') {
+        setTimeout(() => {
+          el.className = 'status';
+        }, 3000);
+      }
+    }
+  </script>
+</body>
+</html>
