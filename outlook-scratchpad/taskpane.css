@@ -1,0 +1,278 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #faf9f8;
+  color: #201f1e;
+  font-size: 14px;
+}
+
+.app {
+  padding: 16px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.app-header h1 {
+  margin: 0 0 2px;
+  font-size: 20px;
+  color: #2b2660;
+}
+
+.subtitle {
+  margin: 0 0 14px;
+  color: #605e5c;
+  font-size: 12px;
+}
+
+.sync-banner {
+  background: #fff4ce;
+  border: 1px solid #ffd335;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-bottom: 14px;
+  color: #4a3b00;
+}
+
+#sync-banner-detail {
+  display: block;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+.actions-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.btn {
+  border: none;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: #5b3fae;
+  color: white;
+}
+
+.btn-primary:disabled {
+  background: #c8c6c4;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #edebe9;
+  color: #201f1e;
+}
+
+.btn-link {
+  background: none;
+  color: #5b3fae;
+  padding: 4px 0;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.chip {
+  border: 1px solid #d2d0ce;
+  background: white;
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #323130;
+}
+
+.chip.active {
+  background: #5b3fae;
+  border-color: #5b3fae;
+  color: white;
+}
+
+.empty-state {
+  text-align: center;
+  color: #8a8886;
+  padding: 30px 10px;
+  font-size: 13px;
+}
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-card {
+  background: white;
+  border: 1px solid #edebe9;
+  border-left: 4px solid #c8c6c4;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.task-card[data-status="urgent-flag"] {
+  border-left-color: #d13438;
+}
+
+.task-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.task-title {
+  flex: 1;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 2px;
+  background: transparent;
+}
+
+.task-title:focus {
+  outline: 1px solid #5b3fae;
+  border-radius: 3px;
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #8a8886;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.icon-btn:hover {
+  color: #d13438;
+}
+
+.source-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f3f2f1;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #323130;
+  text-decoration: none;
+}
+
+.source-link:hover {
+  background: #edebe9;
+}
+
+.source-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-label {
+  display: block;
+  font-size: 11px;
+  color: #605e5c;
+  margin-bottom: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.task-note {
+  width: 100%;
+  border: 1px solid #d2d0ce;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  margin-bottom: 8px;
+}
+
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checklist-text {
+  flex: 1;
+  border: none;
+  border-bottom: 1px solid #edebe9;
+  padding: 3px 2px;
+  font-size: 13px;
+  background: transparent;
+}
+
+.checklist-check:checked ~ .checklist-text {
+  text-decoration: line-through;
+  color: #8a8886;
+}
+
+.checklist-item .checklist-text:not(:focus) {
+  /* line-through applied via JS class toggle for reliability across browsers */
+}
+
+.checklist-item.checked .checklist-text {
+  text-decoration: line-through;
+  color: #8a8886;
+}
+
+.task-meta-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.task-meta-row select,
+.task-meta-row input {
+  border: 1px solid #d2d0ce;
+  border-radius: 4px;
+  padding: 5px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  background: white;
+}
+
+.task-priority {
+  flex: 0 0 auto;
+}
+
+.task-due {
+  flex: 1 1 100px;
+}
+
+.task-status {
+  flex: 1 1 130px;
+}

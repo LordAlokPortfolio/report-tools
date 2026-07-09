@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boss Replies Scratchpad</title>
+  <link rel="stylesheet" href="taskpane.css" />
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Boss Replies</h1>
+      <p class="subtitle">Capture emails, draft replies, track follow-ups.</p>
+    </header>
+
+    <div id="sync-banner" class="sync-banner">
+      Local-only mode: tasks are saved on this device only.
+      <span id="sync-banner-detail">Microsoft To Do sync isn't configured yet.</span>
+    </div>
+
+    <div class="actions-row">
+      <button id="capture-btn" class="btn btn-primary" disabled>Capture this email</button>
+      <button id="add-task-btn" class="btn btn-secondary">+ Blank task</button>
+    </div>
+
+    <div class="filter-row" id="filter-row">
+      <button class="chip active" data-filter="all">All</button>
+      <button class="chip" data-filter="urgent">Urgent</button>
+      <button class="chip" data-filter="waiting">Waiting on boss</button>
+      <button class="chip" data-filter="ready">Ready to send</button>
+      <button class="chip" data-filter="done">Done</button>
+    </div>
+
+    <div id="empty-state" class="empty-state" hidden>
+      Nothing here yet. Open an email and click "Capture this email" to start.
+    </div>
+
+    <ul id="task-list" class="task-list"></ul>
+  </div>
+
+  <template id="task-card-template">
+    <li class="task-card" data-status="">
+      <div class="task-card-header">
+        <input class="task-title" type="text" placeholder="Task title" />
+        <button class="icon-btn delete-btn" title="Delete task" aria-label="Delete task">&times;</button>
+      </div>
+
+      <a class="source-link" href="#" target="_blank" rel="noopener" hidden>
+        <span class="source-icon">✉</span>
+        <span class="source-subject"></span>
+      </a>
+
+      <label class="field-label">What I want to say</label>
+      <textarea class="task-note" rows="3" placeholder="Draft what you want to say to your boss..."></textarea>
+
+      <div class="checklist"></div>
+      <button class="btn btn-link add-checklist-item">+ Add checklist item</button>
+
+      <div class="task-meta-row">
+        <select class="task-priority">
+          <option value="normal">Normal</option>
+          <option value="urgent">Urgent</option>
+        </select>
+        <input class="task-due" type="date" />
+        <select class="task-status">
+          <option value="open">Open</option>
+          <option value="waiting">Waiting on boss</option>
+          <option value="ready">Ready to send</option>
+          <option value="done">Done</option>
+        </select>
+      </div>
+    </li>
+  </template>
+
+  <template id="checklist-item-template">
+    <div class="checklist-item">
+      <input type="checkbox" class="checklist-check" />
+      <input type="text" class="checklist-text" placeholder="Checklist item" />
+      <button class="icon-btn remove-checklist-item" aria-label="Remove item">&times;</button>
+    </div>
+  </template>
+
+  <script src="graph.js"></script>
+  <script src="taskpane.js"></script>
+</body>
+</html>
