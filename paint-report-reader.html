@@ -335,16 +335,23 @@
 
     let fileQueue = [];
     let currentFileIndex = 0;
+    let allParsedData = [];
 
     function handleFiles(files) {
       fileQueue = files;
       currentFileIndex = 0;
+      allParsedData = [];
       processQueue();
     }
 
     async function processQueue() {
       if (currentFileIndex >= fileQueue.length) {
-        statusDiv.innerHTML = '<div class="status success">✓ All files processed.</div>';
+        // All files processed, consolidate and export
+        if (allParsedData.length > 0) {
+          consolidateAndExport();
+        } else {
+          statusDiv.innerHTML = '<div class="status error">❌ No valid reports to export.</div>';
+        }
         return;
       }
 
@@ -356,16 +363,26 @@
       `;
       fileInfo.style.display = 'block';
 
-      readBtn.style.display = fileQueue.length === 1 ? 'block' : 'none';
-      exportBtn.style.display = 'none';
-      resultsDiv.style.display = 'none';
-      rawTextSection.style.display = 'none';
-      statusDiv.innerHTML = '<div class="status warning">⏳ Processing report...</div>';
+      // For single file: show read button. For multiple: auto-process
+      if (fileQueue.length === 1) {
+        currentFile = file;
+        readBtn.style.display = 'block';
+        exportBtn.style.display = 'none';
+        resultsDiv.style.display = 'none';
+        rawTextSection.style.display = 'none';
+        statusDiv.innerHTML = '';
+      } else {
+        // Multi-file: auto-process without showing read button
+        readBtn.style.display = 'none';
+        exportBtn.style.display = 'none';
+        resultsDiv.style.display = 'none';
+        rawTextSection.style.display = 'none';
+        statusDiv.innerHTML = '<div class="status warning">⏳ Processing report...</div>';
 
-      await processFile(file);
-
-      currentFileIndex++;
-      setTimeout(() => processQueue(), 1500);
+        await processFile(file);
+        currentFileIndex++;
+        setTimeout(() => processQueue(), 1500);
+      }
     }
 
     async function processFile(file) {
@@ -397,8 +414,8 @@
           displayRawText(text);
           statusDiv.innerHTML = `<div class="status success">✓ Checksum PASS — batch ${parsed.batch}: ${parsed.entries.length} rows, ${parsed.totalFootage.toFixed(2)} ft matches report Sum ${parsed.expectedSum.toFixed(2)} (${parsed.detailRecordsN} detail records)</div>`;
           exportBtn.style.display = 'block';
-          // Auto-export on valid
-          autoExportCurrentFile(file.name, parsed);
+          // Collect for consolidation
+          allParsedData.push(parsed);
         } else {
           extractedData = null;
           resultsDiv.style.display = 'none';
@@ -412,11 +429,125 @@
       }
     }
 
+    function consolidateAndExport() {
+      if (allParsedData.length === 0) return;
+
+      // Combine all entries from all parsed data
+      const allEntries = [];
+      const allEntriesWithDisplay = [];
+      let totalOriginalFootage = 0;
+      let totalDisplayFootage = 0;
+
+      allParsedData.forEach(data => {
+        allEntries.push(...data.entries);
+        allEntriesWithDisplay.push(...data.entriesWithDisplay);
+        totalOriginalFootage += data.totalFootage;
+        totalDisplayFootage += data.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
+      });
+
+      // Create consolidated data object
+      const consolidatedData = {
+        batch: allParsedData.map(d => d.batch).join(', '),
+        reportDate: allParsedData[0].reportDate,
+        entries: allEntries,
+        entriesWithDisplay: allEntriesWithDisplay,
+        totalFootage: totalOriginalFootage,
+        expectedSum: null,
+        detailRecordsN: null,
+        summary: buildPaintSummary(allEntriesWithDisplay)
+      };
+
+      // Display consolidated results
+      displayResults(consolidatedData);
+      exportBtn.style.display = 'block';
+
+      const totalDisplayGallons = totalDisplayFootage / FT_PER_GALLON;
+      statusDiv.innerHTML = `<div class="status success">✓ All reports consolidated: ${allEntries.length} total rows, ${totalDisplayFootage.toFixed(2)} ft (${totalDisplayGallons.toFixed(3)} gal)</div>`;
+
+      // Auto-export consolidated file
+      autoExportConsolidated(consolidatedData);
+    }
+
+    function buildPaintSummary(entriesWithDisplay) {
+      const summaryMap = {};
+      entriesWithDisplay.forEach(entry => {
+        const key = `${entry.colour}|${entry.finish}`;
+        if (!summaryMap[key]) {
+          summaryMap[key] = { colour: entry.colour, finish: entry.finish, displayFootage: 0, displayGallons: 0 };
+        }
+        summaryMap[key].displayFootage += entry.displayFootage;
+        summaryMap[key].displayGallons = summaryMap[key].displayFootage / FT_PER_GALLON;
+      });
+
+      return Object.values(summaryMap).sort((a, b) => b.displayFootage - a.displayFootage);
+    }
+
+    function autoExportConsolidated(consolidatedData) {
+      const fileData = consolidatedData.entries.map(entry => {
+        const displayFootage = entry.displayFootage;
+        return {
+          'ExType': removeEmDashes(entry.exType),
+          'Colour': removeEmDashes(entry.colour),
+          'Finish': removeEmDashes(entry.finish),
+          'SecondaryColour': removeEmDashes(entry.secondaryColour),
+          'Description': removeEmDashes(entry.description),
+          'BothSides': entry.bothSides ? 'Yes' : 'No',
+          'TotalLengthFt': displayFootage,
+          'LengthsCount': entry.lengthsCount,
+          'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3),
+          'Batch#': consolidatedData.batch,
+          'ReportDate': consolidatedData.reportDate
+        };
+      });
+
+      const displayTotalFootage = consolidatedData.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
+      const displayTotalGallons = displayTotalFootage / FT_PER_GALLON;
+      fileData.push({
+        'ExType': '',
+        'Colour': '',
+        'Finish': '',
+        'SecondaryColour': '',
+        'Description': 'TOTAL (Consumption)',
+        'BothSides': '',
+        'TotalLengthFt': +displayTotalFootage.toFixed(2),
+        'LengthsCount': '',
+        'Gallons': +displayTotalGallons.toFixed(3),
+        'Batch#': consolidatedData.batch,
+        'ReportDate': consolidatedData.reportDate
+      });
+
+      if (consolidatedData.summary && consolidatedData.summary.length > 0) {
+        fileData.push({});
+        fileData.push({ 'Description': 'PAINT SUMMARY (Colour + Finish)' });
+        consolidatedData.summary.forEach(s => {
+          fileData.push({
+            'Colour': removeEmDashes(s.colour),
+            'Finish': removeEmDashes(s.finish),
+            'TotalLengthFt': +s.displayFootage.toFixed(2),
+            'Gallons': +s.displayGallons.toFixed(3)
+          });
+        });
+      }
+
+      const ws = XLSX.utils.json_to_sheet(fileData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
+
+      const exportFileName = `PaintReport_Consolidated.xlsx`;
+      XLSX.writeFile(wb, exportFileName);
+    }
+
     readBtn.addEventListener('click', async () => {
       if (!currentFile) return;
       readBtn.disabled = true;
+      allParsedData = [];
       await processFile(currentFile);
       readBtn.disabled = false;
+
+      // For single file processing, consolidate and export after processing
+      if (allParsedData.length > 0) {
+        consolidateAndExport();
+      }
     });
 
     function moveToNextFile() {
