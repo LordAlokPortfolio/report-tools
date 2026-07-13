@@ -411,10 +411,18 @@
         statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
       } finally {
         readBtn.disabled = false;
-        // If more files in queue, offer to process next
+        // Auto-export current file
+        if (extractedData && parsed.valid) {
+          autoExportCurrentFile(currentFile.name, extractedData);
+        }
+        // If more files in queue, process next automatically or offer option
         if (currentFileIndex + 1 < fileQueue.length) {
-          statusDiv.innerHTML += `<br><small style="color: #666; margin-top: 10px; display: block;">📄 ${fileQueue.length - currentFileIndex - 1} more file(s) to process. Click READ to process next.</small>`;
-          readBtn.addEventListener('click', moveToNextFile, { once: true });
+          statusDiv.innerHTML += `<br><small style="color: #666; margin-top: 10px; display: block;">📄 Processing next file in 2 seconds... ${fileQueue.length - currentFileIndex - 1} remaining.</small>`;
+          setTimeout(() => {
+            currentFileIndex++;
+            displayNextFile();
+            readBtn.click();
+          }, 2000);
         }
       }
     });
@@ -789,6 +797,64 @@
         <pre>${text.substring(0, 721)}</pre>
       `;
       rawTextSection.style.display = 'block';
+    }
+
+    function autoExportCurrentFile(fileName, data) {
+      if (!data) return;
+
+      const fileData = data.entries.map(entry => {
+        const displayFootage = entry.displayFootage;
+        return {
+          'ExType': removeEmDashes(entry.exType),
+          'Colour': removeEmDashes(entry.colour),
+          'Finish': removeEmDashes(entry.finish),
+          'SecondaryColour': removeEmDashes(entry.secondaryColour),
+          'Description': removeEmDashes(entry.description),
+          'BothSides': entry.bothSides ? 'Yes' : 'No',
+          'TotalLengthFt': displayFootage,
+          'LengthsCount': entry.lengthsCount,
+          'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3),
+          'Batch#': data.batch,
+          'ReportDate': data.reportDate
+        };
+      });
+
+      const displayTotalFootage = data.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
+      const displayTotalGallons = displayTotalFootage / FT_PER_GALLON;
+      fileData.push({
+        'ExType': '',
+        'Colour': '',
+        'Finish': '',
+        'SecondaryColour': '',
+        'Description': 'TOTAL (Consumption)',
+        'BothSides': '',
+        'TotalLengthFt': +displayTotalFootage.toFixed(2),
+        'LengthsCount': '',
+        'Gallons': +displayTotalGallons.toFixed(3),
+        'Batch#': data.batch,
+        'ReportDate': data.reportDate
+      });
+
+      if (data.summary && data.summary.length > 0) {
+        fileData.push({});
+        fileData.push({ 'Description': 'PAINT SUMMARY (Colour + Finish)' });
+        data.summary.forEach(s => {
+          fileData.push({
+            'Colour': removeEmDashes(s.colour),
+            'Finish': removeEmDashes(s.finish),
+            'TotalLengthFt': +s.displayFootage.toFixed(2),
+            'Gallons': +s.displayGallons.toFixed(3)
+          });
+        });
+      }
+
+      const ws = XLSX.utils.json_to_sheet(fileData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
+
+      const baseFileName = fileName.replace(/\.[^/.]+$/, "");
+      const exportFileName = `${baseFileName}_${data.batch}.xlsx`;
+      XLSX.writeFile(wb, exportFileName);
     }
 
     exportBtn.addEventListener('click', () => {
