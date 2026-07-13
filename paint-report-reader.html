@@ -468,18 +468,19 @@
       autoExportConsolidated(consolidatedData);
     }
 
-    function buildPaintSummary(entriesWithDisplay) {
+    function buildPaintSummary(entries) {
       const summaryMap = {};
-      entriesWithDisplay.forEach(entry => {
+      entries.forEach(entry => {
         const key = `${entry.colour}|${entry.finish}`;
         if (!summaryMap[key]) {
-          summaryMap[key] = { colour: entry.colour, finish: entry.finish, displayFootage: 0, displayGallons: 0 };
+          summaryMap[key] = { colour: entry.colour, finish: entry.finish, totalFootage: 0, displayFootage: 0 };
         }
-        summaryMap[key].displayFootage += entry.displayFootage;
+        summaryMap[key].totalFootage += entry.totalLengthFt || 0;
+        summaryMap[key].displayFootage += entry.displayFootage || 0;
         summaryMap[key].displayGallons = summaryMap[key].displayFootage / FT_PER_GALLON;
       });
 
-      return Object.values(summaryMap).sort((a, b) => b.displayFootage - a.displayFootage);
+      return Object.values(summaryMap).sort((a, b) => b.totalFootage - a.totalFootage);
     }
 
     function autoExportConsolidated(consolidatedData) {
@@ -492,7 +493,7 @@
           'SecondaryColour': removeEmDashes(entry.secondaryColour || ''),
           'Description': removeEmDashes(entry.description || ''),
           'BothSides': entry.bothSides ? 'Yes' : 'No',
-          'TotalLengthFt': displayFootage || 0,
+          'TotalLengthFt': entry.totalLengthFt || 0,
           'LengthsCount': entry.lengthsCount || 0,
           'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3) || 0,
           'Batch#': consolidatedData.batch || '',
@@ -500,6 +501,7 @@
         };
       });
 
+      const originalTotalFootage = consolidatedData.entries.reduce((sum, e) => sum + (e.totalLengthFt || 0), 0);
       const displayTotalFootage = consolidatedData.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
       const displayTotalGallons = displayTotalFootage / FT_PER_GALLON;
       fileData.push({
@@ -509,7 +511,7 @@
         'SecondaryColour': '',
         'Description': 'TOTAL (Consumption)',
         'BothSides': '',
-        'TotalLengthFt': +displayTotalFootage.toFixed(2),
+        'TotalLengthFt': +originalTotalFootage.toFixed(2),
         'LengthsCount': '',
         'Gallons': +displayTotalGallons.toFixed(3),
         'Batch#': consolidatedData.batch || '',
@@ -538,7 +540,7 @@
             'SecondaryColour': '',
             'Description': '',
             'BothSides': '',
-            'TotalLengthFt': +s.displayFootage.toFixed(2),
+            'TotalLengthFt': +s.totalFootage.toFixed(2),
             'LengthsCount': '',
             'Gallons': +s.displayGallons.toFixed(3),
             'Batch#': '',
