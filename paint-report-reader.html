@@ -518,6 +518,7 @@
         'ReportDate': consolidatedData.reportDate || ''
       });
 
+      const summaryStartRow = fileData.length + 1;
       if (consolidatedData.summary && consolidatedData.summary.length > 0) {
         fileData.push({
           'ExType': '',
@@ -550,6 +551,18 @@
       }
 
       const ws = XLSX.utils.json_to_sheet(fileData);
+
+      // Apply borders to summary table
+      const border = { style: 'thin', color: { rgb: '000000' } };
+      const allBorders = { top: border, bottom: border, left: border, right: border };
+      for (let row = summaryStartRow; row <= fileData.length; row++) {
+        for (let col = 1; col <= 11; col++) {
+          const cellRef = XLSX.utils.encode_col(col - 1) + row;
+          if (!ws[cellRef]) ws[cellRef] = {};
+          ws[cellRef].border = allBorders;
+        }
+      }
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
 
