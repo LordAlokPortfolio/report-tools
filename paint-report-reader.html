@@ -371,6 +371,7 @@
       readBtn.disabled = true;
       statusDiv.innerHTML = '<div class="status warning">⏳ Processing report...</div>';
 
+      let parsed = null;
       try {
         const fileType = currentFile.type;
         let text = '';
@@ -390,7 +391,7 @@
         console.log('='.repeat(80));
         console.log(`Raw text extracted: ${text.length} characters`);
 
-        const parsed = parseReport(text);
+        parsed = parseReport(text);
 
         if (parsed.valid) {
           extractedData = parsed;
@@ -398,6 +399,8 @@
           displayRawText(text);
           statusDiv.innerHTML = `<div class="status success">✓ Checksum PASS — batch ${parsed.batch}: ${parsed.entries.length} rows, ${parsed.totalFootage.toFixed(2)} ft matches report Sum ${parsed.expectedSum.toFixed(2)} (${parsed.detailRecordsN} detail records)</div>`;
           exportBtn.style.display = 'block';
+          // Auto-export on valid
+          autoExportCurrentFile(currentFile.name, parsed);
         } else {
           // Validation failed: no results table, no Excel export.
           extractedData = null;
@@ -411,21 +414,22 @@
         statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
       } finally {
         readBtn.disabled = false;
-        // Auto-export current file
-        if (extractedData && parsed.valid) {
-          autoExportCurrentFile(currentFile.name, extractedData);
-        }
-        // If more files in queue, process next automatically or offer option
+        // If more files in queue, process next automatically
         if (currentFileIndex + 1 < fileQueue.length) {
-          statusDiv.innerHTML += `<br><small style="color: #666; margin-top: 10px; display: block;">📄 Processing next file in 2 seconds... ${fileQueue.length - currentFileIndex - 1} remaining.</small>`;
-          setTimeout(() => {
-            currentFileIndex++;
-            displayNextFile();
-            readBtn.click();
-          }, 2000);
+          const remaining = fileQueue.length - currentFileIndex - 1;
+          statusDiv.innerHTML += `<br><small style="color: #666; margin-top: 10px; display: block;">📄 ${remaining} file(s) left. Processing in 2 seconds...</small>`;
+          setTimeout(processNextFileAuto, 2000);
         }
       }
     });
+
+    function processNextFileAuto() {
+      currentFileIndex++;
+      if (currentFileIndex < fileQueue.length) {
+        displayNextFile();
+        readBtn.click();
+      }
+    }
 
     function moveToNextFile() {
       currentFileIndex++;
