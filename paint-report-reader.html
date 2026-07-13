@@ -486,17 +486,17 @@
       const fileData = consolidatedData.entries.map(entry => {
         const displayFootage = entry.displayFootage;
         return {
-          'ExType': removeEmDashes(entry.exType),
-          'Colour': removeEmDashes(entry.colour),
-          'Finish': removeEmDashes(entry.finish),
-          'SecondaryColour': removeEmDashes(entry.secondaryColour),
-          'Description': removeEmDashes(entry.description),
+          'ExType': removeEmDashes(entry.exType || ''),
+          'Colour': removeEmDashes(entry.colour || ''),
+          'Finish': removeEmDashes(entry.finish || ''),
+          'SecondaryColour': removeEmDashes(entry.secondaryColour || ''),
+          'Description': removeEmDashes(entry.description || ''),
           'BothSides': entry.bothSides ? 'Yes' : 'No',
-          'TotalLengthFt': displayFootage,
-          'LengthsCount': entry.lengthsCount,
-          'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3),
-          'Batch#': consolidatedData.batch,
-          'ReportDate': consolidatedData.reportDate
+          'TotalLengthFt': displayFootage || 0,
+          'LengthsCount': entry.lengthsCount || 0,
+          'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3) || 0,
+          'Batch#': consolidatedData.batch || '',
+          'ReportDate': consolidatedData.reportDate || ''
         };
       });
 
@@ -512,19 +512,37 @@
         'TotalLengthFt': +displayTotalFootage.toFixed(2),
         'LengthsCount': '',
         'Gallons': +displayTotalGallons.toFixed(3),
-        'Batch#': consolidatedData.batch,
-        'ReportDate': consolidatedData.reportDate
+        'Batch#': consolidatedData.batch || '',
+        'ReportDate': consolidatedData.reportDate || ''
       });
 
       if (consolidatedData.summary && consolidatedData.summary.length > 0) {
-        fileData.push({});
-        fileData.push({ 'Description': 'PAINT SUMMARY (Colour + Finish)' });
+        fileData.push({
+          'ExType': '',
+          'Colour': '',
+          'Finish': '',
+          'SecondaryColour': '',
+          'Description': 'PAINT SUMMARY (Colour + Finish)',
+          'BothSides': '',
+          'TotalLengthFt': '',
+          'LengthsCount': '',
+          'Gallons': '',
+          'Batch#': '',
+          'ReportDate': ''
+        });
         consolidatedData.summary.forEach(s => {
           fileData.push({
-            'Colour': removeEmDashes(s.colour),
-            'Finish': removeEmDashes(s.finish),
+            'ExType': '',
+            'Colour': removeEmDashes(s.colour || ''),
+            'Finish': removeEmDashes(s.finish || ''),
+            'SecondaryColour': '',
+            'Description': '',
+            'BothSides': '',
             'TotalLengthFt': +s.displayFootage.toFixed(2),
-            'Gallons': +s.displayGallons.toFixed(3)
+            'LengthsCount': '',
+            'Gallons': +s.displayGallons.toFixed(3),
+            'Batch#': '',
+            'ReportDate': ''
           });
         });
       }
