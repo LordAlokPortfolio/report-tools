@@ -271,7 +271,7 @@
         <div class="upload-hint">PDF (text or scanned) · JPG · PNG · Any photo of the report</div>
       </div>
 
-      <input type="file" id="fileInput" class="file-input" accept=".pdf,.jpg,.jpeg,.png">
+      <input type="file" id="fileInput" class="file-input" accept=".pdf,.jpg,.jpeg,.png" multiple>
 
       <div id="fileInfo" style="display: none;"></div>
       <div id="status"></div>
@@ -323,25 +323,41 @@
       e.preventDefault();
       uploadZone.classList.remove('dragover');
       if (e.dataTransfer.files.length > 0) {
-        handleFile(e.dataTransfer.files[0]);
+        handleFiles(Array.from(e.dataTransfer.files));
       }
     });
 
     fileInput.addEventListener('change', (e) => {
       if (e.target.files.length > 0) {
-        handleFile(e.target.files[0]);
+        handleFiles(Array.from(e.target.files));
       }
     });
 
-    function handleFile(file) {
+    let fileQueue = [];
+    let currentFileIndex = 0;
+
+    function handleFiles(files) {
+      fileQueue = files;
+      currentFileIndex = 0;
+      displayNextFile();
+    }
+
+    function displayNextFile() {
+      if (currentFileIndex >= fileQueue.length) {
+        statusDiv.innerHTML = '<div class="status success">✓ All files processed.</div>';
+        return;
+      }
+
+      const file = fileQueue[currentFileIndex];
       currentFile = file;
-      
+
+      const fileNum = fileQueue.length > 1 ? ` (${currentFileIndex + 1}/${fileQueue.length})` : '';
       fileInfo.innerHTML = `
-        <div class="file-name">✓ ${file.name}</div>
+        <div class="file-name">✓ ${file.name}${fileNum}</div>
         <div class="file-size">${(file.size / 1024).toFixed(2)} KB</div>
       `;
       fileInfo.style.display = 'block';
-      
+
       readBtn.style.display = 'block';
       exportBtn.style.display = 'none';
       resultsDiv.style.display = 'none';
@@ -395,8 +411,18 @@
         statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
       } finally {
         readBtn.disabled = false;
+        // If more files in queue, offer to process next
+        if (currentFileIndex + 1 < fileQueue.length) {
+          statusDiv.innerHTML += `<br><small style="color: #666; margin-top: 10px; display: block;">📄 ${fileQueue.length - currentFileIndex - 1} more file(s) to process. Click READ to process next.</small>`;
+          readBtn.addEventListener('click', moveToNextFile, { once: true });
+        }
       }
     });
+
+    function moveToNextFile() {
+      currentFileIndex++;
+      displayNextFile();
+    }
 
     // Extract text from PDF
     async function extractTextFromPDF(file) {
