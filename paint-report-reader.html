@@ -569,12 +569,37 @@
           secondaryColour = '';
         }
 
-        // Never deduplicate — the same ExType legitimately repeats per colour.
-        result.entries.push({ exType, colour, finish, secondaryColour, description, totalLengthFt, lengthsCount });
+        // When secondary colour is absent, both sides have the same paint.
+        // Flag this; footage will be doubled for consumption display later.
+        const bothSides = secondaryColour === '';
+        result.entries.push({ exType, colour, finish, secondaryColour, description, totalLengthFt, lengthsCount, bothSides });
       }
 
       result.totalFootage = result.entries.reduce((sum, e) => sum + e.totalLengthFt, 0);
       result.totalGallons = result.totalFootage / FT_PER_GALLON;
+
+      // Calculate display footages (doubled for BothSides) for sorting and summary
+      const displayFootages = result.entries.map(e => ({
+        ...e,
+        displayFootage: e.bothSides ? e.totalLengthFt * 2 : e.totalLengthFt
+      }));
+
+      // Sort by display footage descending (highest to lowest)
+      displayFootages.sort((a, b) => b.displayFootage - a.displayFootage);
+      result.entriesWithDisplay = displayFootages;
+
+      // Build summary: aggregate by Colour + Finish using display footages
+      const summaryMap = {};
+      for (const entry of displayFootages) {
+        const key = `${entry.colour}~${entry.finish}`;
+        if (!summaryMap[key]) {
+          summaryMap[key] = { colour: entry.colour, finish: entry.finish, displayFootage: 0 };
+        }
+        summaryMap[key].displayFootage += entry.displayFootage;
+      }
+      result.summary = Object.values(summaryMap)
+        .map(s => ({ ...s, displayGallons: s.displayFootage / FT_PER_GALLON }))
+        .sort((a, b) => b.displayFootage - a.displayFootage);
 
       validateReport(result, lines);
       return result;
@@ -640,12 +665,20 @@
       `;
     }
 
+    function removeEmDashes(s) {
+      return String(s).replace(/—/g, '-');
+    }
+
     function displayResults(data) {
-      let html = `<div class="result-header">Production ${escapeHtml(data.batch)}`;
+      // Calculate display totals (with BothSides doubling)
+      const displayTotalFootage = data.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
+      const displayTotalGallons = displayTotalFootage / FT_PER_GALLON;
+
+      let html = `<div class="result-header">Production ${escapeHtml(removeEmDashes(data.batch))}`;
       if (data.reportDate) {
-        html += ` — ${escapeHtml(data.reportDate)}`;
+        html += ` - ${escapeHtml(removeEmDashes(data.reportDate))}`;
       }
-      html += ` — ${data.entries.length} rows (${data.detailRecordsN} detail records)</div>`;
+      html += ` - ${data.entries.length} rows (${data.detailRecordsN} detail records)</div>`;
 
       html += `<table class="result-table">
         <thead>
@@ -655,6 +688,7 @@
             <th>Finish</th>
             <th>Secondary</th>
             <th>Description</th>
+            <th>Both Sides</th>
             <th>Lengths</th>
             <th>Footage</th>
             <th>Gallons</th>
@@ -662,29 +696,62 @@
         </thead>
         <tbody>`;
 
-      data.entries.forEach(entry => {
-        const gallons = (entry.totalLengthFt / FT_PER_GALLON).toFixed(3);
+      data.entriesWithDisplay.forEach(entry => {
+        const displayFootage = entry.displayFootage;
+        const gallons = (displayFootage / FT_PER_GALLON).toFixed(3);
+        const bothSidesLabel = entry.bothSides ? 'Yes' : 'No';
         html += `
           <tr>
-            <td>${escapeHtml(entry.exType)}</td>
-            <td>${escapeHtml(entry.colour)}</td>
-            <td>${escapeHtml(entry.finish)}</td>
-            <td>${escapeHtml(entry.secondaryColour) || '-'}</td>
-            <td>${escapeHtml(entry.description) || '-'}</td>
+            <td>${escapeHtml(removeEmDashes(entry.exType))}</td>
+            <td>${escapeHtml(removeEmDashes(entry.colour))}</td>
+            <td>${escapeHtml(removeEmDashes(entry.finish))}</td>
+            <td>${escapeHtml(removeEmDashes(entry.secondaryColour)) || '-'}</td>
+            <td>${escapeHtml(removeEmDashes(entry.description)) || '-'}</td>
+            <td>${bothSidesLabel}</td>
             <td>${entry.lengthsCount}</td>
-            <td>${entry.totalLengthFt.toFixed(2)}</td>
+            <td>${displayFootage.toFixed(2)}</td>
             <td>${gallons}</td>
           </tr>`;
       });
 
       html += `
           <tr class="totals-row">
-            <td colspan="6"><strong>TOTALS</strong></td>
-            <td><strong>${data.totalFootage.toFixed(2)} ft</strong></td>
-            <td><strong>${data.totalGallons.toFixed(3)} gal</strong></td>
+            <td colspan="7"><strong>TOTALS (Consumption)</strong></td>
+            <td><strong>${displayTotalFootage.toFixed(2)} ft</strong></td>
+            <td><strong>${displayTotalGallons.toFixed(3)} gal</strong></td>
           </tr>
         </tbody>
       </table>`;
+
+      // Paint summary by Colour + Finish
+      if (data.summary && data.summary.length > 0) {
+        html += `<div style="margin-top: 30px;"><div class="result-header">Paint Summary (by Colour + Finish)</div>`;
+        html += `<table class="result-table">
+          <thead>
+            <tr>
+              <th>Colour</th>
+              <th>Finish</th>
+              <th>Total Footage</th>
+              <th>Total Gallons</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+        data.summary.forEach(s => {
+          const gallons = s.displayGallons.toFixed(3);
+          html += `
+            <tr>
+              <td>${escapeHtml(removeEmDashes(s.colour))}</td>
+              <td>${escapeHtml(removeEmDashes(s.finish))}</td>
+              <td><strong>${s.displayFootage.toFixed(2)} ft</strong></td>
+              <td><strong>${gallons} gal</strong></td>
+            </tr>`;
+        });
+
+        html += `
+          </tbody>
+        </table></div>`;
+      }
 
       resultsDiv.innerHTML = html;
       resultsDiv.style.display = 'block';
@@ -701,32 +768,53 @@
     exportBtn.addEventListener('click', () => {
       if (!extractedData) return;
 
-      const data = extractedData.entries.map(entry => ({
-        'ExType': entry.exType,
-        'Colour': entry.colour,
-        'Finish': entry.finish,
-        'SecondaryColour': entry.secondaryColour,
-        'Description': entry.description,
-        'TotalLengthFt': entry.totalLengthFt,
-        'LengthsCount': entry.lengthsCount,
-        'Gallons': +(entry.totalLengthFt / FT_PER_GALLON).toFixed(3),
-        'Batch#': extractedData.batch,
-        'ReportDate': extractedData.reportDate
-      }));
+      const data = extractedData.entriesWithDisplay.map(entry => {
+        const displayFootage = entry.displayFootage;
+        return {
+          'ExType': removeEmDashes(entry.exType),
+          'Colour': removeEmDashes(entry.colour),
+          'Finish': removeEmDashes(entry.finish),
+          'SecondaryColour': removeEmDashes(entry.secondaryColour),
+          'Description': removeEmDashes(entry.description),
+          'BothSides': entry.bothSides ? 'Yes' : 'No',
+          'TotalLengthFt': displayFootage,
+          'LengthsCount': entry.lengthsCount,
+          'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3),
+          'Batch#': extractedData.batch,
+          'ReportDate': extractedData.reportDate
+        };
+      });
 
-      // Add totals row
+      // Add totals row (with BothSides doubling)
+      const displayTotalFootage = extractedData.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
+      const displayTotalGallons = displayTotalFootage / FT_PER_GALLON;
       data.push({
         'ExType': '',
         'Colour': '',
         'Finish': '',
         'SecondaryColour': '',
-        'Description': 'TOTAL',
-        'TotalLengthFt': +extractedData.totalFootage.toFixed(2),
+        'Description': 'TOTAL (Consumption)',
+        'BothSides': '',
+        'TotalLengthFt': +displayTotalFootage.toFixed(2),
         'LengthsCount': '',
-        'Gallons': +extractedData.totalGallons.toFixed(3),
+        'Gallons': +displayTotalGallons.toFixed(3),
         'Batch#': extractedData.batch,
         'ReportDate': extractedData.reportDate
       });
+
+      // Add paint summary section
+      if (extractedData.summary && extractedData.summary.length > 0) {
+        data.push({});  // blank row
+        data.push({ 'Description': 'PAINT SUMMARY (Colour + Finish)' });
+        extractedData.summary.forEach(s => {
+          data.push({
+            'Colour': removeEmDashes(s.colour),
+            'Finish': removeEmDashes(s.finish),
+            'TotalLengthFt': +s.displayFootage.toFixed(2),
+            'Gallons': +s.displayGallons.toFixed(3)
+          });
+        });
+      }
 
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
