@@ -339,18 +339,16 @@
     function handleFiles(files) {
       fileQueue = files;
       currentFileIndex = 0;
-      displayNextFile();
+      processQueue();
     }
 
-    function displayNextFile() {
+    async function processQueue() {
       if (currentFileIndex >= fileQueue.length) {
         statusDiv.innerHTML = '<div class="status success">✓ All files processed.</div>';
         return;
       }
 
       const file = fileQueue[currentFileIndex];
-      currentFile = file;
-
       const fileNum = fileQueue.length > 1 ? ` (${currentFileIndex + 1}/${fileQueue.length})` : '';
       fileInfo.innerHTML = `
         <div class="file-name">✓ ${file.name}${fileNum}</div>
@@ -358,28 +356,28 @@
       `;
       fileInfo.style.display = 'block';
 
-      readBtn.style.display = 'block';
+      readBtn.style.display = fileQueue.length === 1 ? 'block' : 'none';
       exportBtn.style.display = 'none';
       resultsDiv.style.display = 'none';
       rawTextSection.style.display = 'none';
-      statusDiv.innerHTML = '';
-    }
-
-    readBtn.addEventListener('click', async () => {
-      if (!currentFile) return;
-
-      readBtn.disabled = true;
       statusDiv.innerHTML = '<div class="status warning">⏳ Processing report...</div>';
 
+      await processFile(file);
+
+      currentFileIndex++;
+      setTimeout(() => processQueue(), 1500);
+    }
+
+    async function processFile(file) {
       let parsed = null;
       try {
-        const fileType = currentFile.type;
+        const fileType = file.type;
         let text = '';
 
         if (fileType === 'application/pdf') {
-          text = await extractTextFromPDF(currentFile);
+          text = await extractTextFromPDF(file);
         } else if (fileType.startsWith('image/')) {
-          text = await extractTextFromImage(currentFile);
+          text = await extractTextFromImage(file);
         } else {
           throw new Error('Unsupported file type');
         }
@@ -400,9 +398,8 @@
           statusDiv.innerHTML = `<div class="status success">✓ Checksum PASS — batch ${parsed.batch}: ${parsed.entries.length} rows, ${parsed.totalFootage.toFixed(2)} ft matches report Sum ${parsed.expectedSum.toFixed(2)} (${parsed.detailRecordsN} detail records)</div>`;
           exportBtn.style.display = 'block';
           // Auto-export on valid
-          autoExportCurrentFile(currentFile.name, parsed);
+          autoExportCurrentFile(file.name, parsed);
         } else {
-          // Validation failed: no results table, no Excel export.
           extractedData = null;
           resultsDiv.style.display = 'none';
           exportBtn.style.display = 'none';
@@ -412,28 +409,19 @@
       } catch (error) {
         console.error('Processing error:', error);
         statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
-      } finally {
-        readBtn.disabled = false;
-        // If more files in queue, process next automatically
-        if (currentFileIndex + 1 < fileQueue.length) {
-          const remaining = fileQueue.length - currentFileIndex - 1;
-          statusDiv.innerHTML += `<br><small style="color: #666; margin-top: 10px; display: block;">📄 ${remaining} file(s) left. Processing in 2 seconds...</small>`;
-          setTimeout(processNextFileAuto, 2000);
-        }
-      }
-    });
-
-    function processNextFileAuto() {
-      currentFileIndex++;
-      if (currentFileIndex < fileQueue.length) {
-        displayNextFile();
-        readBtn.click();
       }
     }
 
+    readBtn.addEventListener('click', async () => {
+      if (!currentFile) return;
+      readBtn.disabled = true;
+      await processFile(currentFile);
+      readBtn.disabled = false;
+    });
+
     function moveToNextFile() {
       currentFileIndex++;
-      displayNextFile();
+      processQueue();
     }
 
     // Extract text from PDF
