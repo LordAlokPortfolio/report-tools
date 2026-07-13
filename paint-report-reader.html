@@ -291,6 +291,9 @@
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+    // PLACEHOLDER — to be replaced with per-surface paint rate constants.
+    const FT_PER_GALLON = 400;
+
     let currentFile = null;
     let extractedData = null;
     let rawExtractedText = '';
@@ -371,21 +374,20 @@
         console.log('='.repeat(80));
         console.log(`Raw text extracted: ${text.length} characters`);
 
-        extractedData = parseReport(text);
+        const parsed = parseReport(text);
 
-        if (extractedData && extractedData.entries.length > 0) {
-          displayResults(extractedData);
+        if (parsed.valid) {
+          extractedData = parsed;
+          displayResults(parsed);
           displayRawText(text);
-          statusDiv.innerHTML = '<div class="status success">✓ Done.</div>';
+          statusDiv.innerHTML = `<div class="status success">✓ Checksum PASS — batch ${parsed.batch}: ${parsed.entries.length} rows, ${parsed.totalFootage.toFixed(2)} ft matches report Sum ${parsed.expectedSum.toFixed(2)} (${parsed.detailRecordsN} detail records)</div>`;
           exportBtn.style.display = 'block';
         } else {
-          statusDiv.innerHTML = `
-            <div class="status error">⚠ Could not detect paint data in this report.</div>
-            <div class="status warning">
-              The text was extracted but no ExType / color pattern was found.<br><br>
-              <strong>Check the raw text below</strong> — if the text looks correct, the report format may differ from expected.
-            </div>
-          `;
+          // Validation failed: no results table, no Excel export.
+          extractedData = null;
+          resultsDiv.style.display = 'none';
+          exportBtn.style.display = 'none';
+          displayValidationFailure(parsed);
           displayRawText(text);
         }
       } catch (error) {
@@ -412,20 +414,25 @@
           // Text-based PDF - use text extraction
           console.log(`Page ${pageNum}: Text-based PDF detected`);
           
-          // Reconstruct text by Y-position (lines)
-          const itemsByY = {};
-          textContent.items.forEach(item => {
-            const y = Math.round(item.transform[5]);
-            if (!itemsByY[y]) itemsByY[y] = [];
-            itemsByY[y].push(item);
-          });
-          
-          const sortedYs = Object.keys(itemsByY).map(Number).sort((a, b) => b - a);
-          
-          for (const y of sortedYs) {
-            const items = itemsByY[y].sort((a, b) => a.transform[4] - b.transform[4]);
-            const lineText = items.map(item => item.str).join(' ');
-            fullText += lineText + '\n';
+          // Reconstruct text by Y-position (lines). Items on the same visual
+          // row jitter by ~1pt while rows sit >=17pt apart, so cluster by
+          // Y-gap instead of exact rounding (which splits rows apart).
+          const sortedItems = [...textContent.items].sort((a, b) => b.transform[5] - a.transform[5]);
+          const lines = [];
+          let currentLine = null;
+          let currentY = null;
+          for (const item of sortedItems) {
+            const y = item.transform[5];
+            if (currentLine === null || currentY - y > 3) {
+              currentLine = [];
+              lines.push(currentLine);
+              currentY = y;
+            }
+            currentLine.push(item);
+          }
+          for (const line of lines) {
+            line.sort((a, b) => a.transform[4] - b.transform[4]);
+            fullText += line.map(item => item.str).join(' ') + '\n';
           }
         } else {
           // Scanned PDF - use OCR
@@ -460,196 +467,193 @@
       return text;
     }
 
-    // Parse line-by-line format (scanned PDFs / older format)
-    function parseLineByLine(text) {
-      console.log('Trying line-by-line format parser...');
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-      const entries = [];
-      
-      let currentEntry = null;
-      
-      for (const line of lines) {
-        // Production number
-        const prodMatch = line.match(/Production[:\s]+(\d+)/i);
-        if (prodMatch) {
-          productionNumber = prodMatch[1];
-          console.log(`Found production number: ${productionNumber}`);
-          continue;
-        }
-        
-        // Die number and color
-        const dieMatch = line.match(/^(\d{4}(?:Int|Ext)?)[^\d]*(.+)/);
-        if (dieMatch && !line.toLowerCase().includes('extype') && !line.toLowerCase().includes('total')) {
-          if (currentEntry && currentEntry.die) {
-            entries.push(currentEntry);
-          }
-          currentEntry = { die: dieMatch[1], color: dieMatch[2].trim() };
-          continue;
-        }
-        
-        // ExType description
-        const exTypeMatch = line.match(/ExType\s+\d+\s+(.+)/i);
-        if (exTypeMatch && currentEntry) {
-          currentEntry.description = exTypeMatch[1].replace(/Lengths?\s+\d+/i, '').trim();
-          continue;
-        }
-        
-        // Lengths
-        const lengthsMatch = line.match(/Lengths?\s+(\d+)/i);
-        if (lengthsMatch && currentEntry) {
-          currentEntry.lengths = parseInt(lengthsMatch[1]);
-          continue;
-        }
-        
-        // Total footage
-        const footageMatch = line.match(/Total\s+Length.*?([\d.]+)/i);
-        if (footageMatch && currentEntry) {
-          currentEntry.footage = parseFloat(footageMatch[1]);
-          continue;
-        }
-      }
-      
-      if (currentEntry && currentEntry.die) {
-        entries.push(currentEntry);
-      }
-      
-      if (entries.length > 0) {
-        console.log(`Line-by-line format: Found ${entries.length} entries`);
-        return entries;
-      }
-      
-      return null;
-    }
-
-    // Parse jumbled format (newer PDFs with scrambled columns)
-    function parseJumbledFormat(text) {
-      console.log('Trying jumbled-column format parser...');
-      const entries = [];
-      
-      // Pattern: die-color, ExType, description, Lengths X, footage all on same line
-      // Example: "4175-KV Black~Standard Profile ExType 4175 7/8" Glazing Stop Lengths 15 Total Length(ft) 241.2"
-      const jumbledPattern = /(\d{4}(?:Int|Ext)?)-(\w+)\s+([\w~\s]+?)\s+ExType\s+\d+\s+(.+?)\s+Lengths\s+(\d+)\s+Total Length\(ft\)\s+([\d.]+)/gi;
-      
-      let match;
-      while ((match = jumbledPattern.exec(text)) !== null) {
-        const [_, die, color, profile, description, lengths, footage] = match;
-        entries.push({
-          die: die.trim(),
-          color: color.trim(),
-          profile: profile.trim(),
-          description: description.trim(),
-          lengths: parseInt(lengths),
-          footage: parseFloat(footage)
-        });
-      }
-      
-      if (entries.length > 0) {
-        console.log(`Jumbled format: Found ${entries.length} entries`);
-        return entries;
-      }
-      
-      return null;
-    }
-
-    // Parse clean line-separated format (April 27 2026 format)
-    function parseCleanFormat(text) {
-      console.log('Trying clean line-separated format parser...');
-      const entries = [];
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-      
-      for (let i = 0; i < lines.length; i++) {
-        // Line 1: Die-Color~Profile (e.g., "1122-KV Black~Standard Profile")
-        const headerMatch = lines[i].match(/^(\d{4}(?:Int|Ext)?)-(\w+)\s+(.+?)~(.+)$/);
-        if (!headerMatch) continue;
-        
-        const [_, die, color, colorName, profile] = headerMatch;
-        
-        // Line 2: ExType description Lengths X (e.g., "ExType 1122 Wood Adapter 3/4 in Lengths 4")
-        if (i + 1 >= lines.length) continue;
-        const exTypeMatch = lines[i + 1].match(/^ExType\s+\d+\s+(.+?)\s+Lengths\s+(\d+)$/);
-        if (!exTypeMatch) continue;
-        
-        const [__, description, lengths] = exTypeMatch;
-        
-        // Line 3: Total Length(ft) value (e.g., "Total Length(ft) 65.0")
-        if (i + 2 >= lines.length) continue;
-        const footageMatch = lines[i + 2].match(/^Total Length\(ft\)\s+([\d.]+)$/);
-        if (!footageMatch) continue;
-        
-        const footage = parseFloat(footageMatch[1]);
-        
-        entries.push({
-          die: die.trim(),
-          color: (color + ' ' + colorName).trim(),
-          profile: profile.trim(),
-          description: description.trim(),
-          lengths: parseInt(lengths),
-          footage: footage
-        });
-        
-        i += 2; // Skip the next 2 lines we just processed
-      }
-      
-      if (entries.length > 0) {
-        console.log(`Clean format: Found ${entries.length} entries`);
-        return entries;
-      }
-      
-      return null;
-    }
-
-    // Main parsing function - tries all formats in cascade
+    // Single parser for the Da Vinci "PaintReport Production" format.
+    // Every record is two adjacent lines:
+    //   Line 1: {ExType}-KV {Colour}~{Finish} | {SecondaryColour} {Code} Profile {ProfileCode}
+    //   Line 2: ExType {ExType} {Description} Total Length(ft) {value} Lengths {count}
+    // Anchor on line 2, then pair it with the line directly above. ExType is
+    // NOT always a 4-digit number ("1118-REMOVE Fin", "2343Ext", "SDL1.125"),
+    // colours contain spaces ("Comm Brown"), descriptions contain slashes
+    // ("CAS/AWN", "1 1/4") — so no \d{4} anchors and no "/" or space splits.
     function parseReport(text) {
-      let productionNumber = '';
-      let reportDate = '';
-      
-      // Extract production number (common to all formats)
-      const prodMatch = text.match(/Production[:\s]+(\d+)/i);
-      if (prodMatch) {
-        productionNumber = prodMatch[1];
-      }
-      
-      // Extract date (common format at bottom: "Monday, April 27, 2026 Page 1 of 1")
-      const dateMatch = text.match(/(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/i);
-      if (dateMatch) {
-        reportDate = dateMatch[2];
-      }
-      
-      // Try parsers in order: clean → jumbled → line-by-line
-      let entries = parseCleanFormat(text);
-      if (!entries) entries = parseJumbledFormat(text);
-      if (!entries) entries = parseLineByLine(text);
-      
-      if (!entries || entries.length === 0) {
-        console.log('No parser succeeded');
-        return null;
-      }
-      
-      // Calculate gallons (400 ft = 1 gallon)
-      const totalFootage = entries.reduce((sum, e) => sum + (e.footage || 0), 0);
-      const totalGallons = totalFootage / 400;
-      
-      return {
-        productionNumber,
-        reportDate,
-        entries,
-        totalFootage,
-        totalGallons
+      const rawLines = text.split('\n').map(l => l.replace(/\s+/g, ' ').trim());
+      // Page headers/footers appear mid-stream. "ExType and Colour" contains
+      // "ExType" but is a column header, not a record anchor.
+      const isNoise = l =>
+        !l ||
+        l === 'ExType and Colour' ||
+        l === 'PaintReport' ||
+        /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),.*Page \d+ of \d+$/.test(l);
+      const lines = rawLines.filter(l => !isNoise(l));
+
+      const result = {
+        batch: '',
+        summaryBatch: '',
+        reportDate: '',
+        detailRecordsN: null,   // "(N detail records)" — underlying DB rows, informational
+        expectedSum: null,      // the report's own "Sum" checksum line
+        entries: [],
+        errors: [],
+        totalFootage: 0,
+        totalGallons: 0,
+        sumTolerance: 0,
+        valid: false
       };
+
+      const dateMatch = text.match(/(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})/);
+      if (dateMatch) result.reportDate = dateMatch[1];
+
+      const ANCHOR = /^ExType (.+?) Total Length\(ft\) ([\d,]*\.?\d+) Lengths (\d+)$/;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        let m;
+
+        if ((m = line.match(/^Production (\S+)$/))) { result.batch = m[1]; continue; }
+        if ((m = line.match(/^Summary for 'Production' = (\S+) \((\d+) detail records\)$/))) {
+          result.summaryBatch = m[1];
+          result.detailRecordsN = parseInt(m[2], 10);
+          continue;
+        }
+        if ((m = line.match(/^Sum ([\d,]+(?:\.\d+)?)$/))) {
+          result.expectedSum = parseFloat(m[1].replace(/,/g, ''));
+          continue;
+        }
+
+        m = line.match(ANCHOR);
+        if (!m) continue;
+
+        const combined = m[1]; // "{ExType} {Description}"
+        const totalLengthFt = parseFloat(m[2].replace(/,/g, ''));
+        const lengthsCount = parseInt(m[3], 10);
+        const colourLine = i > 0 ? lines[i - 1] : '';
+
+        // Records are related only by adjacency: the colour line must sit
+        // directly above and start with "{ExType}-KV ". Recover the ExType by
+        // trying each "-KV " in the colour line as the ExType boundary and
+        // requiring the anchor's combined string to start with that prefix.
+        // (ExTypes themselves can contain "-", e.g. "1118-REMOVE Fin".)
+        let exType = null;
+        let kvPos = -1;
+        while ((kvPos = colourLine.indexOf('-KV ', kvPos + 1)) !== -1) {
+          const candidate = colourLine.substring(0, kvPos);
+          if (combined === candidate || combined.startsWith(candidate + ' ')) {
+            exType = candidate;
+            break;
+          }
+        }
+        if (exType === null) {
+          result.errors.push(`Record ${result.entries.length + 1}: data line "${line}" is not preceded by a matching colour line (line above was: "${colourLine}")`);
+          continue;
+        }
+        const description = combined.substring(exType.length).trim();
+
+        // Rest of colour line: "{Colour}~{Finish} | {Secondary} {Code} Profile {ProfileCode}"
+        // Split on "~" only — colour names contain spaces. Secondary colour is
+        // sometimes absent (no "|", trailing space after "Profile").
+        const rest = colourLine.substring(exType.length + '-KV '.length);
+        const tilde = rest.indexOf('~');
+        if (tilde === -1) {
+          result.errors.push(`Record ${result.entries.length + 1}: no "~" separator in colour line "${colourLine}"`);
+          continue;
+        }
+        const colour = rest.substring(0, tilde).trim();
+        const afterTilde = rest.substring(tilde + 1);
+        let finish, secondaryColour;
+        const pipe = afterTilde.indexOf('|');
+        if (pipe !== -1) {
+          finish = afterTilde.substring(0, pipe).trim();
+          secondaryColour = afterTilde.substring(pipe + 1).replace(/\s*Profile\s*\S*$/, '').trim();
+        } else {
+          finish = afterTilde.replace(/\s*Profile\s*\S*$/, '').trim();
+          secondaryColour = '';
+        }
+
+        // Never deduplicate — the same ExType legitimately repeats per colour.
+        result.entries.push({ exType, colour, finish, secondaryColour, description, totalLengthFt, lengthsCount });
+      }
+
+      result.totalFootage = result.entries.reduce((sum, e) => sum + e.totalLengthFt, 0);
+      result.totalGallons = result.totalFootage / FT_PER_GALLON;
+
+      validateReport(result, lines);
+      return result;
+    }
+
+    // MANDATORY CHECKSUM VALIDATION against the report's own summary lines.
+    // A partial parse must never look like a success.
+    function validateReport(result, lines) {
+      if (result.entries.length === 0) {
+        result.errors.push('No records found — the "ExType … Total Length(ft) … Lengths …" anchor never matched.');
+      }
+      if (result.detailRecordsN === null) {
+        result.errors.push(`"Summary for 'Production'" line not found — report may be truncated or a different format.`);
+      }
+      if (result.expectedSum === null) {
+        result.errors.push('Report "Sum" checksum line not found — report may be truncated or a different format.');
+      }
+      if (result.batch && result.summaryBatch && result.batch !== result.summaryBatch) {
+        result.errors.push(`Batch mismatch: report header says ${result.batch} but summary says ${result.summaryBatch}.`);
+      }
+
+      // Structural pairing: every record is exactly one colour line + one data
+      // line. A colour line whose data line was lost (or vice versa) shifts
+      // adjacency, so the counts must match 1:1.
+      const colourLineCount = lines.filter(l => /-KV [^~]*~/.test(l)).length;
+      if (colourLineCount !== result.entries.length) {
+        result.errors.push(`Structural mismatch: found ${colourLineCount} colour lines but parsed ${result.entries.length} records — one or more lines were lost or misread.`);
+      }
+
+      // Sum checksum. Printed per-row footages are rounded to 1 decimal while
+      // the report Sum has 2 decimals, so the max legitimate drift is 0.05/row.
+      if (result.expectedSum !== null) {
+        result.sumTolerance = 0.05 * result.entries.length + 0.005;
+        const diff = Math.abs(result.totalFootage - result.expectedSum);
+        if (diff > result.sumTolerance) {
+          result.errors.push(`CHECKSUM FAILURE: parsed rows sum to ${result.totalFootage.toFixed(2)} ft but the report Sum is ${result.expectedSum.toFixed(2)} ft — difference ${diff.toFixed(2)} exceeds rounding tolerance ${result.sumTolerance.toFixed(2)}. One or more records were missed or misread.`);
+        }
+      }
+
+      result.valid = result.errors.length === 0;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function displayValidationFailure(parsed) {
+      const errorItems = parsed.errors.map(e => `<li>${escapeHtml(e)}</li>`).join('');
+      statusDiv.innerHTML = `
+        <div class="status error">
+          ❌ <strong>CHECKSUM VALIDATION FAILED — results withheld.</strong><br><br>
+          Batch: ${escapeHtml(parsed.batch || '(not found)')}
+          &nbsp;|&nbsp; Rows parsed: ${parsed.entries.length}
+          &nbsp;|&nbsp; Parsed sum: ${parsed.totalFootage.toFixed(2)} ft
+          &nbsp;|&nbsp; Report Sum: ${parsed.expectedSum !== null ? parsed.expectedSum.toFixed(2) + ' ft' : '(not found)'}
+          &nbsp;|&nbsp; Detail records: ${parsed.detailRecordsN !== null ? parsed.detailRecordsN : '(not found)'}
+          <ul style="margin: 12px 0 0 20px;">${errorItems}</ul>
+        </div>
+        <div class="status warning">
+          The parsed data does not reconcile with the report's own summary, so the
+          results table and Excel export are disabled. Check the raw text below.
+        </div>
+      `;
     }
 
     function displayResults(data) {
-      let html = `<div class="result-header">Production ${data.productionNumber}`;
+      let html = `<div class="result-header">Production ${escapeHtml(data.batch)}`;
       if (data.reportDate) {
-        html += ` — ${data.reportDate}`;
+        html += ` — ${escapeHtml(data.reportDate)}`;
       }
-      html += `</div>`;
-      
+      html += ` — ${data.entries.length} rows (${data.detailRecordsN} detail records)</div>`;
+
       html += `<table class="result-table">
         <thead>
           <tr>
-            <th>Die</th>
-            <th>Color</th>
+            <th>ExType</th>
+            <th>Colour</th>
+            <th>Finish</th>
+            <th>Secondary</th>
             <th>Description</th>
             <th>Lengths</th>
             <th>Footage</th>
@@ -657,29 +661,31 @@
           </tr>
         </thead>
         <tbody>`;
-      
+
       data.entries.forEach(entry => {
-        const gallons = (entry.footage / 400).toFixed(3);
+        const gallons = (entry.totalLengthFt / FT_PER_GALLON).toFixed(3);
         html += `
           <tr>
-            <td>${entry.die}</td>
-            <td>${entry.color}</td>
-            <td>${entry.description || '-'}</td>
-            <td>${entry.lengths || '-'}</td>
-            <td>${entry.footage.toFixed(2)}</td>
+            <td>${escapeHtml(entry.exType)}</td>
+            <td>${escapeHtml(entry.colour)}</td>
+            <td>${escapeHtml(entry.finish)}</td>
+            <td>${escapeHtml(entry.secondaryColour) || '-'}</td>
+            <td>${escapeHtml(entry.description) || '-'}</td>
+            <td>${entry.lengthsCount}</td>
+            <td>${entry.totalLengthFt.toFixed(2)}</td>
             <td>${gallons}</td>
           </tr>`;
       });
-      
+
       html += `
           <tr class="totals-row">
-            <td colspan="4"><strong>TOTALS</strong></td>
+            <td colspan="6"><strong>TOTALS</strong></td>
             <td><strong>${data.totalFootage.toFixed(2)} ft</strong></td>
             <td><strong>${data.totalGallons.toFixed(3)} gal</strong></td>
           </tr>
         </tbody>
       </table>`;
-      
+
       resultsDiv.innerHTML = html;
       resultsDiv.style.display = 'block';
     }
@@ -696,29 +702,37 @@
       if (!extractedData) return;
 
       const data = extractedData.entries.map(entry => ({
-        'Die': entry.die,
-        'Color': entry.color,
-        'Description': entry.description || '',
-        'Lengths': entry.lengths || 0,
-        'Footage': entry.footage,
-        'Gallons': (entry.footage / 400).toFixed(3)
+        'ExType': entry.exType,
+        'Colour': entry.colour,
+        'Finish': entry.finish,
+        'SecondaryColour': entry.secondaryColour,
+        'Description': entry.description,
+        'TotalLengthFt': entry.totalLengthFt,
+        'LengthsCount': entry.lengthsCount,
+        'Gallons': +(entry.totalLengthFt / FT_PER_GALLON).toFixed(3),
+        'Batch#': extractedData.batch,
+        'ReportDate': extractedData.reportDate
       }));
 
       // Add totals row
       data.push({
-        'Die': '',
-        'Color': '',
+        'ExType': '',
+        'Colour': '',
+        'Finish': '',
+        'SecondaryColour': '',
         'Description': 'TOTAL',
-        'Lengths': '',
-        'Footage': extractedData.totalFootage.toFixed(2),
-        'Gallons': extractedData.totalGallons.toFixed(3)
+        'TotalLengthFt': +extractedData.totalFootage.toFixed(2),
+        'LengthsCount': '',
+        'Gallons': +extractedData.totalGallons.toFixed(3),
+        'Batch#': extractedData.batch,
+        'ReportDate': extractedData.reportDate
       });
 
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
 
-      const fileName = `PaintReport_${extractedData.productionNumber}.xlsx`;
+      const fileName = `PaintReport_${extractedData.batch}.xlsx`;
       XLSX.writeFile(wb, fileName);
 
       statusDiv.innerHTML = `<div class="status success">✓ Exported to ${fileName}</div>`;
