@@ -484,7 +484,7 @@
     }
 
     function autoExportConsolidated(consolidatedData) {
-      const fileData = consolidatedData.entries.map(entry => {
+      const fileData = consolidatedData.entriesWithDisplay.map(entry => {
         const displayFootage = entry.displayFootage;
         return {
           'ExType': removeEmDashes(entry.exType || ''),
@@ -495,13 +495,13 @@
           'BothSides': entry.bothSides ? 'Yes' : 'No',
           'TotalLengthFt': entry.totalLengthFt || 0,
           'LengthsCount': entry.lengthsCount || 0,
-          'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3) || 0,
+          'Gallons': +(displayFootage / FT_PER_GALLON).toFixed(3),
           'Batch#': consolidatedData.batch || '',
           'ReportDate': consolidatedData.reportDate || ''
         };
       });
 
-      const originalTotalFootage = consolidatedData.entries.reduce((sum, e) => sum + (e.totalLengthFt || 0), 0);
+      const originalTotalFootage = consolidatedData.entriesWithDisplay.reduce((sum, e) => sum + (e.totalLengthFt || 0), 0);
       const displayTotalFootage = consolidatedData.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
       const displayTotalGallons = displayTotalFootage / FT_PER_GALLON;
       fileData.push({
