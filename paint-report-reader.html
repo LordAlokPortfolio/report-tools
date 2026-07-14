@@ -552,14 +552,89 @@
 
       const ws = XLSX.utils.json_to_sheet(fileData);
 
-      // Apply borders to summary table
+      // Professional formatting
       const border = { style: 'thin', color: { rgb: '000000' } };
       const allBorders = { top: border, bottom: border, left: border, right: border };
-      for (let row = summaryStartRow; row <= fileData.length; row++) {
-        for (let col = 1; col <= 11; col++) {
-          const cellRef = XLSX.utils.encode_col(col - 1) + row;
+      const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { rgb: '4472C4' } };
+      const headerFont = { bold: true, color: { rgb: 'FFFFFF' } };
+      const boldFont = { bold: true };
+      const centerAlign = { horizontal: 'center', vertical: 'center' };
+      const rightAlign = { horizontal: 'right', vertical: 'center' };
+
+      // Column widths
+      ws['!cols'] = [
+        { wch: 12 }, // ExType
+        { wch: 16 }, // Colour
+        { wch: 14 }, // Finish
+        { wch: 14 }, // SecondaryColour
+        { wch: 20 }, // Description
+        { wch: 10 }, // BothSides
+        { wch: 12 }, // TotalLengthFt
+        { wch: 10 }, // LengthsCount
+        { wch: 10 }, // Gallons
+        { wch: 15 }, // Batch#
+        { wch: 12 }  // ReportDate
+      ];
+
+      // Header row (row 1)
+      const headers = Object.keys(fileData[0]);
+      headers.forEach((header, col) => {
+        const cellRef = XLSX.utils.encode_col(col) + '1';
+        ws[cellRef].fill = headerFill;
+        ws[cellRef].font = headerFont;
+        ws[cellRef].alignment = centerAlign;
+        ws[cellRef].border = allBorders;
+      });
+
+      // Data rows (rows 2 to totals row)
+      const totalsRowNum = fileData.length + 1;
+      for (let row = 2; row < totalsRowNum; row++) {
+        for (let col = 0; col < headers.length; col++) {
+          const cellRef = XLSX.utils.encode_col(col) + row;
           if (!ws[cellRef]) ws[cellRef] = {};
           ws[cellRef].border = allBorders;
+          ws[cellRef].alignment = col >= 6 ? rightAlign : { vertical: 'center' }; // Right-align numeric columns
+
+          // Format numbers with 2 decimals for footage/gallons
+          if ((col === 6 || col === 8) && ws[cellRef].v !== '') {
+            ws[cellRef].numFmt = '0.00';
+          }
+        }
+      }
+
+      // Totals row formatting (bold, with borders and background)
+      const totalsBgFill = { type: 'pattern', pattern: 'solid', fgColor: { rgb: 'D9E1F2' } };
+      for (let col = 0; col < headers.length; col++) {
+        const cellRef = XLSX.utils.encode_col(col) + totalsRowNum;
+        if (!ws[cellRef]) ws[cellRef] = {};
+        ws[cellRef].font = boldFont;
+        ws[cellRef].fill = totalsBgFill;
+        ws[cellRef].border = allBorders;
+        ws[cellRef].alignment = col >= 6 ? rightAlign : { vertical: 'center' };
+        if ((col === 6 || col === 8) && ws[cellRef].v !== '') {
+          ws[cellRef].numFmt = '0.00';
+        }
+      }
+
+      // Summary section formatting
+      const summaryHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { rgb: 'E7E6E6' } };
+      for (let row = summaryStartRow; row <= fileData.length; row++) {
+        for (let col = 0; col < headers.length; col++) {
+          const cellRef = XLSX.utils.encode_col(col) + row;
+          if (!ws[cellRef]) ws[cellRef] = {};
+          ws[cellRef].border = allBorders;
+          ws[cellRef].alignment = col >= 6 ? rightAlign : { vertical: 'center' };
+
+          // Summary header row (first row of summary)
+          if (row === summaryStartRow) {
+            ws[cellRef].fill = summaryHeaderFill;
+            ws[cellRef].font = boldFont;
+          }
+
+          // Format numbers
+          if ((col === 6 || col === 8) && ws[cellRef].v !== '') {
+            ws[cellRef].numFmt = '0.00';
+          }
         }
       }
 
