@@ -522,8 +522,7 @@
         'ReportDate': consolidatedData.reportDate || ''
       });
 
-      // Main batch table stays plain (no styling) — the PM-facing Paint Summary
-      // below is the formatted, bordered section.
+      // Main batch table sheet (plain, no styling)
       const ws = XLSX.utils.json_to_sheet(fileData);
       ws['!cols'] = [
         { wch: 16 }, // ExType
@@ -539,11 +538,12 @@
         { wch: 14 }  // ReportDate
       ];
 
-      // ---- PAINT SUMMARY: separate bordered section 2 blank rows below ----
-      const summary = consolidatedData.summary || [];
-      const totalsSheetRow = fileData.length + 1;   // 1-based sheet row of the totals line
-      const titleRow = totalsSheetRow + 3;          // leave two blank rows
+      // Create workbook and add main sheet
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
 
+      // ---- PAINT SUMMARY: separate sheet with bordered formatting ----
+      const summary = consolidatedData.summary || [];
       const sumFootage = summary.reduce((t, s) => t + (s.totalFootage !== undefined ? s.totalFootage : (s.displayFootage || 0)), 0);
       const sumGallons = summary.reduce((t, s) => t + (s.displayGallons || 0), 0);
 
@@ -558,49 +558,54 @@
         ]),
         ['TOTAL', '', +sumFootage.toFixed(2), +sumGallons.toFixed(3)]
       ];
-      XLSX.utils.sheet_add_aoa(ws, summaryAoa, { origin: 'A' + titleRow });
 
-      // Style the summary block only (requires the xlsx-js-style build).
+      // Create summary sheet from array
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+      wsSummary['!cols'] = [
+        { wch: 20 }, // Colour
+        { wch: 16 }, // Finish
+        { wch: 18 }, // Total Footage
+        { wch: 12 }  // Gallons
+      ];
+
+      // Style the summary sheet (requires the xlsx-js-style build)
       const thin = { style: 'thin', color: { rgb: '000000' } };
       const borderAll = { top: thin, bottom: thin, left: thin, right: thin };
-      const firstRow0 = titleRow - 1;                       // 0-based
-      const lastRow0 = firstRow0 + summaryAoa.length - 1;   // 0-based total row
 
-      for (let r = firstRow0; r <= lastRow0; r++) {
+      for (let r = 0; r < summaryAoa.length; r++) {
         for (let c = 0; c < 4; c++) {
           const ref = XLSX.utils.encode_cell({ r: r, c: c });
-          if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+          if (!wsSummary[ref]) wsSummary[ref] = { t: 's', v: '' };
           const style = {
             border: borderAll,
             alignment: { vertical: 'center', horizontal: c >= 2 ? 'right' : 'left' }
           };
-          if (r === firstRow0) {
+          if (r === 0) {
             // Title bar
             style.font = { bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
             style.fill = { patternType: 'solid', fgColor: { rgb: '2C3E50' } };
             style.alignment = { vertical: 'center', horizontal: 'left' };
-          } else if (r === firstRow0 + 1) {
+          } else if (r === 1) {
             // Column header row
             style.font = { bold: true, color: { rgb: 'FFFFFF' } };
             style.fill = { patternType: 'solid', fgColor: { rgb: '4472C4' } };
-          } else if (r === lastRow0) {
+          } else if (r === summaryAoa.length - 1) {
             // Grand total row
             style.font = { bold: true };
             style.fill = { patternType: 'solid', fgColor: { rgb: 'D9E1F2' } };
           }
-          if (c >= 2 && r > firstRow0 + 1) {
+          if (c >= 2 && r > 1) {
             style.numFmt = c === 2 ? '0.00' : '0.000';
           }
-          ws[ref].s = style;
+          wsSummary[ref].s = style;
         }
       }
 
       // Merge the title bar across the 4 summary columns
-      ws['!merges'] = ws['!merges'] || [];
-      ws['!merges'].push({ s: { r: firstRow0, c: 0 }, e: { r: firstRow0, c: 3 } });
+      wsSummary['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
+      // Add summary sheet to workbook
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'PaintSummary');
 
       const exportFileName = `PaintReport_Consolidated.xlsx`;
       XLSX.writeFile(wb, exportFileName);
