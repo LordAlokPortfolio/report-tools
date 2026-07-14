@@ -456,7 +456,7 @@
         entriesWithDisplay: allEntriesWithDisplay,
         totalFootage: totalOriginalFootage,
         expectedSum: null,
-        detailRecordsN: null,
+        detailRecordsN: allParsedData.reduce((t, d) => t + (d.detailRecordsN || 0), 0),
         summary: buildPaintSummary(allEntriesWithDisplay)
       };
 
@@ -760,7 +760,6 @@
         // ExType boundary and requiring the anchor's combined string to start with that prefix.
         // (ExTypes themselves can contain "-", e.g. "1118-REMOVE Fin".)
         let exType = null;
-        let brandSeparatorPos = -1;
         let brandSeparatorEnd = -1;
         // Find all dash-space boundaries
         for (let dashPos = 0; dashPos < colourLine.length; dashPos++) {
@@ -774,7 +773,6 @@
               const candidate = colourLine.substring(0, dashPos);
               if (combined === candidate || combined.startsWith(candidate + ' ')) {
                 exType = candidate;
-                brandSeparatorPos = dashPos;
                 brandSeparatorEnd = spacePos + 1;
                 break;
               }
@@ -863,8 +861,10 @@
       // Structural pairing: every record is exactly one colour line + one data
       // line. A colour line whose data line was lost (or vice versa) shifts
       // adjacency, so the counts must match 1:1.
-      // Colour lines have format: ExType-{Brand} {Colour}~{Finish}...
-      const colourLineCount = lines.filter(l => /-[A-Z0-9]+\s+[^~]*~/.test(l)).length;
+      // Colour lines have format: ExType-{Brand} {Colour}~{Finish}... where
+      // {Brand} is any non-space token (KV, GENTEK, ...) — keep this in sync
+      // with the parser's boundary scan, which accepts any brand token.
+      const colourLineCount = lines.filter(l => /-\S+\s+[^~]*~/.test(l)).length;
       if (colourLineCount !== result.entries.length) {
         result.errors.push(`Structural mismatch: found ${colourLineCount} colour lines but parsed ${result.entries.length} records — one or more lines were lost or misread.`);
       }
@@ -918,7 +918,11 @@
       if (data.reportDate) {
         html += ` - ${escapeHtml(removeEmDashes(data.reportDate))}`;
       }
-      html += ` - ${data.entries.length} rows (${data.detailRecordsN} detail records)</div>`;
+      html += ` - ${data.entries.length} rows`;
+      if (data.detailRecordsN) {
+        html += ` (${data.detailRecordsN} detail records)`;
+      }
+      html += `</div>`;
 
       html += `<table class="result-table">
         <thead>
