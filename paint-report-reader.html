@@ -262,7 +262,7 @@
       <h1>🎨 PAINT REPORT READER</h1>
       <p>VINYL EXTRUSION TRACKER</p>
       <div class="badge">100% LOCAL - NO DATA LEAVES YOUR COMPUTER - NO INTERNET REQUIRED AFTER LOAD</div>
-      <div style="font-size: 11px; margin-top: 12px; opacity: 0.85;">Version: 2.1 | Last Updated: 2026-07-14 | Build: Multi-file consolidation + Professional Excel formatting</div>
+      <div style="font-size: 11px; margin-top: 12px; opacity: 0.85;">Version: 2.2 | Last Updated: 2026-07-14 | Build: Bordered Paint Summary section (xlsx-js-style)</div>
     </div>
 
     <div class="content">
@@ -287,7 +287,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- xlsx-js-style: SheetJS fork that supports cell styling (borders, fills, fonts).
+       The plain community xlsx build silently ignores all style properties. -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -458,7 +460,8 @@
         summary: buildPaintSummary(allEntriesWithDisplay)
       };
 
-      // Display consolidated results
+      // Display consolidated results; the EXPORT button re-exports this same data
+      extractedData = consolidatedData;
       displayResults(consolidatedData);
       exportBtn.style.display = 'block';
 
@@ -519,125 +522,82 @@
         'ReportDate': consolidatedData.reportDate || ''
       });
 
-      const summaryStartRow = fileData.length + 1;
-      if (consolidatedData.summary && consolidatedData.summary.length > 0) {
-        fileData.push({
-          'ExType': '',
-          'Colour': '',
-          'Finish': '',
-          'SecondaryColour': '',
-          'Description': 'PAINT SUMMARY (Colour + Finish)',
-          'BothSides': '',
-          'TotalLengthFt': '',
-          'LengthsCount': '',
-          'Gallons': '',
-          'Batch#': '',
-          'ReportDate': ''
-        });
-        consolidatedData.summary.forEach(s => {
-          fileData.push({
-            'ExType': '',
-            'Colour': removeEmDashes(s.colour || ''),
-            'Finish': removeEmDashes(s.finish || ''),
-            'SecondaryColour': '',
-            'Description': '',
-            'BothSides': '',
-            'TotalLengthFt': +s.totalFootage.toFixed(2),
-            'LengthsCount': '',
-            'Gallons': +s.displayGallons.toFixed(3),
-            'Batch#': '',
-            'ReportDate': ''
-          });
-        });
-      }
-
+      // Main batch table stays plain (no styling) — the PM-facing Paint Summary
+      // below is the formatted, bordered section.
       const ws = XLSX.utils.json_to_sheet(fileData);
-
-      // Professional formatting
-      const border = { style: 'thin', color: { rgb: '000000' } };
-      const allBorders = { top: border, bottom: border, left: border, right: border };
-      const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { rgb: '4472C4' } };
-      const headerFont = { bold: true, color: { rgb: 'FFFFFF' } };
-      const boldFont = { bold: true };
-      const centerAlign = { horizontal: 'center', vertical: 'center' };
-      const rightAlign = { horizontal: 'right', vertical: 'center' };
-
-      // Column widths
       ws['!cols'] = [
-        { wch: 12 }, // ExType
+        { wch: 16 }, // ExType
         { wch: 16 }, // Colour
-        { wch: 14 }, // Finish
-        { wch: 14 }, // SecondaryColour
-        { wch: 20 }, // Description
+        { wch: 12 }, // Finish
+        { wch: 16 }, // SecondaryColour
+        { wch: 28 }, // Description
         { wch: 10 }, // BothSides
-        { wch: 12 }, // TotalLengthFt
-        { wch: 10 }, // LengthsCount
-        { wch: 10 }, // Gallons
-        { wch: 15 }, // Batch#
-        { wch: 12 }  // ReportDate
+        { wch: 13 }, // TotalLengthFt
+        { wch: 12 }, // LengthsCount
+        { wch: 9 },  // Gallons
+        { wch: 20 }, // Batch#
+        { wch: 14 }  // ReportDate
       ];
 
-      // Header row (row 1)
-      const headers = Object.keys(fileData[0]);
-      headers.forEach((header, col) => {
-        const cellRef = XLSX.utils.encode_col(col) + '1';
-        ws[cellRef].fill = headerFill;
-        ws[cellRef].font = headerFont;
-        ws[cellRef].alignment = centerAlign;
-        ws[cellRef].border = allBorders;
-      });
+      // ---- PAINT SUMMARY: separate bordered section 2 blank rows below ----
+      const summary = consolidatedData.summary || [];
+      const totalsSheetRow = fileData.length + 1;   // 1-based sheet row of the totals line
+      const titleRow = totalsSheetRow + 3;          // leave two blank rows
 
-      // Data rows (rows 2 to totals row)
-      const totalsRowNum = fileData.length + 1;
-      for (let row = 2; row < totalsRowNum; row++) {
-        for (let col = 0; col < headers.length; col++) {
-          const cellRef = XLSX.utils.encode_col(col) + row;
-          if (!ws[cellRef]) ws[cellRef] = {};
-          ws[cellRef].border = allBorders;
-          ws[cellRef].alignment = col >= 6 ? rightAlign : { vertical: 'center' }; // Right-align numeric columns
+      const sumFootage = summary.reduce((t, s) => t + (s.totalFootage !== undefined ? s.totalFootage : (s.displayFootage || 0)), 0);
+      const sumGallons = summary.reduce((t, s) => t + (s.displayGallons || 0), 0);
 
-          // Format numbers with 2 decimals for footage/gallons
-          if ((col === 6 || col === 8) && ws[cellRef].v !== '') {
-            ws[cellRef].numFmt = '0.00';
+      const summaryAoa = [
+        ['PAINT SUMMARY (Colour + Finish)', '', '', ''],
+        ['Colour', 'Finish', 'Total Footage (ft)', 'Gallons'],
+        ...summary.map(s => [
+          removeEmDashes(s.colour || ''),
+          removeEmDashes(s.finish || ''),
+          +((s.totalFootage !== undefined ? s.totalFootage : (s.displayFootage || 0)).toFixed(2)),
+          +((s.displayGallons || 0).toFixed(3))
+        ]),
+        ['TOTAL', '', +sumFootage.toFixed(2), +sumGallons.toFixed(3)]
+      ];
+      XLSX.utils.sheet_add_aoa(ws, summaryAoa, { origin: 'A' + titleRow });
+
+      // Style the summary block only (requires the xlsx-js-style build).
+      const thin = { style: 'thin', color: { rgb: '000000' } };
+      const borderAll = { top: thin, bottom: thin, left: thin, right: thin };
+      const firstRow0 = titleRow - 1;                       // 0-based
+      const lastRow0 = firstRow0 + summaryAoa.length - 1;   // 0-based total row
+
+      for (let r = firstRow0; r <= lastRow0; r++) {
+        for (let c = 0; c < 4; c++) {
+          const ref = XLSX.utils.encode_cell({ r: r, c: c });
+          if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+          const style = {
+            border: borderAll,
+            alignment: { vertical: 'center', horizontal: c >= 2 ? 'right' : 'left' }
+          };
+          if (r === firstRow0) {
+            // Title bar
+            style.font = { bold: true, sz: 12, color: { rgb: 'FFFFFF' } };
+            style.fill = { patternType: 'solid', fgColor: { rgb: '2C3E50' } };
+            style.alignment = { vertical: 'center', horizontal: 'left' };
+          } else if (r === firstRow0 + 1) {
+            // Column header row
+            style.font = { bold: true, color: { rgb: 'FFFFFF' } };
+            style.fill = { patternType: 'solid', fgColor: { rgb: '4472C4' } };
+          } else if (r === lastRow0) {
+            // Grand total row
+            style.font = { bold: true };
+            style.fill = { patternType: 'solid', fgColor: { rgb: 'D9E1F2' } };
           }
+          if (c >= 2 && r > firstRow0 + 1) {
+            style.numFmt = c === 2 ? '0.00' : '0.000';
+          }
+          ws[ref].s = style;
         }
       }
 
-      // Totals row formatting (bold, with borders and background)
-      const totalsBgFill = { type: 'pattern', pattern: 'solid', fgColor: { rgb: 'D9E1F2' } };
-      for (let col = 0; col < headers.length; col++) {
-        const cellRef = XLSX.utils.encode_col(col) + totalsRowNum;
-        if (!ws[cellRef]) ws[cellRef] = {};
-        ws[cellRef].font = boldFont;
-        ws[cellRef].fill = totalsBgFill;
-        ws[cellRef].border = allBorders;
-        ws[cellRef].alignment = col >= 6 ? rightAlign : { vertical: 'center' };
-        if ((col === 6 || col === 8) && ws[cellRef].v !== '') {
-          ws[cellRef].numFmt = '0.00';
-        }
-      }
-
-      // Summary section formatting
-      const summaryHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { rgb: 'E7E6E6' } };
-      for (let row = summaryStartRow; row <= fileData.length; row++) {
-        for (let col = 0; col < headers.length; col++) {
-          const cellRef = XLSX.utils.encode_col(col) + row;
-          if (!ws[cellRef]) ws[cellRef] = {};
-          ws[cellRef].border = allBorders;
-          ws[cellRef].alignment = col >= 6 ? rightAlign : { vertical: 'center' };
-
-          // Summary header row (first row of summary)
-          if (row === summaryStartRow) {
-            ws[cellRef].fill = summaryHeaderFill;
-            ws[cellRef].font = boldFont;
-          }
-
-          // Format numbers
-          if ((col === 6 || col === 8) && ws[cellRef].v !== '') {
-            ws[cellRef].numFmt = '0.00';
-          }
-        }
-      }
+      // Merge the title bar across the 4 summary columns
+      ws['!merges'] = ws['!merges'] || [];
+      ws['!merges'].push({ s: { r: firstRow0, c: 0 }, e: { r: firstRow0, c: 3 } });
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
