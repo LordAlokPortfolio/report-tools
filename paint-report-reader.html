@@ -20,7 +20,7 @@
     }
 
     .container {
-      max-width: 900px;
+      max-width: 1200px;
       margin: 0 auto;
       background: rgba(255, 255, 255, 0.95);
       border-radius: 12px;
@@ -254,6 +254,63 @@
       word-wrap: break-word;
       border: 1px solid #ddd;
     }
+
+    .dept-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 760px) {
+      .dept-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .dept-panel {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 20px;
+      background: #fcfcfc;
+    }
+
+    .dept-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 15px;
+      text-align: center;
+      letter-spacing: 0.5px;
+    }
+
+    .dept-panel .upload-zone {
+      padding: 30px 15px;
+      margin-bottom: 15px;
+    }
+
+    .dept-panel .upload-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+
+    .dept-panel .upload-text {
+      font-size: 15px;
+    }
+
+    .dept-panel .file-info {
+      margin: 12px 0;
+    }
+
+    .dept-panel .results {
+      margin-top: 15px;
+    }
+
+    .export-bar {
+      border-top: 2px solid #eee;
+      padding-top: 25px;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -266,21 +323,39 @@
     </div>
 
     <div class="content">
-      <div class="upload-zone" id="uploadZone">
-        <div class="upload-icon">📄</div>
-        <div class="upload-text">DROP PAINT REPORT HERE</div>
-        <div class="upload-hint">PDF (text or scanned) · JPG · PNG · Any photo of the report</div>
+      <div class="dept-grid">
+        <div class="dept-panel">
+          <div class="dept-title">🪟 WINDOWS DEPARTMENT</div>
+          <div class="upload-zone" id="uploadZone_windows">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">DROP WINDOWS PAINT REPORT HERE</div>
+            <div class="upload-hint">PDF (text or scanned) · JPG · PNG</div>
+          </div>
+          <input type="file" id="fileInput_windows" class="file-input" accept=".pdf,.jpg,.jpeg,.png" multiple>
+          <div id="fileInfo_windows" style="display: none;"></div>
+          <div id="status_windows"></div>
+          <div id="results_windows" class="results" style="display: none;"></div>
+        </div>
+
+        <div class="dept-panel">
+          <div class="dept-title">🚪 PATIO DEPARTMENT</div>
+          <div class="upload-zone" id="uploadZone_patio">
+            <div class="upload-icon">📄</div>
+            <div class="upload-text">DROP PATIO PAINT REPORT HERE</div>
+            <div class="upload-hint">PDF (text or scanned) · JPG · PNG</div>
+          </div>
+          <input type="file" id="fileInput_patio" class="file-input" accept=".pdf,.jpg,.jpeg,.png" multiple>
+          <div id="fileInfo_patio" style="display: none;"></div>
+          <div id="status_patio"></div>
+          <div id="results_patio" class="results" style="display: none;"></div>
+        </div>
       </div>
 
-      <input type="file" id="fileInput" class="file-input" accept=".pdf,.jpg,.jpeg,.png" multiple>
+      <div class="export-bar">
+        <button id="exportBtn" class="btn" style="display: none;">EXPORT CONSOLIDATED REPORT (ALL DEPTS)</button>
+        <div id="exportStatus"></div>
+      </div>
 
-      <div id="fileInfo" style="display: none;"></div>
-      <div id="status"></div>
-
-      <button id="readBtn" class="btn" style="display: none;">READ REPORT</button>
-      <button id="exportBtn" class="btn" style="display: none;">EXPORT TO EXCEL</button>
-
-      <div id="results" class="results" style="display: none;"></div>
       <div id="rawTextSection" class="raw-text-section" style="display: none;"></div>
     </div>
   </div>
@@ -297,98 +372,100 @@
     // PLACEHOLDER — to be replaced with per-surface paint rate constants.
     const FT_PER_GALLON = 400;
 
-    let currentFile = null;
-    let extractedData = null;
-    let rawExtractedText = '';
-
-    const uploadZone = document.getElementById('uploadZone');
-    const fileInput = document.getElementById('fileInput');
-    const readBtn = document.getElementById('readBtn');
     const exportBtn = document.getElementById('exportBtn');
-    const fileInfo = document.getElementById('fileInfo');
-    const statusDiv = document.getElementById('status');
-    const resultsDiv = document.getElementById('results');
     const rawTextSection = document.getElementById('rawTextSection');
 
-    // Upload zone interactions
-    uploadZone.addEventListener('click', () => fileInput.click());
-    
-    uploadZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      uploadZone.classList.add('dragover');
-    });
-    
-    uploadZone.addEventListener('dragleave', () => {
-      uploadZone.classList.remove('dragover');
-    });
-    
-    uploadZone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      uploadZone.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) {
-        handleFiles(Array.from(e.dataTransfer.files));
-      }
-    });
+    // Each department (Windows, Patio) has its own drop zone, its own file
+    // queue, and its own independent run through the SAME parser/checksum
+    // pipeline — the report format is identical for both, only the analysis
+    // is kept branched so a Plant Manager can see Windows vs Patio consumption
+    // separately. Doors uses a different report layout and is out of scope.
+    const DEPARTMENTS = [
+      { key: 'windows', label: 'Windows' },
+      { key: 'patio', label: 'Patio' }
+    ];
+    const deptState = {};
 
-    fileInput.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
-        handleFiles(Array.from(e.target.files));
-      }
-    });
+    function setupDept(deptKey, deptLabel) {
+      const state = {
+        key: deptKey,
+        label: deptLabel,
+        fileQueue: [],
+        currentFileIndex: 0,
+        allParsedData: [],
+        consolidated: null,
+        uploadZone: document.getElementById(`uploadZone_${deptKey}`),
+        fileInput: document.getElementById(`fileInput_${deptKey}`),
+        fileInfo: document.getElementById(`fileInfo_${deptKey}`),
+        statusDiv: document.getElementById(`status_${deptKey}`),
+        resultsDiv: document.getElementById(`results_${deptKey}`)
+      };
+      deptState[deptKey] = state;
 
-    let fileQueue = [];
-    let currentFileIndex = 0;
-    let allParsedData = [];
+      state.uploadZone.addEventListener('click', () => state.fileInput.click());
 
-    function handleFiles(files) {
-      fileQueue = files;
-      currentFileIndex = 0;
-      allParsedData = [];
-      processQueue();
+      state.uploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        state.uploadZone.classList.add('dragover');
+      });
+
+      state.uploadZone.addEventListener('dragleave', () => {
+        state.uploadZone.classList.remove('dragover');
+      });
+
+      state.uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        state.uploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+          handleDeptFiles(state, Array.from(e.dataTransfer.files));
+        }
+      });
+
+      state.fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          handleDeptFiles(state, Array.from(e.target.files));
+        }
+      });
     }
 
-    async function processQueue() {
-      if (currentFileIndex >= fileQueue.length) {
-        // All files processed, consolidate and export
-        if (allParsedData.length > 0) {
-          consolidateAndExport();
+    DEPARTMENTS.forEach(d => setupDept(d.key, d.label));
+
+    function handleDeptFiles(state, files) {
+      state.fileQueue = files;
+      state.currentFileIndex = 0;
+      state.allParsedData = [];
+      state.consolidated = null;
+      updateExportButton();
+      processDeptQueue(state);
+    }
+
+    async function processDeptQueue(state) {
+      if (state.currentFileIndex >= state.fileQueue.length) {
+        if (state.allParsedData.length > 0) {
+          consolidateDept(state);
         } else {
-          statusDiv.innerHTML = '<div class="status error">❌ No valid reports to export.</div>';
+          state.statusDiv.innerHTML = `<div class="status error">❌ No valid ${state.label} reports parsed.</div>`;
         }
+        updateExportButton();
         return;
       }
 
-      const file = fileQueue[currentFileIndex];
-      const fileNum = fileQueue.length > 1 ? ` (${currentFileIndex + 1}/${fileQueue.length})` : '';
-      fileInfo.innerHTML = `
+      const file = state.fileQueue[state.currentFileIndex];
+      const fileNum = state.fileQueue.length > 1 ? ` (${state.currentFileIndex + 1}/${state.fileQueue.length})` : '';
+      state.fileInfo.innerHTML = `
         <div class="file-name">✓ ${file.name}${fileNum}</div>
         <div class="file-size">${(file.size / 1024).toFixed(2)} KB</div>
       `;
-      fileInfo.style.display = 'block';
+      state.fileInfo.style.display = 'block';
+      state.resultsDiv.style.display = 'none';
+      state.statusDiv.innerHTML = '<div class="status warning">⏳ Processing report...</div>';
 
-      // For single file: show read button. For multiple: auto-process
-      if (fileQueue.length === 1) {
-        currentFile = file;
-        readBtn.style.display = 'block';
-        exportBtn.style.display = 'none';
-        resultsDiv.style.display = 'none';
-        rawTextSection.style.display = 'none';
-        statusDiv.innerHTML = '';
-      } else {
-        // Multi-file: auto-process without showing read button
-        readBtn.style.display = 'none';
-        exportBtn.style.display = 'none';
-        resultsDiv.style.display = 'none';
-        rawTextSection.style.display = 'none';
-        statusDiv.innerHTML = '<div class="status warning">⏳ Processing report...</div>';
-
-        await processFile(file);
-        currentFileIndex++;
-        setTimeout(() => processQueue(), 1500);
-      }
+      await processDeptFile(state, file);
+      state.currentFileIndex++;
+      setTimeout(() => processDeptQueue(state), state.fileQueue.length > 1 ? 800 : 0);
     }
 
-    async function processFile(file) {
+    async function processDeptFile(state, file) {
       let parsed = null;
       try {
         const fileType = file.type;
@@ -402,74 +479,55 @@
           throw new Error('Unsupported file type');
         }
 
-        rawExtractedText = text;
-        console.log('RAW EXTRACTED TEXT:');
-        console.log('='.repeat(80));
-        console.log(text);
-        console.log('='.repeat(80));
-        console.log(`Raw text extracted: ${text.length} characters`);
+        displayRawText(text, `${state.label} — ${file.name}`);
 
         parsed = parseReport(text);
 
         if (parsed.valid) {
-          extractedData = parsed;
-          displayResults(parsed);
-          displayRawText(text);
-          statusDiv.innerHTML = `<div class="status success">✓ Checksum PASS — batch ${parsed.batch}: ${parsed.entries.length} rows, ${parsed.totalFootage.toFixed(2)} ft matches report Sum ${parsed.expectedSum.toFixed(2)} (${parsed.detailRecordsN} detail records)</div>`;
-          exportBtn.style.display = 'block';
-          // Collect for consolidation
-          allParsedData.push(parsed);
+          state.allParsedData.push(parsed);
         } else {
-          extractedData = null;
-          resultsDiv.style.display = 'none';
-          exportBtn.style.display = 'none';
-          displayValidationFailure(parsed);
-          displayRawText(text);
+          displayDeptValidationFailure(state, parsed);
         }
       } catch (error) {
-        console.error('Processing error:', error);
-        statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+        console.error(`${state.label} processing error:`, error);
+        state.statusDiv.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
       }
     }
 
-    function consolidateAndExport() {
-      if (allParsedData.length === 0) return;
-
-      // Combine all entries from all parsed data
+    function consolidateDept(state) {
       const allEntries = [];
       const allEntriesWithDisplay = [];
       let totalOriginalFootage = 0;
       let totalDisplayFootage = 0;
 
-      allParsedData.forEach(data => {
+      state.allParsedData.forEach(data => {
         allEntries.push(...data.entries);
         allEntriesWithDisplay.push(...data.entriesWithDisplay);
         totalOriginalFootage += data.totalFootage;
         totalDisplayFootage += data.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
       });
 
-      // Create consolidated data object
       const consolidatedData = {
-        batch: allParsedData.map(d => d.batch).join(', '),
-        reportDate: allParsedData[0].reportDate,
+        dept: state.label,
+        batch: state.allParsedData.map(d => d.batch).join(', '),
+        reportDate: state.allParsedData[0].reportDate,
         entries: allEntries,
         entriesWithDisplay: allEntriesWithDisplay,
         totalFootage: totalOriginalFootage,
-        expectedSum: null,
-        detailRecordsN: allParsedData.reduce((t, d) => t + (d.detailRecordsN || 0), 0),
+        detailRecordsN: state.allParsedData.reduce((t, d) => t + (d.detailRecordsN || 0), 0),
         summary: buildPaintSummary(allEntriesWithDisplay)
       };
 
-      // Display consolidated results; the EXPORT button re-exports this same data
-      extractedData = consolidatedData;
-      displayResults(consolidatedData);
-      exportBtn.style.display = 'block';
+      state.consolidated = consolidatedData;
+      displayDeptResults(state, consolidatedData);
 
       const totalDisplayGallons = totalDisplayFootage / FT_PER_GALLON;
-      statusDiv.innerHTML = `<div class="status success">✓ All reports consolidated: ${allEntries.length} total rows, ${totalDisplayFootage.toFixed(2)} ft (${totalDisplayGallons.toFixed(3)} gal)</div>`;
+      state.statusDiv.innerHTML = `<div class="status success">✓ ${state.label}: ${allEntries.length} rows consolidated, ${totalDisplayFootage.toFixed(2)} ft (${totalDisplayGallons.toFixed(3)} gal)</div>`;
+    }
 
-      // Auto-export consolidated file
-      autoExportConsolidated(consolidatedData);
+    function updateExportButton() {
+      const anyReady = DEPARTMENTS.some(d => deptState[d.key].consolidated);
+      exportBtn.style.display = anyReady ? 'block' : 'none';
     }
 
     function buildPaintSummary(entries) {
@@ -487,7 +545,14 @@
       return Object.values(summaryMap).sort((a, b) => b.totalFootage - a.totalFootage);
     }
 
-    function autoExportConsolidated(consolidatedData) {
+    // Appends one department's two sheets ("{Dept} Report" plain data +
+    // TOTAL row, "{Dept} Summary" bordered colour/finish rollup) to a shared
+    // workbook. Called once per department that has consolidated data, so a
+    // combined export keeps each department's analysis visually separate
+    // ("branched") rather than merging the two into one summary.
+    function addDeptSheetsToWorkbook(wb, consolidatedData) {
+      const deptLabel = consolidatedData.dept;
+
       const fileData = consolidatedData.entriesWithDisplay.map(entry => {
         const displayFootage = entry.displayFootage;
         return {
@@ -537,10 +602,7 @@
         { wch: 20 }, // Batch#
         { wch: 14 }  // ReportDate
       ];
-
-      // Create workbook and add main sheet
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Paint Report');
+      XLSX.utils.book_append_sheet(wb, ws, `${deptLabel} Report`);
 
       // ---- PAINT SUMMARY: separate sheet with bordered formatting ----
       const summary = consolidatedData.summary || [];
@@ -548,7 +610,7 @@
       const sumGallons = summary.reduce((t, s) => t + (s.displayGallons || 0), 0);
 
       const summaryAoa = [
-        ['PAINT SUMMARY (Colour + Finish)', '', '', ''],
+        [`${deptLabel.toUpperCase()} PAINT SUMMARY (Colour + Finish)`, '', '', ''],
         ['Colour', 'Finish', 'Total Footage (ft)', 'Gallons'],
         ...summary.map(s => [
           removeEmDashes(s.colour || ''),
@@ -604,30 +666,25 @@
       // Merge the title bar across the 4 summary columns
       wsSummary['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
 
-      // Add summary sheet to workbook
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'PaintSummary');
-
-      const exportFileName = `PaintReport_Consolidated.xlsx`;
-      XLSX.writeFile(wb, exportFileName);
+      // Sheet names must stay within Excel's 31-char limit
+      XLSX.utils.book_append_sheet(wb, wsSummary, `${deptLabel} Summary`);
     }
 
-    readBtn.addEventListener('click', async () => {
-      if (!currentFile) return;
-      readBtn.disabled = true;
-      allParsedData = [];
-      await processFile(currentFile);
-      readBtn.disabled = false;
+    exportBtn.addEventListener('click', () => {
+      const activeDepts = DEPARTMENTS
+        .map(d => deptState[d.key])
+        .filter(state => state.consolidated);
 
-      // For single file processing, consolidate and export after processing
-      if (allParsedData.length > 0) {
-        consolidateAndExport();
-      }
+      if (activeDepts.length === 0) return;
+
+      const wb = XLSX.utils.book_new();
+      activeDepts.forEach(state => addDeptSheetsToWorkbook(wb, state.consolidated));
+      XLSX.writeFile(wb, 'PaintReport_Consolidated.xlsx');
+
+      const deptNames = activeDepts.map(s => s.label).join(' + ');
+      document.getElementById('exportStatus').innerHTML =
+        `<div class="status success">✓ Exported ${deptNames} to PaintReport_Consolidated.xlsx (${activeDepts.length * 2} sheets)</div>`;
     });
-
-    function moveToNextFile() {
-      currentFileIndex++;
-      processQueue();
-    }
 
     // Extract text from PDF
     async function extractTextFromPDF(file) {
@@ -689,8 +746,6 @@
 
     // Extract text from image
     async function extractTextFromImage(file) {
-      statusDiv.innerHTML = '<div class="status warning">⏳ Running OCR on image...</div>';
-      
       const { data: { text } } = await Tesseract.recognize(file, 'eng', {
         logger: m => console.log(m)
       });
@@ -891,9 +946,9 @@
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    function displayValidationFailure(parsed) {
+    function displayDeptValidationFailure(state, parsed) {
       const errorItems = parsed.errors.map(e => `<li>${escapeHtml(e)}</li>`).join('');
-      statusDiv.innerHTML = `
+      state.statusDiv.innerHTML = `
         <div class="status error">
           ❌ <strong>CHECKSUM VALIDATION FAILED — results withheld.</strong><br><br>
           Batch: ${escapeHtml(parsed.batch || '(not found)')}
@@ -904,8 +959,8 @@
           <ul style="margin: 12px 0 0 20px;">${errorItems}</ul>
         </div>
         <div class="status warning">
-          The parsed data does not reconcile with the report's own summary, so the
-          results table and Excel export are disabled. Check the raw text below.
+          The parsed data does not reconcile with the report's own summary, so this
+          file was excluded from the ${state.label} consolidation. Check the raw text below.
         </div>
       `;
     }
@@ -914,12 +969,12 @@
       return String(s).replace(/—/g, '-');
     }
 
-    function displayResults(data) {
+    function displayDeptResults(state, data) {
       // Calculate display totals (with BothSides doubling)
       const displayTotalFootage = data.entriesWithDisplay.reduce((sum, e) => sum + e.displayFootage, 0);
       const displayTotalGallons = displayTotalFootage / FT_PER_GALLON;
 
-      let html = `<div class="result-header">Production ${escapeHtml(removeEmDashes(data.batch))}`;
+      let html = `<div class="result-header">${escapeHtml(state.label)} — Production ${escapeHtml(removeEmDashes(data.batch))}`;
       if (data.reportDate) {
         html += ` - ${escapeHtml(removeEmDashes(data.reportDate))}`;
       }
@@ -1002,23 +1057,17 @@
         </table></div>`;
       }
 
-      resultsDiv.innerHTML = html;
-      resultsDiv.style.display = 'block';
+      state.resultsDiv.innerHTML = html;
+      state.resultsDiv.style.display = 'block';
     }
 
-    function displayRawText(text) {
+    function displayRawText(text, label) {
       rawTextSection.innerHTML = `
-        <h3>Raw Extracted Text (first 721 characters):</h3>
+        <h3>Raw Extracted Text${label ? ' — ' + escapeHtml(label) : ''} (first 721 characters):</h3>
         <pre>${text.substring(0, 721)}</pre>
       `;
       rawTextSection.style.display = 'block';
     }
-
-exportBtn.addEventListener('click', () => {
-      if (!extractedData) return;
-      autoExportConsolidated(extractedData);
-      statusDiv.innerHTML = `<div class="status success">✓ Exported to PaintReport_Consolidated.xlsx</div>`;
-    });
   </script>
 </body>
 </html>
