@@ -1,0 +1,38 @@
+{
+  "_comment": "Primary tariff sources monitored by scripts/check-sources.js. JSON has no comment syntax, so notes live in underscore-prefixed keys which the script ignores.",
+  "_knownGaps": [
+    "CBSA Customs Notices page is NOT yet watched - the correct URL has not been confirmed. Add an entry with key 'cbsa_customs_notices' once the URL is verified."
+  ],
+  "sources": [
+    {
+      "key": "canada_list",
+      "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
+      "lastHash": null,
+      "lastChecked": null
+    },
+    {
+      "key": "canada_announcement",
+      "url": "https://www.canada.ca/en/department-finance/news/2026/08/canada-announces-targeted-countermeasures-and-substantive-support-for-workers-and-businesses-in-response-to-us-tariffs.html",
+      "lastHash": null,
+      "lastChecked": null
+    },
+    {
+      "key": "us_motor_vehicles",
+      "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-motor-vehicles/",
+      "lastHash": null,
+      "lastChecked": null
+    },
+    {
+      "key": "us_alcohol",
+      "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-alcoholic-beverages/",
+      "lastHash": null,
+      "lastChecked": null
+    },
+    {
+      "key": "us_dairy",
+      "url": "https://www.federalregister.gov/documents/2026/07/23/2026-14992/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united",
+      "lastHash": null,
+      "lastChecked": null
+    }
+  ]
+}
