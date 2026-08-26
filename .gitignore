@@ -1,0 +1,4 @@
+# Real company contact info - never pushed to this public repo.
+# Copy data/company-defaults.example.json to data/company-defaults.json
+# and fill in the real values; it stays local only.
+data/company-defaults.json
