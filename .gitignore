@@ -2,7 +2,3 @@
 # Copy data/company-email.example.json to data/company-email.json
 # and fill in the real address; it stays local only.
 data/company-email.json
-
-# Same pattern, for the Material Transfer Form's FROM/TO emails.
-# Copy data/mtf-email.example.json to data/mtf-email.json.
-data/mtf-email.json

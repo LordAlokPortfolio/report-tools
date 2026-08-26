@@ -625,12 +625,11 @@ function commitFormNumberEdit(){
 }
 
 // FROM and TO fields come from files dedicated to this form only -
-// data/mtf-defaults.json (public) and the gitignored data/mtf-email.json -
-// so this form's info is the same on every machine without retyping it,
-// kept separate from the NCR generator's own defaults files. The email
-// fields never reach the public site (the file is gitignored there), so
-// whatever gets typed by hand is remembered per-browser in localStorage
-// instead - it only needs typing once per device, not every page load.
+// data/mtf-defaults.json and data/mtf-email.json, both public - so this
+// form's info is the same on every machine without retyping it, kept
+// separate from the NCR generator's own defaults files. Any field typed
+// by hand (or overridden from what's in those files) is also remembered
+// per-browser in localStorage, taking priority on the next load.
 const MTF_PARTY_FIELDS = [
   'fromCompanyName', 'fromDepartment', 'fromContactPerson', 'fromLocation', 'fromEmail',
   'toCompanyName', 'toDepartment', 'toContactPerson', 'toLocation', 'toEmail'
@@ -662,7 +661,7 @@ async function loadMtfDefaults(){
   document.getElementById('fromCompanyName').value = overrides.fromCompanyName ?? defaults.fromCompanyName ?? '';
   document.getElementById('fromDepartment').value = overrides.fromDepartment ?? defaults.fromDepartment ?? '';
   document.getElementById('fromContactPerson').value = overrides.fromContactPerson ?? defaults.fromContactPerson ?? '';
-  document.getElementById('fromLocation').value = overrides.fromLocation ?? '';
+  document.getElementById('fromLocation').value = overrides.fromLocation ?? defaults.fromLocation ?? '';
   document.getElementById('fromEmail').value = overrides.fromEmail ?? emailDefaults.fromEmail ?? '';
   document.getElementById('toCompanyName').value = overrides.toCompanyName ?? defaults.toCompanyName ?? '';
   document.getElementById('toDepartment').value = overrides.toDepartment ?? '';
