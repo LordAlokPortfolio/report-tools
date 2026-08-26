@@ -627,7 +627,21 @@ function commitFormNumberEdit(){
 // FROM and TO fields come from files dedicated to this form only -
 // data/mtf-defaults.json (public) and the gitignored data/mtf-email.json -
 // so this form's info is the same on every machine without retyping it,
-// kept separate from the NCR generator's own defaults files.
+// kept separate from the NCR generator's own defaults files. The email
+// fields never reach the public site (the file is gitignored there), so
+// whatever gets typed by hand is remembered per-browser in localStorage
+// instead - it only needs typing once per device, not every page load.
+const MTF_PARTY_FIELDS = [
+  'fromCompanyName', 'fromDepartment', 'fromContactPerson', 'fromLocation', 'fromEmail',
+  'toCompanyName', 'toDepartment', 'toContactPerson', 'toLocation', 'toEmail'
+];
+
+function saveMtfPartyOverride(fieldId){
+  const overrides = JSON.parse(localStorage.getItem('mtfPartyInfo') || '{}');
+  overrides[fieldId] = document.getElementById(fieldId).value;
+  localStorage.setItem('mtfPartyInfo', JSON.stringify(overrides));
+}
+
 async function loadMtfDefaults(){
   let defaults = {};
   let emailDefaults = {};
@@ -643,13 +657,22 @@ async function loadMtfDefaults(){
   } catch (e) {
     // not present (normal on the public site) or offline - blank is fine.
   }
-  document.getElementById('fromCompanyName').value = defaults.fromCompanyName || '';
-  document.getElementById('fromDepartment').value = defaults.fromDepartment || '';
-  document.getElementById('fromContactPerson').value = defaults.fromContactPerson || '';
-  document.getElementById('fromEmail').value = emailDefaults.fromEmail || '';
-  document.getElementById('toCompanyName').value = defaults.toCompanyName || '';
-  document.getElementById('toContactPerson').value = defaults.toContactPerson || '';
-  document.getElementById('toEmail').value = emailDefaults.toEmail || '';
+  const overrides = JSON.parse(localStorage.getItem('mtfPartyInfo') || '{}');
+
+  document.getElementById('fromCompanyName').value = overrides.fromCompanyName ?? defaults.fromCompanyName ?? '';
+  document.getElementById('fromDepartment').value = overrides.fromDepartment ?? defaults.fromDepartment ?? '';
+  document.getElementById('fromContactPerson').value = overrides.fromContactPerson ?? defaults.fromContactPerson ?? '';
+  document.getElementById('fromLocation').value = overrides.fromLocation ?? '';
+  document.getElementById('fromEmail').value = overrides.fromEmail ?? emailDefaults.fromEmail ?? '';
+  document.getElementById('toCompanyName').value = overrides.toCompanyName ?? defaults.toCompanyName ?? '';
+  document.getElementById('toDepartment').value = overrides.toDepartment ?? '';
+  document.getElementById('toContactPerson').value = overrides.toContactPerson ?? defaults.toContactPerson ?? '';
+  document.getElementById('toLocation').value = overrides.toLocation ?? '';
+  document.getElementById('toEmail').value = overrides.toEmail ?? emailDefaults.toEmail ?? '';
+
+  MTF_PARTY_FIELDS.forEach(id => {
+    document.getElementById(id).addEventListener('blur', () => saveMtfPartyOverride(id));
+  });
 }
 
 loadFormNumber();
