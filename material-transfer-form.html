@@ -658,16 +658,16 @@ async function loadMtfDefaults(){
   }
   const overrides = JSON.parse(localStorage.getItem('mtfPartyInfo') || '{}');
 
-  document.getElementById('fromCompanyName').value = overrides.fromCompanyName ?? defaults.fromCompanyName ?? '';
-  document.getElementById('fromDepartment').value = overrides.fromDepartment ?? defaults.fromDepartment ?? '';
-  document.getElementById('fromContactPerson').value = overrides.fromContactPerson ?? defaults.fromContactPerson ?? '';
-  document.getElementById('fromLocation').value = overrides.fromLocation ?? defaults.fromLocation ?? '';
-  document.getElementById('fromEmail').value = overrides.fromEmail ?? emailDefaults.fromEmail ?? '';
-  document.getElementById('toCompanyName').value = overrides.toCompanyName ?? defaults.toCompanyName ?? '';
-  document.getElementById('toDepartment').value = overrides.toDepartment ?? '';
-  document.getElementById('toContactPerson').value = overrides.toContactPerson ?? defaults.toContactPerson ?? '';
-  document.getElementById('toLocation').value = overrides.toLocation ?? '';
-  document.getElementById('toEmail').value = overrides.toEmail ?? emailDefaults.toEmail ?? '';
+  document.getElementById('fromCompanyName').value = overrides.fromCompanyName || defaults.fromCompanyName || '';
+  document.getElementById('fromDepartment').value = overrides.fromDepartment || defaults.fromDepartment || '';
+  document.getElementById('fromContactPerson').value = overrides.fromContactPerson || defaults.fromContactPerson || '';
+  document.getElementById('fromLocation').value = overrides.fromLocation || defaults.fromLocation || '';
+  document.getElementById('fromEmail').value = overrides.fromEmail || emailDefaults.fromEmail || '';
+  document.getElementById('toCompanyName').value = overrides.toCompanyName || defaults.toCompanyName || '';
+  document.getElementById('toDepartment').value = overrides.toDepartment || '';
+  document.getElementById('toContactPerson').value = overrides.toContactPerson || defaults.toContactPerson || '';
+  document.getElementById('toLocation').value = overrides.toLocation || '';
+  document.getElementById('toEmail').value = overrides.toEmail || emailDefaults.toEmail || '';
 
   MTF_PARTY_FIELDS.forEach(id => {
     document.getElementById(id).addEventListener('blur', () => saveMtfPartyOverride(id));
