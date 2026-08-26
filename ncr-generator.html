@@ -492,15 +492,15 @@
     let settings = {};
 
     // Initialize
-    window.onload = function() {
-      loadSettings();
+    window.onload = async function() {
+      await loadSettings();
       setTodayDate();
       addPoLine();
       loadHistory();
       setupDropZone();
     };
 
-    function loadSettings() {
+    async function loadSettings() {
       const saved = localStorage.getItem('ncrSettings');
       if (saved) {
         settings = JSON.parse(saved);
@@ -509,13 +509,23 @@
           settings.ncrCounter = settings.ncrStartNumber || 60;
         }
       } else {
-        // First time - create default settings
+        // First time on this machine - pull shared company info from the repo
+        // so it doesn't need to be re-typed on every device. NCR# itself stays
+        // local (see startEditNcrNumber) since it's not something to share.
+        let defaults = {};
+        try {
+          const res = await fetch('./data/company-defaults.json');
+          if (res.ok) defaults = await res.json();
+        } catch (e) {
+          // offline, or opened as a local file instead of served over http - fall
+          // back to blank, still editable by hand in Settings as before.
+        }
         settings = {
-          companyLogo: null,
-          companyName: '',
-          companyAddress: '',
-          purchaserName: '',
-          purchaserEmail: '',
+          companyLogo: defaults.companyLogo || null,
+          companyName: defaults.companyName || '',
+          companyAddress: defaults.companyAddress || '',
+          purchaserName: defaults.purchaserName || '',
+          purchaserEmail: defaults.purchaserEmail || '',
           ncrStartNumber: 60,
           ncrCounter: 60
         };
