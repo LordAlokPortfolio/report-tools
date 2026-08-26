@@ -19,13 +19,13 @@
       "checked": "Checked 2026-08-25"
     },
     {
-      "name": "Expanded list &mdash; dairy, appliances, ag equipment, pulp/paper, plastics, electronics",
+      "name": "Expanded list - dairy, appliances, ag equipment, pulp/paper, plastics, electronics",
       "rate": "TBD",
       "status": "pending",
-      "effective": "Announced 2026-08-25, effective 2026-09-08 &mdash; matches U.S. Section 338 dollar-for-dollar",
+      "effective": "Announced 2026-08-25, effective 2026-09-08 - matches U.S. Section 338 dollar-for-dollar",
       "source": "Department of Finance Canada &ndash; countermeasures announcement",
       "url": "https://www.canada.ca/en/department-finance/news/2026/08/canada-announces-targeted-countermeasures-and-substantive-support-for-workers-and-businesses-in-response-to-us-tariffs.html",
-      "checked": "Checked 2026-08-25 &mdash; NOTE: the official HS-code list page above has not been updated for this yet"
+      "checked": "Checked 2026-08-25 - NOTE: the official HS-code list page above has not been updated for this yet"
     }
   ],
   "usData": [
@@ -36,7 +36,7 @@
       "effective": "In effect, separate legal basis from Section 338",
       "source": "CustomsGenius &ndash; 2026 Chapter 99 tariff code reference",
       "url": "https://www.customsgenius.com/tariff-codes-2026",
-      "checked": "Checked 2026-08-25 &mdash; verify against Federal Register before relying on this"
+      "checked": "Checked 2026-08-25 - verify against Federal Register before relying on this"
     },
     {
       "name": "Motor vehicles (Section 338, Annex II)",
@@ -69,7 +69,7 @@
   "commentaryData": [
     {
       "name": "Speculation on further escalation or a negotiated settlement",
-      "note": "No confirmed source tracked yet for this dashboard &mdash; add specific outlet + date here if you want it included, kept visually separate from the panels above."
+      "note": "No confirmed source tracked yet for this dashboard - add specific outlet + date here if you want it included, kept visually separate from the panels above."
     }
   ]
 }

@@ -217,7 +217,7 @@ body{
 
 <div class="scope-note">
   <strong>Scope:</strong> steel &amp; aluminum only. Data below is entered manually from primary
-  government sources as of the date shown &mdash; this is not a live feed yet. Check the source link
+  government sources as of the date shown - this is not a live feed yet. Check the source link
   for anything time-sensitive before acting on it.
 </div>
 
@@ -246,7 +246,7 @@ body{
 <div class="commentary">
   <div class="panel-title">
     COMMENTARY &amp; SPECULATION
-    <div class="panel-sub">Not official data &mdash; opinion, forecasts, unconfirmed reporting</div>
+    <div class="panel-sub">Not official data - opinion, forecasts, unconfirmed reporting</div>
   </div>
   <div id="commentaryEntries"></div>
 </div>
@@ -268,7 +268,7 @@ function renderEntries(containerId, data){
     const statusLabel = item.status === 'active' ? 'ACTIVE' : 'PENDING';
 
     const reviewBadge = item.reviewNeeded
-      ? `<span class="status status-review" title="${item.reviewNote || ''}">SOURCE CHANGED &mdash; VERIFY</span>`
+      ? `<span class="status status-review" title="${item.reviewNote || ''}">SOURCE CHANGED - VERIFY</span>`
       : '';
 
     div.innerHTML = `
@@ -324,7 +324,7 @@ fetch('./data/tariff-data.json')
     document.getElementById('loadError').innerHTML =
       '<div class="load-error"><strong>Could not load tariff data.</strong> ' +
       'data/tariff-data.json failed to load (' + err.message + '). ' +
-      'This page must be served over http:// &mdash; opening the file directly from disk will not work.</div>';
+      'This page must be served over http:// - opening the file directly from disk will not work.</div>';
   });
 
 </script>
