@@ -624,32 +624,36 @@ function commitFormNumberEdit(){
   updateFormNumberDisplay();
 }
 
-// FROM (Transferring Company) fields come from the same shared repo files
-// the NCR generator uses, so this side of the form is the same on every
-// machine without retyping it - see data/company-defaults.json and the
-// gitignored data/company-email.json.
-async function loadFromCompanyDefaults(){
+// FROM and TO fields come from files dedicated to this form only -
+// data/mtf-defaults.json (public) and the gitignored data/mtf-email.json -
+// so this form's info is the same on every machine without retyping it,
+// kept separate from the NCR generator's own defaults files.
+async function loadMtfDefaults(){
   let defaults = {};
   let emailDefaults = {};
   try {
-    const res = await fetch('./data/company-defaults.json');
+    const res = await fetch('./data/mtf-defaults.json');
     if (res.ok) defaults = await res.json();
   } catch (e) {
     // offline, or opened as a local file instead of served over http.
   }
   try {
-    const res = await fetch('./data/company-email.json');
+    const res = await fetch('./data/mtf-email.json');
     if (res.ok) emailDefaults = await res.json();
   } catch (e) {
     // not present (normal on the public site) or offline - blank is fine.
   }
-  document.getElementById('fromCompanyName').value = defaults.companyName || '';
-  document.getElementById('fromContactPerson').value = defaults.purchaserName || '';
-  document.getElementById('fromEmail').value = emailDefaults.purchaserEmail || '';
+  document.getElementById('fromCompanyName').value = defaults.fromCompanyName || '';
+  document.getElementById('fromDepartment').value = defaults.fromDepartment || '';
+  document.getElementById('fromContactPerson').value = defaults.fromContactPerson || '';
+  document.getElementById('fromEmail').value = emailDefaults.fromEmail || '';
+  document.getElementById('toCompanyName').value = defaults.toCompanyName || '';
+  document.getElementById('toContactPerson').value = defaults.toContactPerson || '';
+  document.getElementById('toEmail').value = emailDefaults.toEmail || '';
 }
 
 loadFormNumber();
-loadFromCompanyDefaults();
+loadMtfDefaults();
 
 // Pre-populate 10 material rows to match the printed form.
 for (let i = 0; i < 9; i++) addRow();
