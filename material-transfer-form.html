@@ -39,20 +39,98 @@ body{
 
 .header{
   text-align:center;
-  border-bottom:2px solid #1e5a96;
-  padding-bottom:8px;
-  margin-bottom:12px;
+  background:#1e5a96;
+  color:white;
+  padding:16px;
+  margin:-16px -16px 12px -16px;
+  border-radius:6px 6px 0 0;
 }
 
 .header h1{
   font-size:22px;
-  color:#1e5a96;
+  color:white;
   margin-bottom:4px;
+  letter-spacing:0.5px;
 }
 
 .header p{
   font-size:12px;
-  color:#666;
+  color:rgba(255,255,255,.85);
+}
+
+.two-col{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  border:1px solid #d8d8d8;
+  border-radius:4px;
+  overflow:hidden;
+  margin-bottom:10px;
+  break-inside:avoid;
+  page-break-inside:avoid;
+}
+
+.two-col .col-left{
+  border-right:1px solid #d8d8d8;
+}
+
+.two-col .col-title{
+  background:#1e5a96;
+  color:white;
+  padding:8px 10px;
+  font-size:12px;
+  font-weight:bold;
+}
+
+.two-col .col-body{
+  padding:10px;
+  background:#fafafa;
+}
+
+.two-col .form-group{
+  margin-bottom:8px;
+}
+
+.two-col .form-group:last-child{
+  margin-bottom:0;
+}
+
+.sig-row{
+  display:grid;
+  grid-template-columns:1.4fr 1.4fr 1fr;
+  gap:10px;
+  margin-bottom:10px;
+}
+
+.sig-row:last-child{
+  margin-bottom:0;
+}
+
+.form-number-display{
+  font-size:16px;
+  font-weight:700;
+  color:#1e5a96;
+  font-family:monospace;
+  background:rgba(30,90,150,0.1);
+  padding:6px 10px;
+  border-radius:4px;
+  cursor:pointer;
+  display:inline-block;
+}
+
+@media(max-width:768px){
+
+  .two-col{
+    grid-template-columns:1fr;
+  }
+
+  .two-col .col-left{
+    border-right:none;
+    border-bottom:1px solid #d8d8d8;
+  }
+
+  .sig-row{
+    grid-template-columns:1fr;
+  }
 }
 
 .form-section{
@@ -234,10 +312,22 @@ button{
     print-color-adjust:exact;
   }
 
-  .section-title{
+  .section-title,
+  .two-col .col-title{
     background:#1e5a96 !important;
     color:white !important;
     print-color-adjust:exact;
+  }
+
+  .header{
+    background:#1e5a96 !important;
+    color:white !important;
+    print-color-adjust:exact;
+  }
+
+  .header h1,
+  .header p{
+    color:white !important;
   }
 
   input,
@@ -277,8 +367,8 @@ button{
     <div class="form-grid">
 
       <div class="form-group">
-        <label>Form Number</label>
-        <input type="text" id="formNumber">
+        <label>Form #</label>
+        <div id="formNumberDisplay" class="form-number-display" onclick="startEditFormNumber()" title="Click to adjust the form number (e.g. after using this on another device)">MTF-0001</div>
       </div>
 
       <div class="form-group">
@@ -291,54 +381,60 @@ button{
   </div>
 </div>
 
-<div class="form-section">
-  <div class="section-title">TRANSFER DETAILS</div>
+<div class="two-col">
 
-  <div class="section-body">
-
-    <div class="form-grid">
-
+  <div class="col-left">
+    <div class="col-title">FROM (Transferring Company)</div>
+    <div class="col-body">
       <div class="form-group">
-        <label>From Company</label>
-        <input type="text">
+        <label>Company Name</label>
+        <input type="text" id="fromCompanyName">
       </div>
-
       <div class="form-group">
-        <label>To Company</label>
-        <input type="text">
+        <label>Department</label>
+        <input type="text" id="fromDepartment">
       </div>
-
+      <div class="form-group">
+        <label>Contact Person</label>
+        <input type="text" id="fromContactPerson">
+      </div>
+      <div class="form-group">
+        <label>Location / Suite</label>
+        <input type="text" id="fromLocation">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="fromEmail">
+      </div>
     </div>
-
-    <div class="form-grid">
-
-      <div class="form-group">
-        <label>From Department</label>
-        <input type="text">
-      </div>
-
-      <div class="form-group">
-        <label>To Department</label>
-        <input type="text">
-      </div>
-
-    </div>
-
-    <div class="form-grid">
-
-      <div class="form-group">
-        <label>Released By</label>
-        <input type="text">
-      </div>
-
-      <div class="form-group">
-        <label>Received By</label>
-        <input type="text">
-      </div>
-
-    </div>
-
   </div>
+
+  <div class="col-right">
+    <div class="col-title">TO (Receiving Company)</div>
+    <div class="col-body">
+      <div class="form-group">
+        <label>Company Name</label>
+        <input type="text" id="toCompanyName">
+      </div>
+      <div class="form-group">
+        <label>Department</label>
+        <input type="text" id="toDepartment">
+      </div>
+      <div class="form-group">
+        <label>Contact Person</label>
+        <input type="text" id="toContactPerson">
+      </div>
+      <div class="form-group">
+        <label>Location / Suite</label>
+        <input type="text" id="toLocation">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="toEmail">
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <div class="form-section">
@@ -352,10 +448,10 @@ button{
       <thead>
         <tr>
           <th>#</th>
-          <th>Part #</th>
+          <th>Item / Part Number</th>
           <th>Description</th>
-          <th>UOM</th>
-          <th>Qty</th>
+          <th>Unit of Measure</th>
+          <th>Qty Transferred</th>
           <th></th>
         </tr>
       </thead>
@@ -402,18 +498,65 @@ button{
 
 <div class="form-section">
 
-  <div class="section-title">PURPOSE / NOTES</div>
+  <div class="section-title">PURPOSE / REASON FOR TRANSFER</div>
 
   <div class="section-body">
 
     <div class="form-group">
-      <label>Reason for Transfer</label>
-      <textarea></textarea>
+      <label>Reason</label>
+      <textarea id="reason"></textarea>
     </div>
 
-    <div class="form-group" style="margin-top:8px;">
-      <label>Additional Notes</label>
-      <textarea></textarea>
+  </div>
+</div>
+
+<div class="form-section">
+
+  <div class="section-title">AUTHORIZATION &amp; SIGNATURES</div>
+
+  <div class="section-body">
+
+    <div class="sig-row">
+      <div class="form-group">
+        <label>Released By (From Co.)</label>
+        <input type="text" id="releasedBy">
+      </div>
+      <div class="form-group">
+        <label>Signature</label>
+        <input type="text" id="releasedSignature">
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="releasedDate">
+      </div>
+    </div>
+
+    <div class="sig-row">
+      <div class="form-group">
+        <label>Received By (To Co.)</label>
+        <input type="text" id="receivedBy">
+      </div>
+      <div class="form-group">
+        <label>Signature</label>
+        <input type="text" id="receivedSignature">
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="receivedDate">
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="form-section">
+
+  <div class="section-title">NOTES</div>
+
+  <div class="section-body">
+
+    <div class="form-group">
+      <textarea id="notes"></textarea>
     </div>
 
   </div>
@@ -441,6 +584,75 @@ button{
 
 document.getElementById('formDate').valueAsDate =
   new Date();
+
+let mtfSettings = {};
+
+// Form # lives in localStorage per device, same pattern as the NCR
+// generator's counter - it's not something to share across machines.
+function loadFormNumber(){
+  const saved = localStorage.getItem('mtfSettings');
+  mtfSettings = saved ? JSON.parse(saved) : { formCounter: 1 };
+  if (!mtfSettings.formCounter) mtfSettings.formCounter = 1;
+  updateFormNumberDisplay();
+}
+
+function updateFormNumberDisplay(){
+  document.getElementById('formNumberDisplay').textContent =
+    `MTF-${String(mtfSettings.formCounter).padStart(4, '0')}`;
+}
+
+function startEditFormNumber(){
+  const el = document.getElementById('formNumberDisplay');
+  el.innerHTML = `<input type="number" id="formNumberEditInput" value="${mtfSettings.formCounter}" min="0" step="1" style="font-size:16px;font-weight:700;color:#1e5a96;font-family:monospace;width:90px;border:1px solid #1e5a96;border-radius:4px;padding:2px 4px;">`;
+  const input = document.getElementById('formNumberEditInput');
+  input.focus();
+  input.select();
+  input.addEventListener('blur', commitFormNumberEdit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') { input.removeEventListener('blur', commitFormNumberEdit); updateFormNumberDisplay(); }
+  });
+}
+
+function commitFormNumberEdit(){
+  const input = document.getElementById('formNumberEditInput');
+  const value = parseInt(input.value, 10);
+  if (!isNaN(value) && value >= 0) {
+    mtfSettings.formCounter = value;
+    localStorage.setItem('mtfSettings', JSON.stringify(mtfSettings));
+  }
+  updateFormNumberDisplay();
+}
+
+// FROM (Transferring Company) fields come from the same shared repo files
+// the NCR generator uses, so this side of the form is the same on every
+// machine without retyping it - see data/company-defaults.json and the
+// gitignored data/company-email.json.
+async function loadFromCompanyDefaults(){
+  let defaults = {};
+  let emailDefaults = {};
+  try {
+    const res = await fetch('./data/company-defaults.json');
+    if (res.ok) defaults = await res.json();
+  } catch (e) {
+    // offline, or opened as a local file instead of served over http.
+  }
+  try {
+    const res = await fetch('./data/company-email.json');
+    if (res.ok) emailDefaults = await res.json();
+  } catch (e) {
+    // not present (normal on the public site) or offline - blank is fine.
+  }
+  document.getElementById('fromCompanyName').value = defaults.companyName || '';
+  document.getElementById('fromContactPerson').value = defaults.purchaserName || '';
+  document.getElementById('fromEmail').value = emailDefaults.purchaserEmail || '';
+}
+
+loadFormNumber();
+loadFromCompanyDefaults();
+
+// Pre-populate 10 material rows to match the printed form.
+for (let i = 0; i < 9; i++) addRow();
 
 function addRow(){
 
