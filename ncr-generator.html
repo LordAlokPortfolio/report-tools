@@ -378,7 +378,7 @@
     <div id="create-tab" class="tab-content active">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
         <h2 id="ncrTitle" style="margin:0;">New NCR</h2>
-        <div id="ncrNumberDisplay" style="font-size:18px;font-weight:700;color:#2563eb;font-family:monospace;background:rgba(37,99,235,0.1);padding:8px 16px;border-radius:6px;">NCR#0000</div>
+        <div id="ncrNumberDisplay" onclick="startEditNcrNumber()" title="Click to adjust the NCR number (e.g. after using this on another device)" style="font-size:18px;font-weight:700;color:#2563eb;font-family:monospace;background:rgba(37,99,235,0.1);padding:8px 16px;border-radius:6px;cursor:pointer;">NCR#0000</div>
       </div>
       
       <div class="form-row">
@@ -539,6 +539,31 @@
     function updateNcrNumberDisplay(customNumber) {
       const ncrNum = customNumber || `NCR#${String(settings.ncrCounter).padStart(4, '0')}`;
       document.getElementById('ncrNumberDisplay').textContent = ncrNum;
+    }
+
+    // This device's counter lives in localStorage and doesn't sync across devices,
+    // so clicking the badge lets it be corrected on the spot instead of via Settings.
+    function startEditNcrNumber() {
+      const el = document.getElementById('ncrNumberDisplay');
+      el.innerHTML = `<input type="number" id="ncrNumberEditInput" value="${settings.ncrCounter}" min="0" step="1" style="font-size:18px;font-weight:700;color:#2563eb;font-family:monospace;width:90px;border:1px solid #2563eb;border-radius:4px;padding:2px 4px;">`;
+      const input = document.getElementById('ncrNumberEditInput');
+      input.focus();
+      input.select();
+      input.addEventListener('blur', commitNcrNumberEdit);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') { input.removeEventListener('blur', commitNcrNumberEdit); updateNcrNumberDisplay(); }
+      });
+    }
+
+    function commitNcrNumberEdit() {
+      const input = document.getElementById('ncrNumberEditInput');
+      const value = parseInt(input.value, 10);
+      if (!isNaN(value) && value >= 0) {
+        settings.ncrCounter = value;
+        localStorage.setItem('ncrSettings', JSON.stringify(settings));
+      }
+      updateNcrNumberDisplay();
     }
 
     function saveSettings() {
