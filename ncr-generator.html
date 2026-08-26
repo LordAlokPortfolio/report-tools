@@ -512,7 +512,10 @@
         // First time on this machine - pull shared company info from the repo
         // so it doesn't need to be re-typed on every device. NCR# itself stays
         // local (see startEditNcrNumber) since it's not something to share.
+        // purchaserEmail lives in a separate, gitignored file - it's never on
+        // the public site, so this fetch 404s there and just leaves it blank.
         let defaults = {};
+        let emailDefaults = {};
         try {
           const res = await fetch('./data/company-defaults.json');
           if (res.ok) defaults = await res.json();
@@ -520,12 +523,18 @@
           // offline, or opened as a local file instead of served over http - fall
           // back to blank, still editable by hand in Settings as before.
         }
+        try {
+          const res = await fetch('./data/company-email.json');
+          if (res.ok) emailDefaults = await res.json();
+        } catch (e) {
+          // not present (normal on the public site) or offline - blank is fine.
+        }
         settings = {
           companyLogo: defaults.companyLogo || null,
           companyName: defaults.companyName || '',
           companyAddress: defaults.companyAddress || '',
           purchaserName: defaults.purchaserName || '',
-          purchaserEmail: defaults.purchaserEmail || '',
+          purchaserEmail: emailDefaults.purchaserEmail || '',
           ncrStartNumber: 60,
           ncrCounter: 60
         };
