@@ -804,7 +804,16 @@ function exportPDF(){
       scale:2,
       useCORS:true,
       scrollX:0,
-      scrollY:0
+      scrollY:0,
+      // html2canvas renders the page's normal screen styles, not
+      // @media print - the button bar and per-row Remove buttons are
+      // only hidden under print, so without this they'd render into
+      // the PDF and push/overflow the layout past the page margins.
+      onclone:(clonedDoc)=>{
+        clonedDoc
+          .querySelectorAll('.buttons, .danger')
+          .forEach(el => el.style.display = 'none');
+      }
     },
 
     jsPDF:{
