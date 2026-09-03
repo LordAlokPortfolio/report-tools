@@ -7,32 +7,32 @@
     {
       "key": "canada_list",
       "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
-      "lastHash": null,
-      "lastChecked": null
+      "lastHash": "8895e5cb142159b30aa2aaf4791ac8491c193bc75c35323b43f69120d2fec554",
+      "lastChecked": "2026-09-03T15:01:15.056Z"
     },
     {
       "key": "canada_announcement",
       "url": "https://www.canada.ca/en/department-finance/news/2026/08/canada-announces-targeted-countermeasures-and-substantive-support-for-workers-and-businesses-in-response-to-us-tariffs.html",
-      "lastHash": null,
-      "lastChecked": null
+      "lastHash": "27cf176b3b652e721062d2332fd704a241eec251a7c90c8d3cdfad8cf6f4b70e",
+      "lastChecked": "2026-09-03T15:01:15.056Z"
     },
     {
       "key": "us_motor_vehicles",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-motor-vehicles/",
-      "lastHash": null,
-      "lastChecked": null
+      "lastHash": "b53dce9fb48e5a1401b52f82a38bfbbdc3958b58f0520de8dc01b7b5b147870b",
+      "lastChecked": "2026-09-03T15:01:15.056Z"
     },
     {
       "key": "us_alcohol",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-alcoholic-beverages/",
-      "lastHash": null,
-      "lastChecked": null
+      "lastHash": "9b66ea7ea9deefc54cb9c68cebeccd8a3d498296185ba7b0d0081e5f18186782",
+      "lastChecked": "2026-09-03T15:01:15.056Z"
     },
     {
       "key": "us_dairy",
       "url": "https://www.federalregister.gov/documents/2026/07/23/2026-14992/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united",
-      "lastHash": null,
-      "lastChecked": null
+      "lastHash": "fa60b35156bdea2916ffc5b6bd036b33c827650aa6cbc5f3aafadb185a2fdb68",
+      "lastChecked": "2026-09-03T15:01:15.056Z"
     }
   ]
 }
