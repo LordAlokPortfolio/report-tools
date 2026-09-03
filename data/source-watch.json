@@ -3,42 +3,45 @@
   "_knownGaps": [
     "As of 2026-09-03, CBSA had not yet published a Customs Notice implementing the Sept 8, 2026 counter-tariffs - cbsa_customs_notices below watches the general index page, so the day CBSA posts the matching notice, this will flag as changed even though no specific notice number exists yet to link directly."
   ],
+  "_fixedIssues": [
+    "us_dairy previously pointed at federalregister.gov, which serves an automated-access page with a random CSRF token instead of the real document to non-browser requests - confirmed via three consecutive fetches returning three different hashes. Every daily run would have falsely flagged it forever. Swapped 2026-09-03 to the whitehouse.gov mirror already used successfully by us_motor_vehicles and us_alcohol; content confirmed matching (50% rate, unchanged) before the swap."
+  ],
   "sources": [
     {
       "key": "cbsa_customs_notices",
       "url": "https://www.cbsa-asfc.gc.ca/publications/cn-ad/menu-eng.html",
-      "lastHash": "ee7119dbcb30da57e692b6a2a5373431dca7557907c7ae019b37ddfd39a96bde",
-      "lastChecked": "2026-09-03T15:10:12.904Z"
+      "lastHash": "90e147e36b546306335e696ac9adf066e27477ddd443f5d178b23658b97411d2",
+      "lastChecked": "2026-09-03T15:16:24.755Z"
     },
     {
       "key": "canada_list",
       "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
-      "lastHash": "4618c55c607adccf5f90a5f447974d9c5aa41935b17c9ce18ed6f8cbe61dcfc3",
-      "lastChecked": "2026-09-03T15:10:12.904Z"
+      "lastHash": "1c9a51475a90fc62bbaacd341ab7481006ac3b0c78b7cf85b2ee5422f733c9eb",
+      "lastChecked": "2026-09-03T15:16:24.755Z"
     },
     {
       "key": "canada_announcement",
       "url": "https://www.canada.ca/en/department-finance/news/2026/08/canada-announces-targeted-countermeasures-and-substantive-support-for-workers-and-businesses-in-response-to-us-tariffs.html",
-      "lastHash": "103b0f4f584acba4341dfc40bc69bfb22c2d37a97d1b52d37883d1bc4f648a7f",
-      "lastChecked": "2026-09-03T15:10:12.904Z"
+      "lastHash": "01bf76890d587ca7442d08433c756fd49767cff5b995045e6db0ec4fd5f09b70",
+      "lastChecked": "2026-09-03T15:16:24.755Z"
     },
     {
       "key": "us_motor_vehicles",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-motor-vehicles/",
-      "lastHash": "b53dce9fb48e5a1401b52f82a38bfbbdc3958b58f0520de8dc01b7b5b147870b",
-      "lastChecked": "2026-09-03T15:10:12.904Z"
+      "lastHash": "61174920ad78227361859a2f47db2522e8b26a0b33d7609b2bb5feb93bf77446",
+      "lastChecked": "2026-09-03T15:16:24.755Z"
     },
     {
       "key": "us_alcohol",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-alcoholic-beverages/",
-      "lastHash": "9b66ea7ea9deefc54cb9c68cebeccd8a3d498296185ba7b0d0081e5f18186782",
-      "lastChecked": "2026-09-03T15:10:12.904Z"
+      "lastHash": "144befcd0fe2800e93108bf491cf558300b5b51b14b88c522acd50f22ef7e54b",
+      "lastChecked": "2026-09-03T15:16:24.755Z"
     },
     {
       "key": "us_dairy",
-      "url": "https://www.federalregister.gov/documents/2026/07/23/2026-14992/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united",
-      "lastHash": "3738c0be45ff5b595a834afcaecdd707b7e219021bec3286cf9a5e484b6fd09a",
-      "lastChecked": "2026-09-03T15:10:12.904Z"
+      "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-dairy/",
+      "lastHash": "0ccbf1567d8ee0dbb47b40578bbc0ffccec641fb5ffb44a2c1ac8796d5724976",
+      "lastChecked": "2026-09-03T15:16:24.755Z"
     }
   ]
 }

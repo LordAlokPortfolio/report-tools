@@ -2,36 +2,30 @@
   "canadaData": [
     {
       "name": "Steel &amp; steel articles (HS Ch. 72&ndash;73)",
-      "rate": "25%",
+      "rate": "25% now, rising to 50% on 2026-09-08",
       "status": "active",
-      "effective": "Effective 2025-03-13",
+      "effective": "Effective 2025-03-13; increasing to match U.S. rates effective 2026-09-08",
       "source": "Canada.ca &ndash; Complete list of U.S. products subject to counter tariffs",
       "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
-      "checked": "Checked 2026-08-25",
-      "reviewNeeded": true,
-      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
+      "checked": "Checked 2026-09-03"
     },
     {
       "name": "Aluminum",
-      "rate": "25%",
+      "rate": "25% now, rising to 50% on 2026-09-08",
       "status": "active",
-      "effective": "Effective 2025-03-13",
+      "effective": "Effective 2025-03-13; increasing to match U.S. rates effective 2026-09-08",
       "source": "Canada.ca &ndash; Complete list of U.S. products subject to counter tariffs",
       "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
-      "checked": "Checked 2026-08-25",
-      "reviewNeeded": true,
-      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
+      "checked": "Checked 2026-09-03"
     },
     {
       "name": "Expanded list - dairy, appliances, ag equipment, pulp/paper, plastics, electronics",
-      "rate": "TBD",
+      "rate": "15%, 25% or 50% by product (matches corresponding U.S. rate)",
       "status": "pending",
       "effective": "Announced 2026-08-25, effective 2026-09-08 - matches U.S. Section 338 dollar-for-dollar",
       "source": "Department of Finance Canada &ndash; countermeasures announcement",
       "url": "https://www.canada.ca/en/department-finance/news/2026/08/canada-announces-targeted-countermeasures-and-substantive-support-for-workers-and-businesses-in-response-to-us-tariffs.html",
-      "checked": "Checked 2026-08-25 - NOTE: the official HS-code list page above has not been updated for this yet",
-      "reviewNeeded": true,
-      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
+      "checked": "Checked 2026-09-03 - official HS-code list page above now reflects this"
     }
   ],
   "usData": [
@@ -51,7 +45,7 @@
       "effective": "Effective 2026-08-22",
       "source": "Federal Register &ndash; Presidential Proclamation, Motor Vehicles",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-motor-vehicles/",
-      "checked": "Checked 2026-08-25"
+      "checked": "Checked 2026-09-03 - hash confirmed stable across repeated checks, no content change"
     },
     {
       "name": "Alcoholic beverages (Section 338, Annex II)",
@@ -60,7 +54,7 @@
       "effective": "Effective 2026-08-22",
       "source": "Federal Register &ndash; Presidential Proclamation, Alcoholic Beverages",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-alcoholic-beverages/",
-      "checked": "Checked 2026-08-25"
+      "checked": "Checked 2026-09-03 - hash confirmed stable across repeated checks, no content change"
     },
     {
       "name": "Dairy (Section 338, Annex II)",
@@ -68,10 +62,8 @@
       "status": "active",
       "effective": "Effective 2026-08-22",
       "source": "Federal Register &ndash; Presidential Proclamation, Dairy",
-      "url": "https://www.federalregister.gov/documents/2026/07/23/2026-14992/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united",
-      "checked": "Checked 2026-08-25",
-      "reviewNeeded": true,
-      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
+      "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-dairy/",
+      "checked": "Checked 2026-09-03 - rate confirmed unchanged via whitehouse.gov mirror"
     }
   ],
   "commentaryData": [

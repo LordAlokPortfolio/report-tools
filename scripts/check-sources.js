@@ -37,8 +37,20 @@ function isoDate(value) {
   return (isNaN(d.getTime()) ? new Date() : d).toISOString().slice(0, 10);
 }
 
+// Government pages behind CDNs (Akamai, etc.) inject fresh per-request
+// analytics/RUM beacons into <script> tags - a random token/timestamp on
+// every single fetch, unrelated to the actual page content. Hashing that
+// in makes a source look "changed" every day even when nothing real did.
+// Confirmed by diffing two back-to-back fetches: identical once <script>
+// tags are stripped, different otherwise. Real government-page content
+// (the text this tool actually cares about) is server-rendered HTML, not
+// script-injected, so this doesn't risk missing a genuine change.
+function normalizeForHash(html) {
+  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+}
+
 function sha256(text) {
-  return crypto.createHash('sha256').update(text).digest('hex');
+  return crypto.createHash('sha256').update(normalizeForHash(text)).digest('hex');
 }
 
 /** Collects every object that looks like a dashboard entry (i.e. has a url). */
