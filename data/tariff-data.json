@@ -7,7 +7,9 @@
       "effective": "Effective 2025-03-13",
       "source": "Canada.ca &ndash; Complete list of U.S. products subject to counter tariffs",
       "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
-      "checked": "Checked 2026-08-25"
+      "checked": "Checked 2026-08-25",
+      "reviewNeeded": true,
+      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
     },
     {
       "name": "Aluminum",
@@ -16,7 +18,9 @@
       "effective": "Effective 2025-03-13",
       "source": "Canada.ca &ndash; Complete list of U.S. products subject to counter tariffs",
       "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
-      "checked": "Checked 2026-08-25"
+      "checked": "Checked 2026-08-25",
+      "reviewNeeded": true,
+      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
     },
     {
       "name": "Expanded list - dairy, appliances, ag equipment, pulp/paper, plastics, electronics",
@@ -25,7 +29,9 @@
       "effective": "Announced 2026-08-25, effective 2026-09-08 - matches U.S. Section 338 dollar-for-dollar",
       "source": "Department of Finance Canada &ndash; countermeasures announcement",
       "url": "https://www.canada.ca/en/department-finance/news/2026/08/canada-announces-targeted-countermeasures-and-substantive-support-for-workers-and-businesses-in-response-to-us-tariffs.html",
-      "checked": "Checked 2026-08-25 - NOTE: the official HS-code list page above has not been updated for this yet"
+      "checked": "Checked 2026-08-25 - NOTE: the official HS-code list page above has not been updated for this yet",
+      "reviewNeeded": true,
+      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
     }
   ],
   "usData": [
@@ -63,7 +69,9 @@
       "effective": "Effective 2026-08-22",
       "source": "Federal Register &ndash; Presidential Proclamation, Dairy",
       "url": "https://www.federalregister.gov/documents/2026/07/23/2026-14992/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united",
-      "checked": "Checked 2026-08-25"
+      "checked": "Checked 2026-08-25",
+      "reviewNeeded": true,
+      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
     }
   ],
   "commentaryData": [
