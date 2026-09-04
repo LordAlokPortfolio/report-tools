@@ -1,12 +1,48 @@
 # Vendor & Material Analysis — what this tool actually is
 
-KV Custom Windows and Doors, Brampton ON. This document describes the
-tool as it exists today, not as it was originally planned. Earlier
-drafts of this file described a six-view tool that read uploaded CSVs.
-That plan changed as the work progressed, and this file is being
-rewritten to match what was actually built, in plain language, so that
-someone reading it can understand the tool without already knowing how
-it was made.
+KV Custom Windows and Doors, Brampton ON. This document explains the
+tool as it exists today — what each tab does first, then how it works
+underneath.
+
+## What each tab does
+
+**Speed** — how long a vendor actually takes to deliver right now, not
+what they quoted once. Weighted toward their most recent orders,
+because a vendor's pace can genuinely shift and blending that shift
+into years of older history would hide it instead of catching it.
+
+**Shortfall** — what was ordered vs. what actually arrived, per item,
+for the vendor selected. Catches a vendor who quietly ships less than
+the PO said, order after order — invisible unless someone is counting
+boxes against the PO.
+
+**Frequency** — which items are being reordered more often than their
+own history suggests, ranked by how many times each has been ordered.
+Doesn't say why the rhythm changed; just flags it.
+
+**Mix** — for the vendor selected, which single item is the biggest
+share of everything ordered from them, by order count. That's the MVP
+item — the one worth watching most closely if that vendor ever became
+unreliable.
+
+**Habits** — does a bigger order, or a different time of year, get
+delivered faster or slower by this vendor. About this vendor's
+behavior toward you specifically, not a comparison between vendors.
+
+**Bottleneck** — for anything built from multiple purchased parts: a
+build only moves as fast as its slowest component. Pulls the real lead
+time for each part in a bill of materials and reports the date that
+actually governs the build.
+
+**Concentration** — ignores the vendor selected; a whole-building
+view. Which vendors would hurt the most if they disappeared: how many
+inventory codes each one is the only source for, and what share of
+everything assigned to them has actually been ordered.
+
+**Runout** — also ignores the vendor selected, since running out of
+something is a whole-building question, not a per-vendor one. Reads
+the inventory ledger directly — on hand, usage rate, lead time — and
+says plainly whether ordering today is soon enough.
 
 ## What problem this solves
 
@@ -82,61 +118,6 @@ patched, that every dollar-based feature was eventually dropped rather
 than kept as something half-trustworthy. What's left only uses columns
 that have actually held up under scrutiny — dates, quantities, order
 counts, and inventory movement.
-
-## What each tab actually tells you
-
-**Speed** answers the most basic purchasing question: how long does
-this vendor actually take right now, not what they quoted you once.
-It looks at their most recent orders specifically, because a vendor's
-pace can genuinely shift — a vendor who used to take ten days can
-start taking five weeks — and averaging that shift together with years
-of older, faster history would hide the change instead of catching it.
-
-**Shortfall** compares what was ordered against what actually arrived,
-per item, for the vendor you've selected. It exists because
-short-shipping is the kind of pattern that's invisible unless someone
-is actually counting boxes against the PO — a vendor who quietly
-delivers less than ordered, order after order, won't show up any other
-way.
-
-**Frequency** watches whether an item is being reordered more often
-than its own history suggests it should be. It doesn't say why — that
-could mean rising demand, or it could mean nobody's noticed usage
-creeping up — but it flags the change so a person can go find out.
-
-**Concentration** steps back from any one vendor and asks a structural
-question about the whole business: which vendors would hurt the most
-if they disappeared tomorrow? It counts how many inventory codes each
-vendor is the only source for, and — using the inventory master list,
-not just what's actually been ordered — what share of everything
-assigned to that vendor has actually moved through a PO. A vendor with
-many exclusively-supplied codes is a real dependency risk, whether or
-not those codes get ordered often.
-
-**Mix** takes the opposite angle on one specific vendor: of everything
-you've ordered from them, which single item makes up the biggest share
-of the relationship? That's the MVP item — the one worth paying the
-most attention to if that vendor ever became unreliable.
-
-**Habits** checks whether buying differently — bigger orders, or
-ordering in a different season — changes how fast a vendor delivers
-for you. It's about vendor behavior toward you specifically, not about
-comparing vendors against each other.
-
-**Bottleneck** exists for anything built from multiple purchased
-parts. A build can only start as fast as its slowest component
-arrives; the other parts showing up early doesn't matter. This view
-pulls the actual lead time for each component in a bill of materials
-and reports the one date that actually governs the build.
-
-**Runout** is the odd one out on purpose: unlike every other tab, it
-ignores whichever vendor you've selected, because "am I about to run
-out of something" is a whole-building question, not a per-vendor one.
-It reads the inventory movement ledger directly — what's on hand, how
-fast it's actually being used — and combines that with each item's
-real lead time to say plainly whether ordering today is soon enough,
-or whether the shop floor runs dry before a new order could possibly
-arrive.
 
 ## What this tool deliberately does not do
 

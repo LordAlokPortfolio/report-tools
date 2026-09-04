@@ -37,6 +37,7 @@
     color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
   }
   .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-divider { width: 1px; margin: 6px 6px; background: var(--border); align-self: stretch; }
   .tab-view { display: none; }
   .tab-view.active { display: block; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -63,7 +64,7 @@
 </head>
 <body>
 
-<div class="version-badge">v38 - 2026-09-04 - New About tab; spec rewritten in plain human prose</div>
+<div class="version-badge">v39 - 2026-09-04 - Tabs grouped with a divider; Frequency sorted by order count; Habits heading rewritten; About tab leads with what each tab does</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -144,10 +145,11 @@
       <button class="tab-btn active" data-tab="speed">Speed</button>
       <button class="tab-btn" data-tab="shortship">Shortfall</button>
       <button class="tab-btn" data-tab="cadence">Frequency</button>
-      <button class="tab-btn" data-tab="concentration">Concentration</button>
       <button class="tab-btn" data-tab="mix">Mix</button>
       <button class="tab-btn" data-tab="habits">Habits</button>
       <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
+      <span class="tab-divider"></span>
+      <button class="tab-btn" data-tab="concentration">Concentration</button>
       <button class="tab-btn" data-tab="runout">Runout</button>
       <button class="tab-btn" data-tab="about">About</button>
     </div>
@@ -902,8 +904,8 @@
       return;
     }
 
-    // Most recently ordered first; ties broken by largest single order quantity.
-    entries.sort((a, b) => (b.lastDate - a.lastDate) || (b.maxQty - a.maxQty));
+    // Most-ordered item first (highest total order count); ties broken by most recent order.
+    entries.sort((a, b) => (b.count - a.count) || (b.lastDate - a.lastDate));
     container.appendChild(el("p", { class: "stat" }, [
       `${entries.length} item${entries.length === 1 ? "" : "s"} are now being ordered noticeably more often than their own history:`
     ]));
@@ -1097,7 +1099,7 @@
   function renderHabits() {
     const container = document.getElementById("tab-habits");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Habits - does when/how big you order change what you get?"]));
+    container.appendChild(el("h2", null, ["Habits - does a bigger order, or a different time of year, get delivered faster or slower?"]));
     const rows = filteredRows().filter(isClosed).filter(r => typeof r["Quantity"] === "number");
     if (rows.length === 0) {
       container.appendChild(notEnoughHistory(0));
@@ -1362,32 +1364,49 @@
       paragraphs.forEach(p => container.appendChild(el("p", null, [p])));
     };
 
-    section(null, [
-      "This document describes the tool as it exists today. Every purchasing decision at KV depends on things that live scattered across a messy spreadsheet: how long a vendor actually takes to deliver, whether they're shipping less than what was ordered, whether the business depends too heavily on one supplier, and what's about to run out on the shop floor. This tool reads the workbook directly, does the arithmetic, and shows the answer as one sentence a person can act on."
+    section("Speed", [
+      "How long this vendor actually takes right now, not what they quoted once. Weighted toward their most recent orders, because a vendor's pace can genuinely shift and blending that shift into years of older history would hide it instead of catching it."
     ]);
 
-    section("The one rule", [
-      "The tool only says what the data can prove. Early drafts of this idea kept drifting toward inventing things - a dollar figure for what a delay cost, a recommendation to drop a vendor, an explanation for why a price moved. None of that lives in the data, so it would have been made up, and a tool that quietly guesses is worse than one that says \"I don't have enough here to tell you.\" Every number this tool prints traces back to an actual column in the workbook, to arithmetic on those columns, or to something the user typed in themselves."
+    section("Shortfall", [
+      "What was ordered vs. what actually arrived, per item, for the vendor selected above. Catches a vendor who quietly ships less than the PO said, order after order - a pattern nobody sees unless someone is counting boxes against the PO."
+    ]);
+
+    section("Frequency", [
+      "Which items are being reordered more often than their own history suggests, ranked by how many times each has been ordered. It doesn't say why the rhythm changed - could be rising usage, could be nobody noticing - it just flags it."
+    ]);
+
+    section("Mix", [
+      "For the vendor selected above: which single item is the biggest share of everything ordered from them, by order count. That's the MVP item - the one worth watching most closely if this vendor ever became unreliable."
+    ]);
+
+    section("Habits", [
+      "Does a bigger order, or a different time of year, get delivered faster or slower by this vendor. About this vendor's behavior toward you specifically, not a comparison between vendors."
+    ]);
+
+    section("Bottleneck", [
+      "For anything built from multiple purchased parts: a build only moves as fast as its slowest component. Pulls the real lead time for each part in a bill of materials and reports the date that actually governs the build."
+    ]);
+
+    section("Concentration", [
+      "Ignores the vendor picked above - this is a whole-building view. Which vendors would hurt the most if they disappeared: how many inventory codes each one is the only source for, and what share of everything assigned to them has actually been ordered."
+    ]);
+
+    section("Runout", [
+      "Also ignores the vendor picked above, since running out of something is a whole-building question, not a per-vendor one. Reads the inventory ledger directly - on hand, usage rate, lead time - and says plainly whether ordering today is soon enough."
+    ]);
+
+    section("The one rule behind all of it", [
+      "The tool only says what the data can prove. Early drafts kept drifting toward inventing things - a dollar figure for what a delay cost, a recommendation to drop a vendor, an explanation for why a price moved. None of that lives in the data, so it would have been made up, and a tool that quietly guesses is worse than one that says \"I don't have enough here to tell you.\" Every number this tool prints traces back to an actual column in the workbook, to arithmetic on those columns, or to something the user typed in themselves."
     ]);
 
     section("How it connects to your data", [
-      "You sign in with your Microsoft account, and from then on the tool reads your PO workbook live from OneDrive - nothing is uploaded or copied anywhere else. Because this page is public, anyone who opens the link without the passphrase sees the tool running on a made-up sample dataset instead, with every tab fully working on fake numbers. The passphrase isn't real security - it's a doorbell, not a lock. The actual protection is that your real data is never published; it's only ever read live, while you're signed in."
+      "Sign in with your Microsoft account, and the tool reads your PO workbook live from OneDrive - nothing is uploaded or copied anywhere else. Because this page is public, anyone who opens the link without the passphrase sees the tool running on a made-up sample dataset instead, with every tab fully working on fake numbers. The passphrase isn't real security - it's a doorbell, not a lock. The actual protection is that your real data is never published; it's only ever read live, while you're signed in."
     ]);
 
     section("Why the data needed cleaning first", [
       "The raw workbook has real problems: custom orders get entered with a placeholder cost of zero because nobody's typed in a real price, the promised-delivery-date column turned out to be unreliable, dates carry time-of-day where only the date matters, and some rows are missing a receipt date entirely. A separate script fixes what can be fixed without guessing and leaves alone what can't be trusted - every rule it applies was worked out and confirmed one at a time, never invented.",
       "Pricing data turned out to be unreliable enough, in ways that kept surfacing new problems even after being patched, that every dollar-based feature was eventually dropped rather than kept half-trustworthy. What's left only uses columns that have actually held up: dates, quantities, order counts, and inventory movement."
-    ]);
-
-    section("What each tab tells you", [
-      "Speed answers how long a vendor actually takes right now, weighted toward their most recent orders, because a vendor's pace can genuinely shift and averaging that shift together with years of older history would hide the change instead of catching it.",
-      "Shortfall compares what was ordered against what actually arrived, per item, for the vendor you've selected - the kind of pattern that's invisible unless someone is actually counting boxes against the PO.",
-      "Frequency watches whether an item is being reordered more often than its own history suggests. It doesn't say why, but it flags the change so a person can go find out.",
-      "Concentration steps back and asks which vendors would hurt the most if they disappeared tomorrow - how many inventory codes each vendor is the only source for, and what share of everything assigned to them has actually been ordered.",
-      "Mix takes the opposite angle on one vendor: of everything you've ordered from them, which single item is the biggest share of the relationship - the MVP item worth paying the most attention to.",
-      "Habits checks whether buying differently changes how fast a vendor delivers for you specifically, not how vendors compare to each other.",
-      "Bottleneck is for anything built from multiple purchased parts: a build only moves as fast as its slowest component, so this pulls the real lead time for each part in a bill of materials and reports the date that actually governs the build.",
-      "Runout ignores whichever vendor you've selected, on purpose, because running out of something is a whole-building question. It reads the inventory ledger directly and says plainly whether ordering today is soon enough."
     ]);
 
     section("What this tool deliberately does not do", [
