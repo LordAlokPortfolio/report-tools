@@ -45,7 +45,9 @@
       "effective": "Effective 2026-08-22",
       "source": "Federal Register &ndash; Presidential Proclamation, Motor Vehicles",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-motor-vehicles/",
-      "checked": "Checked 2026-09-03 - hash confirmed stable across repeated checks, no content change"
+      "checked": "Checked 2026-09-03 - hash confirmed stable across repeated checks, no content change",
+      "reviewNeeded": true,
+      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
     },
     {
       "name": "Alcoholic beverages (Section 338, Annex II)",
@@ -54,7 +56,9 @@
       "effective": "Effective 2026-08-22",
       "source": "Federal Register &ndash; Presidential Proclamation, Alcoholic Beverages",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-alcoholic-beverages/",
-      "checked": "Checked 2026-09-03 - hash confirmed stable across repeated checks, no content change"
+      "checked": "Checked 2026-09-03 - hash confirmed stable across repeated checks, no content change",
+      "reviewNeeded": true,
+      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
     },
     {
       "name": "Dairy (Section 338, Annex II)",
@@ -63,7 +67,9 @@
       "effective": "Effective 2026-08-22",
       "source": "Federal Register &ndash; Presidential Proclamation, Dairy",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-dairy/",
-      "checked": "Checked 2026-09-03 - rate confirmed unchanged via whitehouse.gov mirror"
+      "checked": "Checked 2026-09-03 - rate confirmed unchanged via whitehouse.gov mirror",
+      "reviewNeeded": true,
+      "reviewNote": "source page changed since last check on 2026-09-03, verify manually"
     }
   ],
   "commentaryData": [
