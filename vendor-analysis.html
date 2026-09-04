@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v29 - 2026-09-04 - Tab labels shortened to one word each</div>
+<div class="version-badge">v30 - 2026-09-04 - Concentration now shows assigned-catalog size + top code</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -167,6 +167,8 @@
   const PO_SHEET_NAME = "PO-INVENTORY-TABLE";
   const HISTORY_SHEET_NAME = "HISTORY SHEET"; // table tbl_HISTORY lives on this sheet
   const BOM_SHEET_NAME = "BOTTLENECK";        // still being built per the user -- may not have BOM columns yet
+  const DA_VINCI_SHEET_NAME = "Da Vinci File"; // inventory master -- each code's assigned supplier
+  const SUPPLIER_SHEET_NAME = "SUPPLIER FILE"; // resolves Da Vinci's Supplier ID to the same vendor name the PO table uses
 
   let msalApp = null;
   let workbookItemId = null;
@@ -176,6 +178,8 @@
   let poRows = [];       // array of row objects, keyed by header
   let bomRows = null;
   let ledgerRows = null;
+  let daVinciRows = null;
+  let supplierFileRows = null;
   let poAsOf = null;
   let ledgerAsOf = null;
 
@@ -448,6 +452,8 @@
       ledgerRows = await fetchSheetRows(HISTORY_SHEET_NAME);
       if (ledgerRows) ledgerAsOf = new Date();
       bomRows = await fetchSheetRows(BOM_SHEET_NAME);
+      daVinciRows = await fetchSheetRows(DA_VINCI_SHEET_NAME);
+      supplierFileRows = await fetchSheetRows(SUPPLIER_SHEET_NAME);
       document.getElementById("loadStatus").textContent =
         `Loaded ${poRows.length.toLocaleString()} PO rows live from OneDrive as of ${fmtDate(poAsOf)}.`;
       populateLanding();
@@ -531,10 +537,17 @@
   // ID alone isn't readable -- ledgerRows (tbl_HISTORY) carries both ID and
   // INVENTORY NAME, so label as "ID - Name" wherever an ID is shown to a person.
   function itemLabel(id) {
-    if (!ledgerRows) return String(id);
+    if (!ledgerRows && !daVinciRows) return String(id);
     if (!itemLabel._map) {
       itemLabel._map = new Map();
-      ledgerRows.forEach(r => {
+      // Da Vinci File covers every code (not just ones with ledger movement),
+      // so build from it first, then fill any gaps from the ledger.
+      (daVinciRows || []).forEach(r => {
+        const rid = String(r["ID"] || "").trim();
+        const name = String(r["INVENTORY NAME"] || "").trim();
+        if (rid && name && !itemLabel._map.has(rid)) itemLabel._map.set(rid, name);
+      });
+      (ledgerRows || []).forEach(r => {
         const rid = String(r["ID"] || "").trim();
         const name = String(r["INVENTORY NAME"] || "").trim();
         if (rid && name && !itemLabel._map.has(rid)) itemLabel._map.set(rid, name);
@@ -725,13 +738,39 @@
     ]));
     container.appendChild(el("p", { class: "as-of" }, [`Purchase orders as of ${fmtDate(poAsOf)}.`]));
 
+    // Da Vinci File's own SUPPLIER ID column assigns every code to a vendor, whether
+    // or not it's ever actually been ordered -- that's the real catalog size to
+    // measure against, not just "codes we've ordered" (which undercounts dependency:
+    // 55 codes ordered out of 77 assigned still means all 77 depend on that vendor).
+    let assignedByVendor = null;
+    if (daVinciRows && supplierFileRows) {
+      const nameBySupplierId = new Map();
+      supplierFileRows.forEach(r => {
+        const id = String(r["SUPPLIER ID"] || "").trim();
+        const name = String(r["SUPPLIER NAME"] || "").trim();
+        if (id && name) nameBySupplierId.set(id, name);
+      });
+      assignedByVendor = new Map();
+      daVinciRows.forEach(r => {
+        const item = String(r["ID"] || "").trim();
+        const supplierId = String(r["SUPPLIER ID"] || "").trim();
+        if (!item || !supplierId) return;
+        const vendor = nameBySupplierId.get(supplierId) || supplierId;
+        if (!assignedByVendor.has(vendor)) assignedByVendor.set(vendor, new Set());
+        assignedByVendor.get(vendor).add(item);
+      });
+    }
+
     const suppliersByItem = new Map();
+    const orderCountByVendorItem = new Map(); // "vendor||item" -> count
     poRows.filter(isStockItem).forEach(r => {
       const item = String(r["ID"] || "").trim();
       const vendor = String(r["Supplier ID"] || "").trim();
       if (!item || !vendor) return;
       if (!suppliersByItem.has(item)) suppliersByItem.set(item, new Set());
       suppliersByItem.get(item).add(vendor);
+      const key = vendor + "||" + item;
+      orderCountByVendorItem.set(key, (orderCountByVendorItem.get(key) || 0) + 1);
     });
 
     const singleSourceItemsByVendor = new Map();
@@ -752,32 +791,54 @@
     totalItemsByVendor.forEach((items, vendor) => {
       const singleSource = singleSourceItemsByVendor.get(vendor) || new Set();
       if (singleSource.size === 0) return; // no dependency risk from this vendor
-      entries.push({ vendor, totalItems: items.size, singleSourceCount: singleSource.size });
+      let topItem = null, topCount = 0;
+      items.forEach(item => {
+        const count = orderCountByVendorItem.get(vendor + "||" + item) || 0;
+        if (count > topCount) { topCount = count; topItem = item; }
+      });
+      const assigned = assignedByVendor ? assignedByVendor.get(vendor) : null;
+      entries.push({
+        vendor, totalItems: items.size, singleSourceCount: singleSource.size,
+        assignedCount: assigned ? assigned.size : null,
+        topItem, topCount,
+      });
     });
 
     if (entries.length === 0) {
       container.appendChild(el("div", { class: "callout ok" }, ["No vendor is the sole source for any item in this data."]));
       return;
     }
+    if (!assignedByVendor) {
+      container.appendChild(el("div", { class: "callout warn" }, [
+        "Da Vinci File and/or Supplier File didn't load, so \"assigned catalog size\" isn't available this refresh -- showing ordered-item counts only."
+      ]));
+    }
 
     entries.sort((a, b) => b.singleSourceCount - a.singleSourceCount);
     container.appendChild(el("p", { class: "stat" }, [
       `${entries.length} vendor${entries.length === 1 ? " is" : "s are"} the only source for at least one item:`
     ]));
+    const headers = ["Vendor", "Codes ordered", "Codes assigned to them", "Only they supply", "Most-ordered code"];
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Vendor", "Total items supplied", "Items only they supply"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, headers.map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     entries.forEach(e => {
+      const assignedText = e.assignedCount === null ? "-" : `${e.totalItems} of ${e.assignedCount}`;
+      const topText = e.topItem ? `${itemLabel(e.topItem)} (${e.topCount} orders)` : "-";
       tbody.appendChild(el("tr", null, [
         el("td", null, [e.vendor]),
         el("td", null, [String(e.totalItems)]),
+        el("td", null, [assignedText]),
         el("td", { class: "change-up" }, [String(e.singleSourceCount)]),
+        el("td", { class: "note" }, [topText]),
       ]));
     });
     table.appendChild(tbody);
     container.appendChild(table);
-    container.appendChild(el("p", { class: "note" }, ["\"Only they supply\" means no other vendor has ever shipped this item in the data available - not that no alternate vendor exists in the world."]));
+    container.appendChild(el("p", { class: "note" }, [
+      "\"Only they supply\" means no other vendor has ever shipped this item in the data available - not that no alternate vendor exists in the world. \"Codes assigned to them\" comes from Da Vinci File's own Supplier ID column - codes never ordered still count toward dependency risk, since the vendor is still the designated source for them."
+    ]));
   }
 
   // ---------- View 4: Habits ----------
