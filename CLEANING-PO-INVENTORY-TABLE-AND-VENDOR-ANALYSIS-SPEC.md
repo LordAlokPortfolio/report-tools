@@ -25,7 +25,7 @@ share of everything ordered from them, by order count. That's the MVP
 item — the one worth watching most closely if that vendor ever became
 unreliable.
 
-**Habits** — does a bigger order, or a different time of year, get
+**Sensitivity** — does a bigger order, or a different time of year, get
 delivered faster or slower by this vendor. About this vendor's
 behavior toward you specifically, not a comparison between vendors.
 
