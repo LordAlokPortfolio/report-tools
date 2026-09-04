@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v13 — 2026-09-04 — Speed/Creep recency update</div>
+<div class="version-badge">v14 — 2026-09-04 — Pattern rethought as actionable</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -602,7 +602,10 @@
   function renderPattern() {
     const container = document.getElementById("tab-pattern");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Pattern — does cost move with lead time for the same item?"]));
+    container.appendChild(el("h2", null, ["Pattern — when lead time moves, does cost move with it?"]));
+    container.appendChild(el("p", { class: "note" }, [
+      "Answers a specific business question: if this item's lead time stretches again, should you expect cost to move too? A correlation number doesn't answer that on its own — this counts how often cost actually moved the same direction as lead time, order to order."
+    ]));
     const rows = filteredRows().filter(isClosed).filter(r => typeof r["UnitCost"] === "number");
     const byItem = new Map();
     rows.forEach(r => {
@@ -614,30 +617,63 @@
       byItem.get(item).push({ date: d1, cost: r["UnitCost"], leadTime: bd });
     });
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "Correlation"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["Item", "Orders", "What history shows", "So what"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
-    let any = false;
+    const entries = [];
     byItem.forEach((points, item) => {
       if (points.length < MIN_HISTORY) return;
       points.sort((a, b) => a.date - b.date);
+
+      // Order-to-order: when lead time changed from one order to the next, did cost
+      // move the same direction? This is the answerable, actionable version of
+      // "does cost move with lead time" -- skip pairs where lead time didn't change,
+      // since there's no direction to compare against.
+      let same = 0, total = 0;
+      for (let i = 1; i < points.length; i++) {
+        const dLead = points[i].leadTime - points[i - 1].leadTime;
+        const dCost = points[i].cost - points[i - 1].cost;
+        if (dLead === 0) continue;
+        total++;
+        if (Math.sign(dCost) === Math.sign(dLead)) same++;
+      }
+      if (total < 5) return; // not enough actual lead-time changes to say anything
+
+      const rate = same / total;
       const corr = pearsonCorrelation(points.map(p => p.cost), points.map(p => p.leadTime));
-      if (corr === null) return;
-      any = true;
+      entries.push({ item, count: points.length, same, total, rate, corr });
+    });
+    entries.sort((a, b) => b.rate - a.rate);
+    entries.forEach(e => {
+      let label, soWhat, cls;
+      if (e.rate >= 0.75) {
+        label = "Strong tendency"; cls = "change-up";
+        soWhat = "Treat a lead-time increase as an early signal to expect cost to rise too — worth budgeting for, and worth raising with this vendor.";
+      } else if (e.rate > 0.5) {
+        label = "Some tendency"; cls = "";
+        soWhat = "Cost sometimes follows lead time here, but not reliably enough to count on.";
+      } else {
+        label = "No consistent tendency"; cls = "low-confidence";
+        soWhat = "Lead time and cost have moved independently for this item — one isn't a useful early warning for the other.";
+      }
       tbody.appendChild(el("tr", null, [
-        el("td", null, [item]),
-        el("td", null, [String(points.length)]),
-        el("td", null, [corr.toFixed(2)]),
+        el("td", null, [e.item]),
+        el("td", null, [String(e.count)]),
+        el("td", { class: cls }, [
+          `${label} — cost moved with lead time ${e.same} of ${e.total} times it changed (${(e.rate * 100).toFixed(0)}%)` +
+          (e.corr !== null ? ` [r=${e.corr.toFixed(2)}]` : "")
+        ]),
+        el("td", { class: "note" }, [soWhat]),
       ]));
     });
     table.appendChild(tbody);
-    if (!any) {
+    if (entries.length === 0) {
       container.appendChild(notEnoughHistory(0));
-      container.appendChild(el("p", { class: "note" }, [`(No item in this vendor/timeline has ${MIN_HISTORY}+ closed orders with both a cost and a computable lead time.)`]));
+      container.appendChild(el("p", { class: "note" }, [`(No item in this vendor/timeline has ${MIN_HISTORY}+ closed orders with at least 5 actual lead-time changes to compare against.)`]));
       return;
     }
     container.appendChild(table);
-    container.appendChild(el("p", { class: "note" }, ["Correlation only — this does not claim cost caused the lead-time change, or the reverse."]));
+    container.appendChild(el("p", { class: "note" }, ["This describes what happened together in the past, not what caused what — it does not claim cost changes because lead time changes, or the reverse."]));
   }
 
   // ---------- View 4: Habits ----------
