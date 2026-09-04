@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vendor &amp; Material Analysis — KV Custom Windows and Doors</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --border: #dcdcd6; --text: #1c1c1a;
+    --muted: #6b6b64; --accent: #2c5f4f; --accent-light: #e7f0ec;
+    --warn: #8a5a00; --warn-bg: #fdf2df; --bad: #8a2c2c; --bad-bg: #fbeaea;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 20px 28px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 28px 80px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  .panel h2 { margin-top: 0; font-size: 16px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  select, input[type=file], input[type=number] {
+    padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff;
+  }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; flex-wrap: wrap; }
+  .tab-btn {
+    padding: 9px 14px; border: none; background: none; cursor: pointer; font-size: 13px;
+    color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-view { display: none; }
+  .tab-view.active { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .callout { padding: 12px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; }
+  .callout.warn { background: var(--warn-bg); color: var(--warn); }
+  .callout.bad { background: var(--bad-bg); color: var(--bad); }
+  .callout.ok { background: var(--accent-light); color: var(--accent); }
+  .stat { font-weight: 600; }
+  .insufficient { color: var(--muted); font-style: italic; }
+  .as-of { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  button.primary {
+    padding: 8px 16px; border: none; border-radius: 6px; background: var(--accent); color: #fff;
+    font-size: 13px; cursor: pointer;
+  }
+  button.primary:disabled { background: #b7c4bd; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Vendor &amp; Material Analysis</h1>
+  <p>Reads the cleaned PO history file. The tool only states what the data can prove — no invented numbers, no "switch vendors" verdicts. See CLEANING-PO-INVENTORY-TABLE-AND-VENDOR-ANALYSIS-SPEC.md for the full design notes.</p>
+</header>
+
+<main>
+
+  <section class="panel">
+    <h2>1. Load your files</h2>
+    <div class="row">
+      <div class="field">
+        <label for="poFile">PO history (cleaned) — required</label>
+        <input type="file" id="poFile" accept=".xlsx,.xls,.csv">
+      </div>
+      <div class="field">
+        <label for="bomFile">Component list / BOM — optional, needed for Bottleneck</label>
+        <input type="file" id="bomFile" accept=".xlsx,.xls,.csv">
+      </div>
+      <div class="field">
+        <label for="ledgerFile">Inventory ledger — optional, needed for Runout</label>
+        <input type="file" id="ledgerFile" accept=".xlsx,.xls,.csv">
+      </div>
+    </div>
+    <p class="note" id="loadStatus">No file loaded yet. Nothing is uploaded anywhere — parsing happens in your browser only.</p>
+  </section>
+
+  <section class="panel" id="landingPanel" style="display:none;">
+    <h2>2. Pick a vendor and a timeline</h2>
+    <div class="row">
+      <div class="field">
+        <label for="vendorSelect">Vendor</label>
+        <select id="vendorSelect"></select>
+      </div>
+      <div class="field">
+        <label for="timelineSelect">Timeline</label>
+        <select id="timelineSelect">
+          <option value="90">Last 90 days</option>
+          <option value="180">Last 6 months</option>
+          <option value="365" selected>Last 12 months</option>
+          <option value="0">All time</option>
+        </select>
+      </div>
+    </div>
+    <p class="as-of" id="asOfLine"></p>
+  </section>
+
+  <section id="viewsSection" style="display:none;">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="speed">Speed</button>
+      <button class="tab-btn" data-tab="creep">Creep</button>
+      <button class="tab-btn" data-tab="pattern">Pattern</button>
+      <button class="tab-btn" data-tab="habits">Habits</button>
+      <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
+      <button class="tab-btn" data-tab="runout">Runout</button>
+    </div>
+
+    <div class="tab-view active" id="tab-speed"></div>
+    <div class="tab-view" id="tab-creep"></div>
+    <div class="tab-view" id="tab-pattern"></div>
+    <div class="tab-view" id="tab-habits"></div>
+    <div class="tab-view" id="tab-bottleneck"></div>
+    <div class="tab-view" id="tab-runout"></div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- state ----------
+  let poRows = [];       // array of row objects, keyed by header
+  let bomRows = null;
+  let ledgerRows = null;
+  let poAsOf = null;
+  let ledgerAsOf = null;
+
+  const MIN_HISTORY = 6; // orders; per spec, below this we say "not enough history" instead of guessing
+
+  // ---------- helpers ----------
+  function excelSerialToDate(serial) {
+    return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000);
+  }
+  function toDate(v) {
+    if (v instanceof Date) return v;
+    if (typeof v === "number") return excelSerialToDate(v);
+    if (typeof v === "string") {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return null;
+  }
+  function isWeekend(d) {
+    const dow = d.getUTCDay();
+    return dow === 0 || dow === 6;
+  }
+  function businessDaysBetween(start, end) {
+    if (!start || !end) return null;
+    let count = 0;
+    const s = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+    const e = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+    for (let d = new Date(s.getTime() + 86400000); d <= e; d = new Date(d.getTime() + 86400000)) {
+      if (!isWeekend(d)) count++;
+    }
+    return count;
+  }
+  function median(nums) {
+    const arr = nums.slice().sort((a, b) => a - b);
+    const mid = Math.floor(arr.length / 2);
+    return arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
+  }
+  function pearsonCorrelation(xs, ys) {
+    const n = xs.length;
+    if (n < 2) return null;
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let num = 0, dx2 = 0, dy2 = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = xs[i] - mx, dy = ys[i] - my;
+      num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
+    }
+    const denom = Math.sqrt(dx2 * dy2);
+    return denom === 0 ? null : num / denom;
+  }
+  function fmtDate(d) {
+    if (!d) return "—";
+    return d.toISOString().slice(0, 10);
+  }
+  function fmtMoney(v) {
+    return typeof v === "number" ? "$" + v.toFixed(2) : "—";
+  }
+  function el(tag, attrs, children) {
+    const e = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(k => {
+      if (k === "class") e.className = attrs[k];
+      else if (k === "html") e.innerHTML = attrs[k];
+      else e.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(c => e.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+    return e;
+  }
+  function notEnoughHistory(n) {
+    return el("p", { class: "insufficient" },
+      [`Not enough history yet (${n} order${n === 1 ? "" : "s"}, minimum ${MIN_HISTORY}). No number is shown rather than guessing from too little data.`]);
+  }
+
+  // ---------- file parsing ----------
+  function readSheetAsRows(file, cb) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const wb = XLSX.read(e.target.result, { type: "binary", cellDates: false });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      cb(rows);
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  document.getElementById("poFile").addEventListener("change", function (e) {
+    const f = e.target.files[0];
+    if (!f) return;
+    readSheetAsRows(f, function (rows) {
+      poRows = rows;
+      poAsOf = new Date();
+      document.getElementById("loadStatus").textContent =
+        `Loaded ${rows.length.toLocaleString()} PO rows from "${f.name}".`;
+      populateLanding();
+    });
+  });
+  document.getElementById("bomFile").addEventListener("change", function (e) {
+    const f = e.target.files[0];
+    if (!f) return;
+    readSheetAsRows(f, function (rows) { bomRows = rows; renderAll(); });
+  });
+  document.getElementById("ledgerFile").addEventListener("change", function (e) {
+    const f = e.target.files[0];
+    if (!f) return;
+    readSheetAsRows(f, function (rows) { ledgerRows = rows; ledgerAsOf = new Date(); renderAll(); });
+  });
+
+  // ---------- landing ----------
+  function populateLanding() {
+    const vendors = Array.from(new Set(poRows.map(r => String(r["Supplier ID"] || "").trim()).filter(Boolean))).sort();
+    const sel = document.getElementById("vendorSelect");
+    sel.innerHTML = "";
+    vendors.forEach(v => sel.appendChild(el("option", { value: v }, [v])));
+    document.getElementById("landingPanel").style.display = "block";
+    document.getElementById("viewsSection").style.display = "block";
+    document.getElementById("asOfLine").textContent =
+      `Purchase orders as of ${fmtDate(poAsOf)}.` + (ledgerAsOf ? ` Inventory ledger as of ${fmtDate(ledgerAsOf)}.` : "");
+    sel.addEventListener("change", renderAll);
+    document.getElementById("timelineSelect").addEventListener("change", renderAll);
+    renderAll();
+  }
+
+  // ---------- tabs ----------
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-view").forEach(v => v.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // ---------- data access ----------
+  function filteredRows() {
+    const vendor = document.getElementById("vendorSelect").value;
+    const days = parseInt(document.getElementById("timelineSelect").value, 10);
+    const cutoff = days > 0 ? new Date(Date.now() - days * 86400000) : null;
+    return poRows.filter(r => {
+      if (String(r["Supplier ID"] || "").trim() !== vendor) return false;
+      if (cutoff) {
+        const d = toDate(r["PO Date"]);
+        if (!d || d < cutoff) return false;
+      }
+      return true;
+    });
+  }
+  function isClosed(r) { return r["POLineClosed"] === -1 || r["POLineClosed"] === "-1"; }
+  function isOpen(r) { return r["POLineClosed"] === 0 || r["POLineClosed"] === "0"; }
+
+  // ---------- View 1: Speed ----------
+  function renderSpeed() {
+    const container = document.getElementById("tab-speed");
+    container.innerHTML = "";
+    const rows = filteredRows().filter(isClosed);
+    const leadTimes = [];
+    rows.forEach(r => {
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (bd !== null) leadTimes.push(bd);
+    });
+    container.appendChild(el("h2", null, ["Speed — how fast this vendor actually is"]));
+    if (leadTimes.length < MIN_HISTORY) {
+      container.appendChild(notEnoughHistory(leadTimes.length));
+      return;
+    }
+    const med = Math.ceil(median(leadTimes));
+    const nextOrderBy = new Date(Date.now() + med * 86400000);
+    container.appendChild(el("p", null, [
+      el("span", { class: "stat" }, [`${med} business days`]),
+      ` median lead time, rounded up, based on ${leadTimes.length} closed orders in this timeline.`
+    ]));
+    container.appendChild(el("p", null, [
+      "If ordering today, expect receipt around ",
+      el("span", { class: "stat" }, [fmtDate(new Date(Date.now() + med * 86400000))]),
+      "."
+    ]));
+  }
+
+  // ---------- View 2: Creep ----------
+  function renderCreep() {
+    const container = document.getElementById("tab-creep");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Creep — price rising quietly over many orders"]));
+    const rows = filteredRows().filter(r => typeof r["UnitCost"] === "number");
+    const byItem = new Map();
+    rows.forEach(r => {
+      const item = String(r["ITEM NO"] || "").trim();
+      if (!item) return;
+      if (!byItem.has(item)) byItem.set(item, []);
+      byItem.get(item).push(r);
+    });
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "First cost", "Latest cost", "Change", "Biggest single jump"].map(h => el("th", null, [h])))]),
+      ]);
+    const tbody = el("tbody");
+    let any = false;
+    byItem.forEach((itemRows, item) => {
+      if (itemRows.length < 2) return; // need at least two points to show a change
+      itemRows.sort((a, b) => toDate(a["PO Date"]) - toDate(b["PO Date"]));
+      const first = itemRows[0]["UnitCost"], last = itemRows[itemRows.length - 1]["UnitCost"];
+      const pctChange = first !== 0 ? ((last - first) / first) * 100 : null;
+      let biggestJump = 0;
+      for (let i = 1; i < itemRows.length; i++) {
+        biggestJump = Math.max(biggestJump, Math.abs(itemRows[i]["UnitCost"] - itemRows[i - 1]["UnitCost"]));
+      }
+      any = true;
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [item]),
+        el("td", null, [String(itemRows.length)]),
+        el("td", null, [fmtMoney(first)]),
+        el("td", null, [fmtMoney(last)]),
+        el("td", null, [pctChange === null ? "—" : pctChange.toFixed(1) + "%"]),
+        el("td", null, [fmtMoney(biggestJump)]),
+      ]));
+    });
+    table.appendChild(tbody);
+    if (!any) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No item in this vendor/timeline has more than one order with a usable UnitCost — nothing to compare."]));
+      return;
+    }
+    container.appendChild(table);
+  }
+
+  // ---------- View 3: Pattern ----------
+  function renderPattern() {
+    const container = document.getElementById("tab-pattern");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Pattern — does cost move with lead time for the same item?"]));
+    const rows = filteredRows().filter(isClosed).filter(r => typeof r["UnitCost"] === "number");
+    const byItem = new Map();
+    rows.forEach(r => {
+      const item = String(r["ITEM NO"] || "").trim();
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (!item || bd === null) return;
+      if (!byItem.has(item)) byItem.set(item, []);
+      byItem.get(item).push({ date: d1, cost: r["UnitCost"], leadTime: bd });
+    });
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Correlation"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    let any = false;
+    byItem.forEach((points, item) => {
+      if (points.length < MIN_HISTORY) return;
+      points.sort((a, b) => a.date - b.date);
+      const corr = pearsonCorrelation(points.map(p => p.cost), points.map(p => p.leadTime));
+      if (corr === null) return;
+      any = true;
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [item]),
+        el("td", null, [String(points.length)]),
+        el("td", null, [corr.toFixed(2)]),
+      ]));
+    });
+    table.appendChild(tbody);
+    if (!any) {
+      container.appendChild(notEnoughHistory(0));
+      container.appendChild(el("p", { class: "note" }, [`(No item in this vendor/timeline has ${MIN_HISTORY}+ closed orders with both a cost and a computable lead time.)`]));
+      return;
+    }
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["Correlation only — this does not claim cost caused the lead-time change, or the reverse."]));
+  }
+
+  // ---------- View 4: Habits ----------
+  function renderHabits() {
+    const container = document.getElementById("tab-habits");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Habits — does when/how big you order change what you get?"]));
+    const rows = filteredRows().filter(isClosed).filter(r => typeof r["Quantity"] === "number");
+    if (rows.length === 0) {
+      container.appendChild(notEnoughHistory(0));
+      return;
+    }
+    const qtys = rows.map(r => r["Quantity"]).sort((a, b) => a - b);
+    const sizeMedian = median(qtys);
+    function quarterOf(d) { return "Q" + (Math.floor(d.getUTCMonth() / 3) + 1); }
+    const buckets = new Map(); // key = quarter|size -> {leadTimes:[], costs:[]}
+    rows.forEach(r => {
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (!d1 || bd === null) return;
+      const size = r["Quantity"] >= sizeMedian ? "Large" : "Small";
+      const key = quarterOf(d1) + " / " + size;
+      if (!buckets.has(key)) buckets.set(key, { leadTimes: [], costs: [] });
+      buckets.get(key).leadTimes.push(bd);
+      if (typeof r["UnitCost"] === "number") buckets.get(key).costs.push(r["UnitCost"]);
+    });
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Quarter / size", "Orders", "Median lead time", "Median cost"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    let any = false;
+    Array.from(buckets.keys()).sort().forEach(key => {
+      const b = buckets.get(key);
+      if (b.leadTimes.length < 3) return; // too thin to mean anything
+      any = true;
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [key]),
+        el("td", null, [String(b.leadTimes.length)]),
+        el("td", null, [Math.ceil(median(b.leadTimes)) + " business days"]),
+        el("td", null, [b.costs.length ? fmtMoney(median(b.costs)) : "—"]),
+      ]));
+    });
+    table.appendChild(tbody);
+    if (!any) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No quarter/size bucket has 3+ orders yet — too thin to mean anything. History starts recently; this fills in over time."]));
+      return;
+    }
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, [`Size split at this vendor's median order quantity (${sizeMedian}) for this timeline. Buckets under 3 orders are hidden rather than shown as noise.`]));
+  }
+
+  // ---------- View 5: Bottleneck ----------
+  function renderBottleneck() {
+    const container = document.getElementById("tab-bottleneck");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Bottleneck — the slowest component sets the build date"]));
+    if (!bomRows) {
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload a component list / BOM file (columns: ParentSKU, ComboID, ComponentSKU, QtyPerUnit) above to use this view."]));
+      return;
+    }
+    // Build median lead time + latest cost per component (ITEM NO / INVENTORY ID) across ALL vendors/history.
+    const perComponent = new Map();
+    poRows.filter(isClosed).forEach(r => {
+      const item = String(r["ITEM NO"] || r["INVENTORY ID"] || "").trim();
+      if (!item) return;
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (!perComponent.has(item)) perComponent.set(item, { leadTimes: [], lastCost: null, lastDate: null });
+      const rec = perComponent.get(item);
+      if (bd !== null) rec.leadTimes.push(bd);
+      if (typeof r["UnitCost"] === "number" && (!rec.lastDate || d1 > rec.lastDate)) {
+        rec.lastCost = r["UnitCost"]; rec.lastDate = d1;
+      }
+    });
+    const combos = new Map(); // ParentSKU|ComboID -> [{ComponentSKU, QtyPerUnit}]
+    bomRows.forEach(r => {
+      const key = `${r["ParentSKU"]}|${r["ComboID"]}`;
+      if (!combos.has(key)) combos.set(key, { parent: r["ParentSKU"], combo: r["ComboID"], parts: [] });
+      combos.get(key).parts.push({ sku: String(r["ComponentSKU"] || "").trim(), qty: Number(r["QtyPerUnit"]) || 1 });
+    });
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Parent SKU", "Combo", "Slowest component", "Build-start lead time", "Cost to build"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    let any = false;
+    combos.forEach(c => {
+      let worstLead = null, worstPart = null, costSum = 0, costKnown = true;
+      c.parts.forEach(p => {
+        const rec = perComponent.get(p.sku);
+        if (!rec || rec.leadTimes.length < MIN_HISTORY) { costKnown = false; return; }
+        const med = Math.ceil(median(rec.leadTimes));
+        if (worstLead === null || med > worstLead) { worstLead = med; worstPart = p.sku; }
+        if (rec.lastCost !== null) costSum += rec.lastCost * p.qty; else costKnown = false;
+      });
+      if (worstLead === null) return;
+      any = true;
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [String(c.parent)]),
+        el("td", null, [String(c.combo)]),
+        el("td", null, [worstPart]),
+        el("td", null, [worstLead + " business days"]),
+        el("td", null, [costKnown ? fmtMoney(costSum) : "incomplete — some component costs unknown"]),
+      ]));
+    });
+    table.appendChild(tbody);
+    if (!any) {
+      container.appendChild(el("p", { class: "insufficient" }, [`No BOM combo has a component with ${MIN_HISTORY}+ closed orders of history yet.`]));
+      return;
+    }
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["Uses each component's own purchase history across all vendors, not just the vendor/timeline picked above — a build's bottleneck isn't scoped to one vendor."]));
+  }
+
+  // ---------- View 6: Runout ----------
+  function renderRunout() {
+    const container = document.getElementById("tab-runout");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Runout — what's about to run dry, building-wide"]));
+    if (!ledgerRows) {
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view. This tab ignores the vendor/timeline picked above — it's a whole-building question."]));
+      return;
+    }
+    container.appendChild(el("p", { class: "as-of" }, [`Inventory ledger as of ${fmtDate(ledgerAsOf)}. Purchase orders as of ${fmtDate(poAsOf)}.`]));
+
+    // On-hand + weekly usage per SKU from ledger movement rows.
+    const bySku = new Map();
+    ledgerRows.forEach(r => {
+      const sku = String(r["INVENTORY ID"] || r["SKU"] || "").trim();
+      if (!sku) return;
+      const qty = Number(r["Quantity"] || r["Qty"] || 0);
+      const d = toDate(r["Date"]);
+      if (!bySku.has(sku)) bySku.set(sku, { movements: [] });
+      bySku.get(sku).movements.push({ date: d, qty });
+    });
+
+    // Median lead time and current vendor per SKU, from PO history (all vendors, closed orders).
+    const leadBySku = new Map();
+    const vendorBySku = new Map();
+    poRows.filter(isClosed).forEach(r => {
+      const sku = String(r["INVENTORY ID"] || "").trim();
+      if (!sku) return;
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (bd !== null) {
+        if (!leadBySku.has(sku)) leadBySku.set(sku, []);
+        leadBySku.get(sku).push(bd);
+      }
+      vendorBySku.set(sku, r["Supplier ID"]);
+    });
+
+    // Open POs per SKU.
+    const openBySku = new Map();
+    poRows.filter(isOpen).forEach(r => {
+      const sku = String(r["INVENTORY ID"] || "").trim();
+      if (!sku) return;
+      if (!openBySku.has(sku)) openBySku.set(sku, []);
+      openBySku.get(sku).push({ qty: r["Quantity"], date: toDate(r["PO DateReceived"]) || toDate(r["PO DateRequired"]) });
+    });
+
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["SKU", "Vendor", "On hand", "Weekly usage", "Weeks left", "Open PO", "Real lead time", "Order by", "Suggested qty"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    let any = false;
+    bySku.forEach((rec, sku) => {
+      const sorted = rec.movements.filter(m => m.date).sort((a, b) => a.date - b.date);
+      if (sorted.length < 2) return;
+      const onHand = sorted[sorted.length - 1].qty; // ledger assumed to carry a running/on-hand style figure per row
+      const spanDays = (sorted[sorted.length - 1].date - sorted[0].date) / 86400000;
+      const totalOut = sorted.reduce((sum, m) => sum + (m.qty < 0 ? -m.qty : 0), 0);
+      const weeklyUsage = spanDays > 0 ? (totalOut / spanDays) * 7 : 0;
+      if (weeklyUsage <= 0) return;
+      const weeksLeft = onHand / weeklyUsage;
+      const leadTimes = leadBySku.get(sku);
+      const leadDays = leadTimes && leadTimes.length >= MIN_HISTORY ? Math.ceil(median(leadTimes)) : null;
+      const leadWeeks = leadDays !== null ? leadDays / 5 : null; // business days -> weeks worked
+      const open = (openBySku.get(sku) || [])[0];
+      any = true;
+      const orderBy = leadWeeks !== null ? weeksLeft - leadWeeks : null;
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [sku]),
+        el("td", null, [String(vendorBySku.get(sku) || "—")]),
+        el("td", null, [String(onHand)]),
+        el("td", null, [weeklyUsage.toFixed(1)]),
+        el("td", null, [weeksLeft.toFixed(1)]),
+        el("td", null, [open ? `${open.qty} by ${fmtDate(open.date)}` : "—"]),
+        el("td", null, [leadDays !== null ? leadDays + " bd" : "not enough history"]),
+        el("td", null, [orderBy === null ? "—" : (orderBy <= 0 ? "NOW" : orderBy.toFixed(1) + " wk from now")]),
+        el("td", null, ["—"]), // suggested qty needs an approval-limit ceiling the user must supply; not invented here
+      ]));
+    });
+    table.appendChild(tbody);
+    if (!any) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No SKU in the ledger has enough movement history to compute a usage rate yet."]));
+      return;
+    }
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["Suggested qty is left blank — splitting into multiple POs needs an approval-limit ceiling only you can supply. This tool won't invent one."]));
+  }
+
+  function renderAll() {
+    if (!poRows.length) return;
+    renderSpeed();
+    renderCreep();
+    renderPattern();
+    renderHabits();
+    renderBottleneck();
+    renderRunout();
+  }
+})();
+</script>
+
+</body>
+</html>
