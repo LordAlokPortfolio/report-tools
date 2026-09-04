@@ -64,17 +64,17 @@ Based on `POLineClosed` (`-1` = closed, `0` = open):
   anywhere in cleaning or reporting - kept as a narrow, intentional
   exception because it's still the least-bad stand-in for a closed order
   with no real receipt date at all.
-- **Open (`POLineClosed = 0`)** → fill from `PO Date` + this supplier's
-  median working-day lead time. The median is computed from that same
-  supplier's *other* closed orders where both `PO Date` and `PO DateReceived`
-  are real (non-NULL) dates - working days = Mon-Fri, counted between the
-  two dates. **If that supplier has no such historical orders, leave the
-  cell as `"NULL"`** - never invent a lead time with nothing behind it, per
-  the "only what the data can prove" rule in the spec.
-- No minimum sample-size threshold is enforced (unlike the 6-8 order
-  minimum described for the *reporting* tool's Speed/Pattern views in the
-  spec) - even a single historical closed order for a supplier is used as
-  its median. If this turns out to produce noisy fills, revisit.
+- **Open (`POLineClosed = 0`)** → left as `"NULL"`. **Previously** filled
+  from a guessed date (`PO Date` + that supplier's median lead time from
+  their closed-order history) - **retracted**. The problem: a guessed date
+  written into a still-open order's real cell freezes into permanent data.
+  If that order later actually closes, this script only fills a cell that's
+  still `"NULL"` - so a stale guess would sit there forever, get read as a
+  real receipt date once `POLineClosed` flips to `-1`, and silently corrupt
+  every downstream lead-time figure that trusts it (this is exactly how a
+  vendor's real ~8-week lead time showed up as ~10 days in the reporting
+  tool - traced back to this fill). Never guess a receipt date for an order
+  that hasn't actually been received.
 
 ### QtyReceived = 0
 Two-case rule based on `POLineClosed`:

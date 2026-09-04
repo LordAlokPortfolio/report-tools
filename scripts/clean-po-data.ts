@@ -13,12 +13,13 @@
 //                                     script or the reporting tool -- this one
 //                                     narrow fallback is intentional (least-bad
 //                                     stand-in for a genuinely missing date).
-//      POLineClosed = 0  (open)   -> fill from PO Date + this supplier's
-//                                     median working-day lead time, computed
-//                                     from that supplier's other closed
-//                                     orders (real PO Date -> PO DateReceived
-//                                     pairs). No historical data for that
-//                                     supplier -> leave as "NULL".
+//      POLineClosed = 0  (open)   -> left as "NULL". Never guessed -- a fabricated
+//                                     date written into a still-open order would
+//                                     freeze into permanent data and later get
+//                                     read as a real receipt date if the order
+//                                     closes without this cell being updated,
+//                                     silently corrupting downstream lead-time
+//                                     figures.
 // 3. QtyReceived = 0:
 //      POLineClosed = 0  (open)   -> leave as 0 (order genuinely not received yet).
 //      POLineClosed = -1 (closed) -> replace with this row's Quantity value.
@@ -82,28 +83,6 @@ function main(workbook: ExcelScript.Workbook) {
   function isNullCell(v: string | number | boolean): boolean {
     return typeof v === "string" && v.trim().toUpperCase() === "NULL";
   }
-  function excelSerialToUTCDate(serial: number): Date {
-    return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000);
-  }
-  function isWeekendSerial(daySerial: number): boolean {
-    const dow = excelSerialToUTCDate(daySerial).getUTCDay();
-    return dow === 0 || dow === 6;
-  }
-  function workingDaysBetween(startSerial: number, endSerial: number): number {
-    let count = 0;
-    const s = Math.floor(startSerial);
-    const e = Math.floor(endSerial);
-    for (let day = s + 1; day <= e; day++) {
-      if (!isWeekendSerial(day)) count++;
-    }
-    return count;
-  }
-  function median(nums: number[]): number {
-    const sorted = [...nums].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-  }
-
   const supplierIdx = headerIndex["Supplier ID"];
   const poDateIdx = headerIndex["PO Date"];
   const poDateReceivedIdx = headerIndex["PO DateReceived"];
@@ -140,33 +119,7 @@ function main(workbook: ExcelScript.Workbook) {
     nameBySupplierId.set(key, supplierValues[i][sfSupplierNameCol] as string | number);
   }
 
-  // Pass 1: collect each supplier's working-day lead time from their closed
-  // orders with real (non-NULL) PO Date / PO DateReceived pairs.
-  const leadTimesBySupplier = new Map<string, number[]>();
-
-  for (let start = 1; start < totalRows; start += CHUNK_SIZE) {
-    const rowsInChunk = Math.min(CHUNK_SIZE, totalRows - start);
-    const chunk = sheet.getRangeByIndexes(start, 0, rowsInChunk, totalCols).getValues();
-
-    for (const row of chunk) {
-      const closed = row[poLineClosedIdx] === -1;
-      const poDate = row[poDateIdx];
-      const poDateReceived = row[poDateReceivedIdx];
-      if (closed && typeof poDate === "number" && typeof poDateReceived === "number") {
-        const supplier = String(row[supplierIdx]);
-        const days = workingDaysBetween(poDate, poDateReceived);
-        if (!leadTimesBySupplier.has(supplier)) leadTimesBySupplier.set(supplier, []);
-        leadTimesBySupplier.get(supplier).push(days);
-      }
-    }
-  }
-
-  const medianLeadTimeBySupplier = new Map<string, number>();
-  leadTimesBySupplier.forEach((days, supplier) => {
-    medianLeadTimeBySupplier.set(supplier, median(days));
-  });
-
-  // Pass 2: clean each row and write it back to the SAME sheet, reordered.
+  // Clean each row and write it back to the SAME sheet, reordered.
   sheet.getRangeByIndexes(0, 0, 1, outputCols.length).setValues([outputCols]);
 
   for (let start = 1; start < totalRows; start += CHUNK_SIZE) {
@@ -177,26 +130,19 @@ function main(workbook: ExcelScript.Workbook) {
     for (const row of chunk) {
       const cleaned = row.slice();
       const closed = row[poLineClosedIdx] === -1;
-      const open = row[poLineClosedIdx] === 0;
 
       // Rule: PO DateReceived = NULL
       // PO DateRequired is confirmed unreliable in general, but this one narrow
       // fallback is intentional -- for a closed order with no real receipt date
       // at all, it's still the least-bad stand-in available. Not used anywhere
       // else in this script or the reporting tool.
-      if (isNullCell(cleaned[poDateReceivedIdx])) {
-        if (closed) {
-          cleaned[poDateReceivedIdx] = cleaned[poDateRequiredIdx];
-        } else if (open) {
-          const supplier = String(row[supplierIdx]);
-          const poDate = row[poDateIdx];
-          const supplierMedian = medianLeadTimeBySupplier.get(supplier);
-          if (typeof poDate === "number" && supplierMedian !== undefined) {
-            cleaned[poDateReceivedIdx] = Math.floor(poDate) + Math.ceil(supplierMedian);
-          } else {
-            cleaned[poDateReceivedIdx] = "NULL";
-          }
-        }
+      // Open orders: left as "NULL", never guessed. A guessed date written into a
+      // still-open order's real cell would freeze into permanent data -- if the
+      // order later actually closes, this script only fills a NULL cell, so a
+      // stale guess would sit there forever masquerading as a real receipt date
+      // and silently corrupt every lead-time figure that reads it.
+      if (isNullCell(cleaned[poDateReceivedIdx]) && closed) {
+        cleaned[poDateReceivedIdx] = cleaned[poDateRequiredIdx];
       }
 
       // Rule: PO Date / PO DateReceived -- strip time-of-day
