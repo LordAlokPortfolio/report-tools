@@ -327,9 +327,18 @@
         `Loaded ${poRows.length.toLocaleString()} PO rows live from OneDrive as of ${fmtDate(poAsOf)}.`;
       populateLanding();
     } catch (err) {
+      let diag = "";
+      try {
+        const itemId = await findWorkbookItemId();
+        const sheets = await graphGet(`/me/drive/items/${itemId}/workbook/worksheets?$select=name`);
+        diag = " Actual worksheet names Graph sees in this workbook: " +
+          sheets.value.map(s => `"${s.name}"`).join(", ") + ".";
+      } catch (diagErr) {
+        diag = " (Could not list worksheets to help diagnose: " + diagErr.message + ")";
+      }
       document.getElementById("loadStatus").textContent =
         "Could not read from OneDrive: " + err.message +
-        " — check WORKBOOK_FILENAME and the sheet name constants match the live workbook exactly.";
+        " — check WORKBOOK_FILENAME and the sheet name constants match the live workbook exactly." + diag;
     }
   }
 
