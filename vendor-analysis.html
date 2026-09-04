@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v23 - 2026-09-04 - Short-shipping/Cadence now group by ID, not ITEM NO</div>
+<div class="version-badge">v24 - 2026-09-04 - Item rows now show ID + INVENTORY NAME</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -263,7 +263,7 @@
   document.getElementById("ledgerFile").addEventListener("change", function (e) {
     const f = e.target.files[0];
     if (!f) return;
-    readSheetAsRows(f, function (rows) { ledgerRows = rows; ledgerAsOf = new Date(); renderAll(); });
+    readSheetAsRows(f, function (rows) { ledgerRows = rows; ledgerAsOf = new Date(); itemLabel._map = null; renderAll(); });
   });
 
   // ---------- OneDrive / Microsoft Graph ----------
@@ -339,6 +339,7 @@
     if (!graphAccessToken) return;
     document.getElementById("loadStatus").textContent = "Reading live data from OneDrive…";
     worksheetListCache = null; // pick up any sheet renames since the last refresh
+    itemLabel._map = null; // rebuild the ID -> name lookup from fresh ledger data
     try {
       poRows = (await fetchSheetRows(PO_SHEET_NAME)) || [];
       poAsOf = new Date();
@@ -424,6 +425,21 @@
       return t !== "" && /^[0-9.]+$/.test(t);
     }
     return false;
+  }
+  // ID alone isn't readable -- ledgerRows (tbl_HISTORY) carries both ID and
+  // INVENTORY NAME, so label as "ID - Name" wherever an ID is shown to a person.
+  function itemLabel(id) {
+    if (!ledgerRows) return String(id);
+    if (!itemLabel._map) {
+      itemLabel._map = new Map();
+      ledgerRows.forEach(r => {
+        const rid = String(r["ID"] || "").trim();
+        const name = String(r["INVENTORY NAME"] || "").trim();
+        if (rid && name && !itemLabel._map.has(rid)) itemLabel._map.set(rid, name);
+      });
+    }
+    const name = itemLabel._map.get(String(id));
+    return name ? `${id} - ${name}` : String(id);
   }
 
   // ---------- View 1: Speed ----------
@@ -528,7 +544,7 @@
     entries.forEach(e => {
       const rowClass = e.count < 4 ? "thin-row" : "";
       tbody.appendChild(el("tr", { class: rowClass }, [
-        el("td", null, [e.item]),
+        el("td", null, [itemLabel(e.item)]),
         el("td", { class: e.count < 4 ? "low-confidence" : "" }, [String(e.count)]),
         el("td", { class: "change-up" }, [`${e.shortOrders} of ${e.count} (${((e.shortOrders / e.count) * 100).toFixed(0)}%)`]),
         el("td", null, [String(e.ordered)]),
@@ -586,7 +602,7 @@
     const tbody = el("tbody");
     entries.forEach(e => {
       tbody.appendChild(el("tr", null, [
-        el("td", null, [e.item]),
+        el("td", null, [itemLabel(e.item)]),
         el("td", null, [String(e.count)]),
         el("td", null, [`${e.overallAvg.toFixed(0)} days`]),
         el("td", { class: "change-up" }, [`${e.recentAvg.toFixed(0)} days`]),
