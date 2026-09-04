@@ -422,28 +422,51 @@
     const container = document.getElementById("tab-speed");
     container.innerHTML = "";
     const rows = filteredRows().filter(isClosed);
-    const leadTimes = [];
+    const orders = [];
     rows.forEach(r => {
       const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
       const bd = businessDaysBetween(d1, d2);
-      if (bd !== null) leadTimes.push(bd);
+      if (bd !== null) orders.push({ poNo: r["PO No"], date: d1, received: d2, leadTime: bd });
     });
     container.appendChild(el("h2", null, ["Speed — how fast this vendor actually is"]));
-    if (leadTimes.length < MIN_HISTORY) {
-      container.appendChild(notEnoughHistory(leadTimes.length));
+    if (orders.length < MIN_HISTORY) {
+      container.appendChild(notEnoughHistory(orders.length));
       return;
     }
+    const leadTimes = orders.map(o => o.leadTime);
     const med = Math.ceil(median(leadTimes));
-    const nextOrderBy = new Date(Date.now() + med * 86400000);
+    const min = Math.min(...leadTimes), max = Math.max(...leadTimes);
     container.appendChild(el("p", null, [
       el("span", { class: "stat" }, [`${med} business days`]),
-      ` median lead time, rounded up, based on ${leadTimes.length} closed orders in this timeline.`
+      ` median lead time, rounded up, based on ${orders.length} closed orders in this timeline. `,
+      el("span", { class: "stat" }, [`Ranged from ${min} to ${max} business days`]),
+      " across individual orders — see the per-PO breakdown below for the actual spread."
     ]));
     container.appendChild(el("p", null, [
       "If ordering today, expect receipt around ",
       el("span", { class: "stat" }, [fmtDate(new Date(Date.now() + med * 86400000))]),
       "."
     ]));
+
+    orders.sort((a, b) => a.date - b.date);
+    container.appendChild(el("h2", null, ["Per-PO lead time"]));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["PO No", "PO Date", "PO DateReceived", "Lead time (business days)", "Vs. median"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    orders.forEach(o => {
+      const diff = o.leadTime - med;
+      const diffText = diff === 0 ? "on median" : (diff > 0 ? `+${diff} slower` : `${diff} faster`);
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [String(o.poNo)]),
+        el("td", null, [fmtDate(o.date)]),
+        el("td", null, [fmtDate(o.received)]),
+        el("td", null, [String(o.leadTime)]),
+        el("td", null, [diffText]),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
   }
 
   // ---------- View 2: Creep ----------
