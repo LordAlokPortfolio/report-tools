@@ -318,11 +318,11 @@
     } catch (err) {
       let diag = "";
       try {
-        const root = await graphGet("/me/drive/root/children?$select=name,folder,file");
-        diag = " Items actually in your OneDrive root: " +
-          root.value.map(i => i.name + (i.folder ? "/" : "")).join(", ") + ".";
+        const folder = await graphGet("/me/drive/root:/WAREHOUSE AUDITS 2026:/children?$select=name,folder,file");
+        diag = " Items actually inside \"WAREHOUSE AUDITS 2026\": " +
+          folder.value.map(i => i.name + (i.folder ? "/" : "")).join(", ") + ".";
       } catch (diagErr) {
-        diag = " (Could not even list the OneDrive root to help diagnose: " + diagErr.message + ")";
+        diag = " (Could not list \"WAREHOUSE AUDITS 2026\" to help diagnose: " + diagErr.message + ")";
       }
       document.getElementById("loadStatus").textContent =
         "Could not read from OneDrive: " + err.message +
