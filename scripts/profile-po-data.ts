@@ -1,9 +1,10 @@
 // Office Script — run from Excel's "Automate" tab (Excel Online or desktop M365).
 // Does NOT modify your data. Reads the PO history sheet in row batches (to stay
 // under the Office Scripts payload limit) and writes a summary of issues to a
-// new "Profile Report" sheet. Seven columns (ID, PO DateRevised, SpecialRequest,
-// QtyThisShip, Scanned, ShipLocalle, Tag) are skipped during analysis — left
-// alone in your file, just not checked here since they don't matter for cleaning.
+// new "Profile Report" sheet. Eight columns (ID, PO DateRevised, SpecialRequest,
+// QtyThisShip, Scanned, ShipLocalle, Tag, ShipBy) are skipped during analysis —
+// left alone in your file, just not checked here since they don't matter for
+// cleaning. UnitCost of 0 is treated as a legitimate value, not an error.
 //
 // How to run:
 // 1. Open the workbook with the PO history sheet active (or edit SHEET_NAME below).
@@ -29,7 +30,7 @@ function main(workbook: ExcelScript.Workbook) {
   headers.forEach((h, i) => (headerIndex[h] = i));
 
   // Columns excluded from analysis (kept in the file, just not checked/reported here).
-  const EXCLUDED_COLS = ["ID", "PO DateRevised", "SpecialRequest", "QtyThisShip", "Scanned", "ShipLocalle", "Tag"];
+  const EXCLUDED_COLS = ["ID", "PO DateRevised", "SpecialRequest", "QtyThisShip", "Scanned", "ShipLocalle", "Tag", "ShipBy"];
 
   const requiredCols = ["PO No", "Supplier ID", "PO Date", "ITEM NO", "INVENTORY ID"].filter(c => !EXCLUDED_COLS.includes(c));
   const dateCols = ["PO Date", "PO DateReceived", "PO DateRequired", "PO DateRevised", "ShipBy"].filter(c => !EXCLUDED_COLS.includes(c));
@@ -87,7 +88,6 @@ function main(workbook: ExcelScript.Workbook) {
           flag("Non-numeric value", col, rowNum);
         } else {
           if (v < 0) flag("Negative value", col, rowNum);
-          if (col === "UnitCost" && v === 0) flag("Zero unit cost", col, rowNum);
         }
       }
 
