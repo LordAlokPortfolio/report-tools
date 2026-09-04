@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v31 - 2026-09-04 - Cadence renamed to Frequency; % instead of raw counts</div>
+<div class="version-badge">v32 - 2026-09-04 - Concentration column order: ordered, total, %, top code</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -825,20 +825,21 @@
     container.appendChild(el("p", { class: "stat" }, [
       `${entries.length} vendor${entries.length === 1 ? " is" : "s are"} the only source for at least one item:`
     ]));
-    const headers = ["Vendor", "Codes ordered", "% of assigned catalog ordered", "Only they supply", "Most-ordered code"];
+    const headers = ["Vendor", "Codes ordered", "Total codes by vendor", "% of assigned catalog ordered", "Most-ordered code"];
     const table = el("table", null, [
       el("thead", null, [el("tr", null, headers.map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     entries.forEach(e => {
+      const totalText = e.assignedCount === null ? "-" : String(e.assignedCount);
       const assignedText = e.assignedCount === null || e.assignedCount === 0
         ? "-" : `${((e.totalItems / e.assignedCount) * 100).toFixed(0)}%`;
       const topText = e.topItem ? `${itemLabel(e.topItem)} (${e.topCount} orders)` : "-";
       tbody.appendChild(el("tr", null, [
         el("td", null, [e.vendor]),
         el("td", null, [String(e.totalItems)]),
-        el("td", null, [assignedText]),
-        el("td", { class: "change-up" }, [String(e.singleSourceCount)]),
+        el("td", null, [totalText]),
+        el("td", { class: "change-up" }, [assignedText]),
         el("td", { class: "note" }, [topText]),
       ]));
     });
