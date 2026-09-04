@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v15 — 2026-09-04 — Speed/Creep simplified to plain sentences</div>
+<div class="version-badge">v16 — 2026-09-04 — Speed table sorted newest-first</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -473,7 +473,7 @@
       el("thead", null, [el("tr", null, ["PO No", "PO Date", "PO DateReceived", "Lead time (business days)", "Vs. recent"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
-    orders.forEach(o => {
+    orders.slice().reverse().forEach(o => { // most recent first -- table reads top-to-bottom as newest-to-oldest
       const diff = o.leadTime - recentMed;
       const diffText = diff === 0 ? "on recent" : (diff > 0 ? `+${diff} slower` : `${diff} faster`);
       tbody.appendChild(el("tr", null, [
