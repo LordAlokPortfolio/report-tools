@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v26 - 2026-09-04 - Retry Graph timeouts automatically</div>
+<div class="version-badge">v27 - 2026-09-04 - Reuse one Excel session instead of re-opening every call</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -331,27 +331,48 @@
   // Graph's Excel backend can time out (504/MaxRequestDurationExceeded) opening a
   // large or currently-open workbook -- often transient. Retry a few times with
   // backoff before giving up.
-  async function graphGet(path, attempt = 1) {
+  let workbookSessionId = null;
+  async function graphGet(path, attempt = 1, method = "GET", body = null) {
+    const headers = { Authorization: "Bearer " + graphAccessToken };
+    if (workbookSessionId && path.includes("/workbook/")) headers["workbook-session-id"] = workbookSessionId;
+    if (body) headers["Content-Type"] = "application/json";
     const res = await fetch("https://graph.microsoft.com/v1.0" + path, {
-      headers: { Authorization: "Bearer " + graphAccessToken },
+      method, headers, body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
-      const body = await res.text();
-      const isTimeout = res.status === 504 || body.includes("MaxRequestDurationExceeded");
-      if (isTimeout && attempt < 3) {
-        await new Promise(r => setTimeout(r, attempt * 2000));
-        return graphGet(path, attempt + 1);
+      const respBody = await res.text();
+      const isTimeout = res.status === 504 || respBody.includes("MaxRequestDurationExceeded");
+      if (isTimeout && attempt < 4) {
+        await new Promise(r => setTimeout(r, attempt * 3000));
+        return graphGet(path, attempt + 1, method, body);
       }
       const hint = isTimeout
         ? " (Microsoft's Excel service timed out opening the workbook -- if it's open in desktop Excel right now, try closing it and retrying.)"
         : "";
-      throw new Error(`Graph request failed (${res.status}) for ${path}: ${body}${hint}`);
+      throw new Error(`Graph request failed (${res.status}) for ${path}: ${respBody}${hint}`);
     }
+    if (res.status === 204) return null;
     return res.json();
   }
 
+  // Opens the workbook ONCE per refresh and reuses that session for every
+  // subsequent workbook call, instead of Graph cold-opening the whole 42k+ row
+  // workbook fresh on every single request -- that repeated cold-open is the
+  // likely cause of the repeated timeouts.
+  async function ensureWorkbookSession(itemId) {
+    if (workbookSessionId) return workbookSessionId;
+    const result = await graphGet(`/me/drive/items/${itemId}/workbook/createSession`, 1, "POST", { persistChanges: false });
+    workbookSessionId = result.id;
+    return workbookSessionId;
+  }
+
   async function findWorkbookItemId() {
-    if (workbookItemId) return workbookItemId;
+    if (workbookItemId) {
+      // itemId stays cached across Refresh clicks in this page load, but the
+      // session is deliberately reset every refresh -- always make sure one exists.
+      await ensureWorkbookSession(workbookItemId);
+      return workbookItemId;
+    }
     const results = await graphGet(`/me/drive/root/search(q='${encodeURIComponent(WORKBOOK_FILENAME)}')?$select=id,name,file`);
     const match = results.value.find(i => i.file && i.name === WORKBOOK_FILENAME);
     if (!match) {
@@ -359,6 +380,7 @@
       throw new Error(`No exact filename match for "${WORKBOOK_FILENAME}". Search returned: ${names}.`);
     }
     workbookItemId = match.id;
+    await ensureWorkbookSession(workbookItemId);
     return workbookItemId;
   }
 
@@ -399,6 +421,7 @@
     document.getElementById("loadStatus").textContent = "Reading live data from OneDrive…";
     worksheetListCache = null; // pick up any sheet renames since the last refresh
     itemLabel._map = null; // rebuild the ID -> name lookup from fresh ledger data
+    workbookSessionId = null; // start a fresh session each refresh, don't reuse a possibly-expired one
     try {
       poRows = (await fetchSheetRows(PO_SHEET_NAME)) || [];
       poAsOf = new Date();
