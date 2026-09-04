@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v25 - 2026-09-04 - Business-day math now excludes Ontario holidays</div>
+<div class="version-badge">v26 - 2026-09-04 - Retry Graph timeouts automatically</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -328,13 +328,24 @@
     });
   }
 
-  async function graphGet(path) {
+  // Graph's Excel backend can time out (504/MaxRequestDurationExceeded) opening a
+  // large or currently-open workbook -- often transient. Retry a few times with
+  // backoff before giving up.
+  async function graphGet(path, attempt = 1) {
     const res = await fetch("https://graph.microsoft.com/v1.0" + path, {
       headers: { Authorization: "Bearer " + graphAccessToken },
     });
     if (!res.ok) {
       const body = await res.text();
-      throw new Error(`Graph request failed (${res.status}) for ${path}: ${body}`);
+      const isTimeout = res.status === 504 || body.includes("MaxRequestDurationExceeded");
+      if (isTimeout && attempt < 3) {
+        await new Promise(r => setTimeout(r, attempt * 2000));
+        return graphGet(path, attempt + 1);
+      }
+      const hint = isTimeout
+        ? " (Microsoft's Excel service timed out opening the workbook -- if it's open in desktop Excel right now, try closing it and retrying.)"
+        : "";
+      throw new Error(`Graph request failed (${res.status}) for ${path}: ${body}${hint}`);
     }
     return res.json();
   }
