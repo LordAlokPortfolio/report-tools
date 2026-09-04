@@ -84,39 +84,24 @@ Two-case rule based on `POLineClosed`:
 
 ### INVENTORY ID — leading/trailing whitespace
 **Decision: trim.** Uncontroversial — whitespace-only difference, trimming
-can't lose information. Flagged by the earlier profiling pass; not yet
-wired into `clean-po-data.ts` (only the rules above are implemented so far
-— add this when picked back up).
+can't lose information.
 
-### Explicitly NOT cleaned
+### Non-numeric QtyReceived
+**Decision: replace with that row's `Quantity` value.** Same resolution as
+the `QtyReceived = 0` + closed case above — if `QtyReceived` isn't a usable
+number at all, treat it the same way: fall back to `Quantity`.
+
+### Explicitly NOT cleaned / no rule
 
 - **`PO DateRevised`** — an earlier draft of this log had a rule for this
   column (NULL + closed → copy the `Quantity` value into it). That rule was
   flagged as suspicious (it would put a quantity number into a date column)
   and was **dropped** when the rules were restated. No cleaning is applied
   to `PO DateRevised`.
-
-## Open — needs a decision
-
-### Duplicate PO No + ITEM NO (24 rows across 24 combos, as of the last profiling run)
-Per the spec, a PO line can legitimately arrive in partial shipments, which
-would make the same PO No + ITEM NO appear more than once with different
-`QtyThisShip` / `PO DateReceived`. Not yet determined whether the flagged
-rows are partial shipments (expected, not an error) or true duplicate rows.
-
-**Next step:** check the flagged rows directly in Excel. For each duplicate
-PO No + ITEM NO pair, compare `QtyThisShip` and `PO DateReceived` across the
-occurrences:
-- Different `QtyThisShip` / `PO DateReceived` per occurrence → partial
-  shipment, expected, not an error.
-- Identical across all fields → true duplicate row, needs a dedup rule.
-
-### Negative UnitCost (5 rows, as of the last profiling run)
-Not yet asked — likely returns/credits, but unconfirmed. Needs a decision:
-keep as-is (if returns are real), or flag as a data-entry error.
-
-### Non-numeric QtyReceived (3 rows, as of the last profiling run)
-Not yet asked. Needs a decision on what's actually in those cells.
+- **Duplicate PO No + ITEM NO** — decision: ignore, no rule. (Earlier
+  hypothesis was partial shipments vs. true duplicates; not pursued further.)
+- **Negative UnitCost** — decision: ignore, no rule. (Earlier hypothesis was
+  returns/credits; not pursued further.)
 
 ---
 
@@ -132,10 +117,12 @@ exact.
 ## Process
 
 1. `scripts/clean-po-data.ts` runs in Excel (Automate tab) against the raw
-   PO history sheet. It never modifies the source sheet — writes a cleaned,
-   reordered copy to a new "Clean Data" sheet.
+   PO history sheet. **It edits the sheet in place** — overwrites the
+   sheet's own cells with cleaned, reordered values. No separate output
+   sheet, no report. Back up the file before running.
 2. Any new issue type found gets discussed here before a rule is written —
    business meaning first, code second.
 3. Record the resolved rule here (no data, ever).
-4. Once the open items above are resolved, extend `clean-po-data.ts` to
-   cover them.
+4. All currently known issue types are resolved and implemented as of this
+   writing. Re-profile after a new raw export lands, since a different file
+   may surface new issue types.

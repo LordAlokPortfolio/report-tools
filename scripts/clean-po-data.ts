@@ -1,9 +1,10 @@
 // Office Script — run from Excel's "Automate" tab (Excel Online or desktop M365).
-// Cleans the raw PO history sheet according to the rules documented in
-// CLEANING-LOG.md. Does NOT modify the source sheet -- writes a cleaned,
-// reordered copy to a new "Clean Data" sheet (replaced if this is re-run).
+// Cleans the PO history sheet IN PLACE -- overwrites the sheet's own cells
+// with cleaned, reordered values. No separate output sheet, no report.
+// Full rule list is documented in CLEANING-LOG.md; keep that file in sync
+// with this script.
 //
-// Rules applied (see CLEANING-LOG.md for the full writeup):
+// Rules applied:
 // 1. PO Date, PO DateReceived: strip time-of-day, keep date only.
 // 2. PO DateReceived = "NULL":
 //      POLineClosed = -1 (closed) -> fill from PO DateRequired (same row).
@@ -12,26 +13,27 @@
 //                                     from that supplier's other closed
 //                                     orders (real PO Date -> PO DateReceived
 //                                     pairs). No historical data for that
-//                                     supplier -> leave as "NULL" (never
-//                                     invent a number with nothing behind it).
+//                                     supplier -> leave as "NULL".
 // 3. QtyReceived = 0:
 //      POLineClosed = 0  (open)   -> leave as 0 (order genuinely not received yet).
-//      POLineClosed = -1 (closed) -> replace with this row's Quantity value
-//                                     (closed order implies fully received).
-// 4. PO DateRevised: untouched. No rule applied.
-// 5. Columns not used by any report view are moved to the right side of the
-//    output table, not deleted, not hidden from the file -- just out of the
-//    way of the columns the reports actually read.
+//      POLineClosed = -1 (closed) -> replace with this row's Quantity value.
+// 4. QtyReceived is non-numeric (not 0, just not a number) -> replace with
+//    this row's Quantity value.
+// 5. INVENTORY ID: trim leading/trailing whitespace.
+// 6. Duplicate PO No + ITEM NO: ignored, no rule.
+// 7. Negative UnitCost: ignored, no rule.
+// 8. PO DateRevised: untouched, no rule.
+// 9. Columns not used by any report view are moved to the right side of the
+//    table (still in the file, just reordered).
 //
 // Limitation: "working days" here means Mon-Fri only. No company holiday
-// calendar is available to this script, so statutory holidays are not
-// excluded from the day count. Document this if it matters to a report.
+// calendar is available to this script.
 //
 // How to run:
-// 1. Open the workbook with the raw PO history sheet active (or edit SHEET_NAME below).
-// 2. Automate tab -> open this script -> Run.
-// 3. If you hit the payload-limit error, lower CHUNK_SIZE and re-run.
-// 4. Read the new "Clean Data" sheet. The original sheet is untouched.
+// 1. BACK UP THE FILE FIRST -- this script overwrites the sheet's own data.
+// 2. Open the workbook with the raw PO history sheet active (or edit SHEET_NAME below).
+// 3. Automate tab -> open this script -> Run.
+// 4. If you hit the payload-limit error, lower CHUNK_SIZE and re-run.
 
 function main(workbook: ExcelScript.Workbook) {
   const SHEET_NAME = ""; // leave blank to use the active sheet, or set e.g. "PO History"
@@ -50,22 +52,17 @@ function main(workbook: ExcelScript.Workbook) {
   const headerIndex: { [key: string]: number } = {};
   headers.forEach((h, i) => (headerIndex[h] = i));
 
-  // Columns the report views actually use, kept on the left of the output table.
   const NECESSARY_COLS = [
     "PO No", "Supplier ID", "PO Date", "ITEM NO", "Quantity", "INVENTORY ID",
     "PO DateReceived", "PO DateRequired", "PO DateRevised", "QtyReceived",
     "POLineClosed", "UnitCost", "Category",
   ];
-  // Not used by any report view -- kept in the output, just moved to the right.
   const SIDE_COLS = ["ID", "SpecialRequest", "QtyThisShip", "Scanned", "Tag", "ShipLocalle", "ShipBy"];
-
   const outputCols = [...NECESSARY_COLS, ...SIDE_COLS].filter(c => headerIndex[c] !== undefined);
 
   function isNullCell(v: string | number | boolean): boolean {
     return typeof v === "string" && v.trim().toUpperCase() === "NULL";
   }
-
-  // Excel serial date (with or without a time fraction) -> whole calendar day, as an integer serial.
   function excelSerialToUTCDate(serial: number): Date {
     return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000);
   }
@@ -88,7 +85,6 @@ function main(workbook: ExcelScript.Workbook) {
     return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
   }
 
-  const poNoIdx = headerIndex["PO No"];
   const supplierIdx = headerIndex["Supplier ID"];
   const poDateIdx = headerIndex["PO Date"];
   const poDateReceivedIdx = headerIndex["PO DateReceived"];
@@ -96,6 +92,7 @@ function main(workbook: ExcelScript.Workbook) {
   const poLineClosedIdx = headerIndex["POLineClosed"];
   const quantityIdx = headerIndex["Quantity"];
   const qtyReceivedIdx = headerIndex["QtyReceived"];
+  const inventoryIdIdx = headerIndex["INVENTORY ID"];
 
   // Pass 1: collect each supplier's working-day lead time from their closed
   // orders with real (non-NULL) PO Date / PO DateReceived pairs.
@@ -123,16 +120,16 @@ function main(workbook: ExcelScript.Workbook) {
     medianLeadTimeBySupplier.set(supplier, median(days));
   });
 
-  // Pass 2: build the cleaned, reordered output.
-  const outHeader = outputCols;
-  const outRows: (string | number | boolean)[][] = [outHeader];
+  // Pass 2: clean each row and write it back to the SAME sheet, reordered.
+  sheet.getRangeByIndexes(0, 0, 1, outputCols.length).setValues([outputCols]);
 
   for (let start = 1; start < totalRows; start += CHUNK_SIZE) {
     const rowsInChunk = Math.min(CHUNK_SIZE, totalRows - start);
     const chunk = sheet.getRangeByIndexes(start, 0, rowsInChunk, totalCols).getValues();
+    const cleanedChunk: (string | number | boolean)[][] = [];
 
     for (const row of chunk) {
-      const cleaned = row.slice(); // copy; only touch the specific cells the rules cover
+      const cleaned = row.slice();
       const closed = row[poLineClosedIdx] === -1;
       const open = row[poLineClosedIdx] === 0;
 
@@ -147,7 +144,7 @@ function main(workbook: ExcelScript.Workbook) {
           if (typeof poDate === "number" && supplierMedian !== undefined) {
             cleaned[poDateReceivedIdx] = Math.floor(poDate) + Math.ceil(supplierMedian);
           } else {
-            cleaned[poDateReceivedIdx] = "NULL"; // uncalculable -- no supplier history, leave as NULL
+            cleaned[poDateReceivedIdx] = "NULL";
           }
         }
       }
@@ -160,30 +157,30 @@ function main(workbook: ExcelScript.Workbook) {
         cleaned[poDateReceivedIdx] = Math.floor(cleaned[poDateReceivedIdx] as number);
       }
 
-      // Rule: QtyReceived = 0
+      // Rule: QtyReceived = 0 (closed -> Quantity, open -> leave as 0)
       if (cleaned[qtyReceivedIdx] === 0) {
         if (closed) {
           cleaned[qtyReceivedIdx] = cleaned[quantityIdx];
         }
-        // open -> leave as 0, that's correct (not received yet)
+      } else if (typeof cleaned[qtyReceivedIdx] !== "number") {
+        // Rule: QtyReceived non-numeric -> Quantity
+        cleaned[qtyReceivedIdx] = cleaned[quantityIdx];
       }
 
+      // Rule: INVENTORY ID -- trim whitespace
+      if (typeof cleaned[inventoryIdIdx] === "string") {
+        cleaned[inventoryIdIdx] = (cleaned[inventoryIdIdx] as string).trim();
+      }
+
+      // Duplicate PO No + ITEM NO: ignored, no rule.
+      // Negative UnitCost: ignored, no rule.
       // PO DateRevised: untouched, no rule.
 
-      outRows.push(outputCols.map(col => cleaned[headerIndex[col]]));
+      cleanedChunk.push(outputCols.map(col => cleaned[headerIndex[col]]));
     }
+
+    sheet.getRangeByIndexes(start, 0, rowsInChunk, outputCols.length).setValues(cleanedChunk);
   }
 
-  const existing = workbook.getWorksheet("Clean Data");
-  if (existing) existing.delete();
-  const outSheet = workbook.addWorksheet("Clean Data");
-
-  for (let start = 0; start < outRows.length; start += CHUNK_SIZE) {
-    const rowsInChunk = Math.min(CHUNK_SIZE, outRows.length - start);
-    const slice = outRows.slice(start, start + rowsInChunk);
-    outSheet.getRangeByIndexes(start, 0, rowsInChunk, outputCols.length).setValues(slice);
-  }
-
-  outSheet.getUsedRange().getFormat().autofitColumns();
-  outSheet.activate();
+  sheet.getUsedRange().getFormat().autofitColumns();
 }
