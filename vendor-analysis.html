@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v35 - 2026-09-04 - New Mix tab (order-frequency MVP); passphrase rotated</div>
+<div class="version-badge">v36 - 2026-09-04 - REJECTION handled: subtracts stock, excluded from usage rate</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -1185,11 +1185,13 @@
 
     // tbl_HISTORY: ID, INVENTORY NAME, DATE, QTY, TYPE, BATCH_ID, BATCH_TIME, SORT_DATETIME.
     // TYPE semantics (confirmed): Count = snapshot, resets on-hand to QTY at that DATE.
-    // Receiving(s) = adds QTY. Transfer(s) = always subtracts QTY (usage). Matched
-    // singular or plural, since the real data uses "RECEIVING"/"TRANSFER" (singular),
-    // not the "Receivings"/"Transfers" originally described. Any other TYPE (e.g.
-    // "REJECTION") is unrecognized -- skipped, not guessed, and counted so it's
-    // visible rather than silent.
+    // Receiving(s) = adds QTY. Transfer(s) = subtracts QTY and counts as usage
+    // demand. Rejection = subtracts QTY (defective stock leaving inventory) but
+    // does NOT count as usage demand -- see the on-hand loop below. Receiving/
+    // Transfer matched singular or plural, since the real data uses "RECEIVING"/
+    // "TRANSFER" (singular), not the "Receivings"/"Transfers" originally
+    // described. Any other TYPE is unrecognized -- skipped, not guessed, and
+    // counted so it's visible rather than silent.
     const bySku = new Map();
     let unrecognizedTypeCount = 0;
     const unrecognizedTypes = new Set();
@@ -1201,6 +1203,7 @@
       const type = rawType === "count" ? "count"
         : (rawType === "receiving" || rawType === "receivings") ? "receivings"
         : (rawType === "transfer" || rawType === "transfers") ? "transfers"
+        : rawType === "rejection" ? "rejection" // subtracts from on-hand, but NOT counted as usage-rate demand
         : null;
       const d = toDate(r["SORT_DATETIME"] || r["DATE"]);
       if (!bySku.has(sku)) bySku.set(sku, { movements: [] });
@@ -1264,7 +1267,11 @@
       const sorted = rec.movements.filter(m => m.date).sort((a, b) => a.date - b.date);
       if (sorted.length < 2) return;
 
-      // Running on-hand: Count resets to QTY, Receivings adds, Transfers subtracts.
+      // Running on-hand: Count resets to QTY, Receivings adds, Transfers subtracts
+      // and counts as usage demand. Rejection also subtracts (confirmed) but is
+      // NOT counted toward usage-rate demand -- a rejection is defective stock
+      // leaving inventory, not consumption, and folding it into the usage rate
+      // would make Runout predict faster depletion than real demand supports.
       let onHand = null;
       let transfersTotal = 0;
       let firstDate = null, lastDate = null;
@@ -1272,6 +1279,7 @@
         if (m.type === "count") onHand = m.qty;
         else if (m.type === "receivings") onHand = (onHand || 0) + m.qty;
         else if (m.type === "transfers") { onHand = (onHand || 0) - m.qty; transfersTotal += m.qty; }
+        else if (m.type === "rejection") onHand = (onHand || 0) - m.qty;
         if (firstDate === null) firstDate = m.date;
         lastDate = m.date;
       });

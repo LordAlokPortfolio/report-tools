@@ -40,8 +40,13 @@ Microsoft Graph. Sheets in use:
   expects.
 - `HISTORY SHEET` (table `tbl_HISTORY`) - inventory movement ledger:
   `ID, INVENTORY NAME, DATE, QTY, TYPE, BATCH_ID, BATCH_TIME, SORT_DATETIME`.
-  `TYPE` semantics (confirmed): `Count` = snapshot/reset of on-hand, `Receivings`
-  = adds to on-hand, `Transfers` = always subtracts (usage). QTY is unsigned.
+  Real values are `Count`, `RECEIVING`, `TRANSFER`, `REJECTION` (singular, all
+  caps in practice - matched case-insensitively, singular or plural). `TYPE`
+  semantics (confirmed): `Count` = snapshot/reset of on-hand. `Receiving` =
+  adds to on-hand. `Transfer` = subtracts from on-hand AND counts as usage
+  demand for Runout's usage-rate calc. `Rejection` = subtracts from on-hand
+  but does NOT count as usage demand (defective stock leaving inventory isn't
+  the same signal as real consumption). QTY is unsigned.
 
 ## How vendor-analysis.html connects to the workbook
 
