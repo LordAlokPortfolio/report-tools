@@ -70,7 +70,7 @@
 </head>
 <body>
 
-<div class="version-badge">v43 - 2026-09-04 - New Actions tab: vendor-scoped runout cards, sorted soonest-due first, same figures as Runout</div>
+<div class="version-badge">v44 - 2026-09-04 - Fixed vendorBySku to cover open POs too (Actions was silently empty for any SKU without a closed order yet); moved Bottleneck to the whole-inventory group (its computation already ignores the vendor picker)</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -153,9 +153,9 @@
       <button class="tab-btn" data-tab="cadence">Frequency</button>
       <button class="tab-btn" data-tab="mix">Mix</button>
       <button class="tab-btn" data-tab="habits">Sensitivity</button>
-      <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
       <button class="tab-btn" data-tab="actions">Actions</button>
       <span class="tab-divider"></span>
+      <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
       <button class="tab-btn" data-tab="concentration">Concentration</button>
       <button class="tab-btn" data-tab="runout">Runout</button>
       <button class="tab-btn" data-tab="about">About</button>
@@ -1250,10 +1250,24 @@
       bySku.get(sku).movements.push({ date: d, qty, type });
     });
 
-    // Median lead time, current vendor, and open POs per SKU, matched via ID
-    // (the PO table's ID column, resolved from Da Vinci File -- same key as tbl_HISTORY.ID).
-    const leadBySku = new Map();
+    // Vendor per SKU, from every PO row (open or closed) -- an ID is only
+    // ever single-sourced (confirmed: no two suppliers share an ID), so this
+    // is a stable tag regardless of order status. Built separately from lead
+    // time below, which genuinely needs a completed delivery to measure --
+    // restricting vendor assignment to closed rows too would silently drop
+    // any SKU that hasn't had a closed order yet from every vendor's Actions
+    // view, even though it's right there in the ledger.
     const vendorBySku = new Map();
+    poRows.forEach(r => {
+      const sku = String(r["ID"] || "").trim();
+      if (!sku) return;
+      vendorBySku.set(sku, r["Supplier ID"]);
+    });
+
+    // Median lead time per SKU, matched via ID (the PO table's ID column,
+    // resolved from Da Vinci File -- same key as tbl_HISTORY.ID). Closed
+    // orders only -- lead time needs an actual delivery to measure.
+    const leadBySku = new Map();
     poRows.filter(isClosed).forEach(r => {
       const sku = String(r["ID"] || "").trim();
       if (!sku) return;
@@ -1263,7 +1277,6 @@
         if (!leadBySku.has(sku)) leadBySku.set(sku, []);
         leadBySku.get(sku).push(bd);
       }
-      vendorBySku.set(sku, r["Supplier ID"]);
     });
     // PO DateRequired is not used -- confirmed unreliable (purchaser-entered).
     // For an open PO with no real PO DateReceived yet, the expected date is

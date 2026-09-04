@@ -23,8 +23,10 @@ reporting on it:
    tabs plus an About tab against the cleaned data - all of them price-free
    (see "Pricing is unreliable" below for why). The tab bar is split into
    two visually divided groups: vendor-scoped (Speed, Shortfall, Frequency,
-   Mix, Sensitivity, Bottleneck, Actions) and whole-inventory (Concentration,
-   Runout), followed by About.
+   Mix, Sensitivity, Actions) and whole-inventory (Bottleneck, Concentration,
+   Runout), followed by About. Bottleneck moved to the whole-inventory group
+   in v44 - its computation was already whole-building (ignores the vendor
+   picker), it was just visually misplaced.
 
 ## The workbook (live, in OneDrive)
 
@@ -228,3 +230,14 @@ filename search and then by worksheet-ID matching).
   stockout count) so Runout (whole-building table) and Actions (cards
   filtered to the selected vendor, sorted soonest-due first) read the
   exact same numbers instead of two independent calculations.
+- **v44** - Fixed a real bug: `vendorBySku` was built only from closed PO
+  rows, so any SKU without a closed order yet (still open, or never
+  reordered) got no vendor tag at all and could never appear in Actions
+  for any vendor - even though it was sitting right there in the ledger
+  and visible in the whole-building Runout table. Vendor assignment is now
+  built from every PO row, open or closed; lead-time calculation stays
+  closed-only (a real delivery is still required to measure lead time).
+  Also moved Bottleneck from the vendor-scoped group to the whole-inventory
+  group - its own computation already reads across all vendors/history and
+  ignores the vendor picker, so it was categorized wrong, not just placed
+  wrong.
