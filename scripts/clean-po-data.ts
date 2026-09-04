@@ -1,4 +1,4 @@
-// Office Script — run from Excel's "Automate" tab (Excel Online or desktop M365).
+// Office Script - run from Excel's "Automate" tab (Excel Online or desktop M365).
 // Cleans the PO history sheet IN PLACE -- overwrites the sheet's own cells
 // with cleaned, reordered values. No separate output sheet, no report.
 // Full rule list is documented in CLEANING-LOG.md; keep that file in sync

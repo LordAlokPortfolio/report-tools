@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vendor &amp; Material Analysis — KV Custom Windows and Doors</title>
+<title>Vendor &amp; Material Analysis - KV Custom Windows and Doors</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/2.32.2/js/msal-browser.min.js"></script>
 <style>
@@ -63,11 +63,11 @@
 </head>
 <body>
 
-<div class="version-badge">v18 — 2026-09-04 — Fixed Creep's zero-cost divide-by-zero bug</div>
+<div class="version-badge">v19 - 2026-09-04 - Exclude custom-order $0 pricing from cost math</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
-  <p>Reads the cleaned PO history file. The tool only states what the data can prove — no invented numbers, no "switch vendors" verdicts. See CLEANING-PO-INVENTORY-TABLE-AND-VENDOR-ANALYSIS-SPEC.md for the full design notes.</p>
+  <p>Reads the cleaned PO history file. The tool only states what the data can prove - no invented numbers, no "switch vendors" verdicts. See CLEANING-PO-INVENTORY-TABLE-AND-VENDOR-ANALYSIS-SPEC.md for the full design notes.</p>
 </header>
 
 <main>
@@ -82,7 +82,7 @@
         <button class="primary" id="refreshBtn" disabled>Refresh data</button>
       </div>
     </div>
-    <p class="note" id="loadStatus">Sign in, then Refresh re-reads whatever is currently saved in the workbook at its fixed OneDrive path — nothing is uploaded anywhere; the file is read live from OneDrive.</p>
+    <p class="note" id="loadStatus">Sign in, then Refresh re-reads whatever is currently saved in the workbook at its fixed OneDrive path - nothing is uploaded anywhere; the file is read live from OneDrive.</p>
   </section>
 
   <section class="panel" id="manualUploadPanel">
@@ -225,11 +225,11 @@
     return denom === 0 ? null : num / denom;
   }
   function fmtDate(d) {
-    if (!d) return "—";
+    if (!d) return "-";
     return d.toISOString().slice(0, 10);
   }
   function fmtMoney(v) {
-    return typeof v === "number" ? "$" + v.toFixed(2) : "—";
+    return typeof v === "number" ? "$" + v.toFixed(2) : "-";
   }
   function el(tag, attrs, children) {
     const e = document.createElement(tag);
@@ -427,6 +427,18 @@
   }
   function isClosed(r) { return r["POLineClosed"] === -1 || r["POLineClosed"] === "-1"; }
   function isOpen(r) { return r["POLineClosed"] === 0 || r["POLineClosed"] === "0"; }
+  // Stock items have a real numeric ID (resolved from the Da Vinci File lookup during
+  // cleaning). Custom orders carry a text ID like "Custom order of: <supplier>" and are
+  // sent with placeholder $0 pricing -- that pricing isn't real and must not feed cost math.
+  function isStockItem(r) {
+    const idVal = r["ID"];
+    if (typeof idVal === "number") return true;
+    if (typeof idVal === "string") {
+      const t = idVal.trim();
+      return t !== "" && /^[0-9.]+$/.test(t);
+    }
+    return false;
+  }
 
   // ---------- View 1: Speed ----------
   function renderSpeed() {
@@ -439,7 +451,7 @@
       const bd = businessDaysBetween(d1, d2);
       if (bd !== null) orders.push({ poNo: r["PO No"], date: d1, received: d2, leadTime: bd });
     });
-    container.appendChild(el("h2", null, ["Speed — how fast this vendor actually is"]));
+    container.appendChild(el("h2", null, ["Speed - how fast this vendor actually is"]));
     if (orders.length < MIN_HISTORY) {
       container.appendChild(notEnoughHistory(orders.length));
       return;
@@ -461,11 +473,11 @@
 
     const expectDate = fmtDate(new Date(Date.now() + recentMed * 86400000));
     const headline = shifted
-      ? `Right now this vendor is taking about ${recentMed} business days — that's a real change from the ${overallMed}-day pace across this timeline. Order today, expect it around ${expectDate}, and plan around the new pace, not the old one.`
+      ? `Right now this vendor is taking about ${recentMed} business days - that's a real change from the ${overallMed}-day pace across this timeline. Order today, expect it around ${expectDate}, and plan around the new pace, not the old one.`
       : `This vendor is taking about ${recentMed} business days lately, in line with their ${overallMed}-day pace across this timeline. Order today, expect it around ${expectDate}.`;
     container.appendChild(el("p", { class: "stat" }, [headline]));
     container.appendChild(el("p", { class: "note" }, [
-      `Based on the ${recentN} most recent order${recentN === 1 ? "" : "s"} (current pace) vs. all ${orders.length} closed orders in this timeline (${min}–${max} bd range, ${overallMed} bd median).`
+      `Based on the ${recentN} most recent order${recentN === 1 ? "" : "s"} (current pace) vs. all ${orders.length} closed orders in this timeline (${min}-${max} bd range, ${overallMed} bd median).`
     ]));
 
     container.appendChild(el("h2", null, ["Order-by-order detail"]));
@@ -492,8 +504,8 @@
   function renderCreep() {
     const container = document.getElementById("tab-creep");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Creep — price rising quietly over many orders"]));
-    const rows = filteredRows().filter(r => typeof r["UnitCost"] === "number");
+    container.appendChild(el("h2", null, ["Creep - price rising quietly over many orders"]));
+    const rows = filteredRows().filter(isStockItem).filter(r => typeof r["UnitCost"] === "number");
     const byItem = new Map();
     rows.forEach(r => {
       const item = String(r["ITEM NO"] || "").trim();
@@ -557,7 +569,7 @@
     });
 
     if (entries.length === 0) {
-      container.appendChild(el("p", { class: "insufficient" }, ["No item in this vendor/timeline has more than one order with a usable UnitCost — nothing to compare."]));
+      container.appendChild(el("p", { class: "insufficient" }, ["No item in this vendor/timeline has more than one order with a usable UnitCost - nothing to compare."]));
       return;
     }
 
@@ -596,14 +608,14 @@
         el("td", null, [fmtMoney(e.last)]),
         el("td", { class: "change-up" }, [changeText]),
         el("td", null, [fmtMoney(e.biggestJump)]),
-        el("td", { class: "note" }, [e.tiedTo || "—"]),
+        el("td", { class: "note" }, [e.tiedTo || "-"]),
       ]));
     });
     table.appendChild(tbody);
     container.appendChild(table);
     if (notIncreasedCount > 0) {
       container.appendChild(el("p", { class: "note" }, [
-        `${notIncreasedCount} other item${notIncreasedCount === 1 ? "" : "s"} showed no increase (flat or down) and aren't listed. Rows with only 2–3 orders above are dimmed — thin evidence.`
+        `${notIncreasedCount} other item${notIncreasedCount === 1 ? "" : "s"} showed no increase (flat or down) and aren't listed. Rows with only 2-3 orders above are dimmed - thin evidence.`
       ]));
     }
   }
@@ -612,11 +624,11 @@
   function renderPattern() {
     const container = document.getElementById("tab-pattern");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Pattern — when lead time moves, does cost move with it?"]));
+    container.appendChild(el("h2", null, ["Pattern - when lead time moves, does cost move with it?"]));
     container.appendChild(el("p", { class: "note" }, [
-      "Answers a specific business question: if this item's lead time stretches again, should you expect cost to move too? A correlation number doesn't answer that on its own — this counts how often cost actually moved the same direction as lead time, order to order."
+      "Answers a specific business question: if this item's lead time stretches again, should you expect cost to move too? A correlation number doesn't answer that on its own - this counts how often cost actually moved the same direction as lead time, order to order."
     ]));
-    const rows = filteredRows().filter(isClosed).filter(r => typeof r["UnitCost"] === "number");
+    const rows = filteredRows().filter(isClosed).filter(isStockItem).filter(r => typeof r["UnitCost"] === "number");
     const byItem = new Map();
     rows.forEach(r => {
       const item = String(r["ITEM NO"] || "").trim();
@@ -664,14 +676,14 @@
 
     if (strong.length === 0 && some.length === 0) {
       container.appendChild(el("div", { class: "callout ok" }, [
-        `None of the ${entries.length} items with enough history show cost reliably following lead time in this timeline — lead time isn't a useful early-warning signal for cost here.`
+        `None of the ${entries.length} items with enough history show cost reliably following lead time in this timeline - lead time isn't a useful early-warning signal for cost here.`
       ]));
       return;
     }
 
     if (strong.length > 0) {
       container.appendChild(el("p", { class: "stat" }, [
-        `${strong.length} of ${entries.length} item${entries.length === 1 ? "" : "s"} show a strong tendency — when lead time stretches, cost has reliably followed:`
+        `${strong.length} of ${entries.length} item${entries.length === 1 ? "" : "s"} show a strong tendency - when lead time stretches, cost has reliably followed:`
       ]));
       const strongTable = el("table", null, [
         el("thead", null, [el("tr", null, ["Item", "Orders", "How often cost followed lead time"].map(h => el("th", null, [h])))]),
@@ -686,7 +698,7 @@
       });
       strongTable.appendChild(tbody);
       container.appendChild(strongTable);
-      container.appendChild(el("p", { class: "note" }, ["Treat a lead-time increase on these items as an early signal to expect cost to rise too — worth budgeting for and worth raising with this vendor."]));
+      container.appendChild(el("p", { class: "note" }, ["Treat a lead-time increase on these items as an early signal to expect cost to rise too - worth budgeting for and worth raising with this vendor."]));
     }
 
     if (some.length > 0) {
@@ -699,14 +711,14 @@
         `${noneCount} other item${noneCount === 1 ? "" : "s"} with enough history show no consistent link between lead time and cost, and aren't listed.`
       ]));
     }
-    container.appendChild(el("p", { class: "note" }, ["This describes what happened together in the past, not what caused what — it does not claim cost changes because lead time changes, or the reverse."]));
+    container.appendChild(el("p", { class: "note" }, ["This describes what happened together in the past, not what caused what - it does not claim cost changes because lead time changes, or the reverse."]));
   }
 
   // ---------- View 4: Habits ----------
   function renderHabits() {
     const container = document.getElementById("tab-habits");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Habits — does when/how big you order change what you get?"]));
+    container.appendChild(el("h2", null, ["Habits - does when/how big you order change what you get?"]));
     const rows = filteredRows().filter(isClosed).filter(r => typeof r["Quantity"] === "number");
     if (rows.length === 0) {
       container.appendChild(notEnoughHistory(0));
@@ -724,7 +736,9 @@
       const key = quarterOf(d1) + " / " + size;
       if (!buckets.has(key)) buckets.set(key, { leadTimes: [], costs: [] });
       buckets.get(key).leadTimes.push(bd);
-      if (typeof r["UnitCost"] === "number") buckets.get(key).costs.push(r["UnitCost"]);
+      // Lead time is valid for custom orders too, but their $0 placeholder pricing isn't --
+      // only stock items (real numeric ID) feed the cost side of this bucket.
+      if (typeof r["UnitCost"] === "number" && isStockItem(r)) buckets.get(key).costs.push(r["UnitCost"]);
     });
     const table = el("table", null, [
       el("thead", null, [el("tr", null, ["Quarter / size", "Orders", "Median lead time", "Median cost"].map(h => el("th", null, [h])))]),
@@ -739,12 +753,12 @@
         el("td", null, [key]),
         el("td", null, [String(b.leadTimes.length)]),
         el("td", null, [Math.ceil(median(b.leadTimes)) + " business days"]),
-        el("td", null, [b.costs.length ? fmtMoney(median(b.costs)) : "—"]),
+        el("td", null, [b.costs.length ? fmtMoney(median(b.costs)) : "-"]),
       ]));
     });
     table.appendChild(tbody);
     if (!any) {
-      container.appendChild(el("p", { class: "insufficient" }, ["No quarter/size bucket has 3+ orders yet — too thin to mean anything. History starts recently; this fills in over time."]));
+      container.appendChild(el("p", { class: "insufficient" }, ["No quarter/size bucket has 3+ orders yet - too thin to mean anything. History starts recently; this fills in over time."]));
       return;
     }
     container.appendChild(table);
@@ -755,7 +769,7 @@
   function renderBottleneck() {
     const container = document.getElementById("tab-bottleneck");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Bottleneck — the slowest component sets the build date"]));
+    container.appendChild(el("h2", null, ["Bottleneck - the slowest component sets the build date"]));
     if (!bomRows) {
       container.appendChild(el("div", { class: "callout warn" }, ["Upload a component list / BOM file (columns: ParentSKU, ComboID, ComponentSKU, QtyPerUnit) above to use this view."]));
       return;
@@ -770,7 +784,9 @@
       if (!perComponent.has(item)) perComponent.set(item, { leadTimes: [], lastCost: null, lastDate: null });
       const rec = perComponent.get(item);
       if (bd !== null) rec.leadTimes.push(bd);
-      if (typeof r["UnitCost"] === "number" && (!rec.lastDate || d1 > rec.lastDate)) {
+      // Lead time counts custom orders too; cost rollup only trusts stock items'
+      // real pricing (custom orders carry $0 placeholder pricing, not real cost).
+      if (typeof r["UnitCost"] === "number" && isStockItem(r) && (!rec.lastDate || d1 > rec.lastDate)) {
         rec.lastCost = r["UnitCost"]; rec.lastDate = d1;
       }
     });
@@ -801,7 +817,7 @@
         el("td", null, [String(c.combo)]),
         el("td", null, [worstPart]),
         el("td", null, [worstLead + " business days"]),
-        el("td", null, [costKnown ? fmtMoney(costSum) : "incomplete — some component costs unknown"]),
+        el("td", null, [costKnown ? fmtMoney(costSum) : "incomplete - some component costs unknown"]),
       ]));
     });
     table.appendChild(tbody);
@@ -810,16 +826,16 @@
       return;
     }
     container.appendChild(table);
-    container.appendChild(el("p", { class: "note" }, ["Uses each component's own purchase history across all vendors, not just the vendor/timeline picked above — a build's bottleneck isn't scoped to one vendor."]));
+    container.appendChild(el("p", { class: "note" }, ["Uses each component's own purchase history across all vendors, not just the vendor/timeline picked above - a build's bottleneck isn't scoped to one vendor."]));
   }
 
   // ---------- View 6: Runout ----------
   function renderRunout() {
     const container = document.getElementById("tab-runout");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Runout — what's about to run dry, building-wide"]));
+    container.appendChild(el("h2", null, ["Runout - what's about to run dry, building-wide"]));
     if (!ledgerRows) {
-      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view. This tab ignores the vendor/timeline picked above — it's a whole-building question."]));
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view. This tab ignores the vendor/timeline picked above - it's a whole-building question."]));
       return;
     }
     container.appendChild(el("p", { class: "as-of" }, [`Inventory ledger (tbl_HISTORY) as of ${fmtDate(ledgerAsOf)}. Purchase orders as of ${fmtDate(poAsOf)}.`]));
@@ -910,23 +926,23 @@
       const orderBy = leadWeeks !== null ? weeksLeft - leadWeeks : null;
       tbody.appendChild(el("tr", null, [
         el("td", null, [sku]),
-        el("td", null, [String(vendorBySku.get(sku) || "—")]),
+        el("td", null, [String(vendorBySku.get(sku) || "-")]),
         el("td", null, [String(onHand)]),
         el("td", null, [weeklyUsage.toFixed(1)]),
         el("td", null, [weeksLeft.toFixed(1)]),
-        el("td", null, [open ? `${open.qty} by ${fmtDate(open.date)}` : "—"]),
+        el("td", null, [open ? `${open.qty} by ${fmtDate(open.date)}` : "-"]),
         el("td", null, [leadDays !== null ? leadDays + " bd" : "not enough history"]),
-        el("td", null, [orderBy === null ? "—" : (orderBy <= 0 ? "NOW" : orderBy.toFixed(1) + " wk from now")]),
-        el("td", null, ["—"]), // suggested qty needs an approval-limit ceiling the user must supply; not invented here
+        el("td", null, [orderBy === null ? "-" : (orderBy <= 0 ? "NOW" : orderBy.toFixed(1) + " wk from now")]),
+        el("td", null, ["-"]), // suggested qty needs an approval-limit ceiling the user must supply; not invented here
       ]));
     });
     table.appendChild(tbody);
     if (!any) {
-      container.appendChild(el("p", { class: "insufficient" }, ["No ID in the ledger has both a Count baseline and observed Transfers usage yet — can't compute a runout date without both."]));
+      container.appendChild(el("p", { class: "insufficient" }, ["No ID in the ledger has both a Count baseline and observed Transfers usage yet - can't compute a runout date without both."]));
       return;
     }
     container.appendChild(table);
-    container.appendChild(el("p", { class: "note" }, ["Suggested qty is left blank — splitting into multiple POs needs an approval-limit ceiling only you can supply. This tool won't invent one."]));
+    container.appendChild(el("p", { class: "note" }, ["Suggested qty is left blank - splitting into multiple POs needs an approval-limit ceiling only you can supply. This tool won't invent one."]));
   }
 
   function renderAll() {

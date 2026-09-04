@@ -1,4 +1,4 @@
-# Material & Vendor Tool — design notes
+# Material & Vendor Tool - design notes
 
 Working spec for a new tool to be added to the Operations Toolkit
 (`index.html`). Nothing here is built yet. This file exists so a new
@@ -15,7 +15,7 @@ Repo: `LordAlokPortfolio/report-tools`, public, served by GitHub Pages.
 
 This came out of a long back-and-forth and it is the most important line
 in this file. Every earlier draft of this idea drifted into inventing
-things — a dollar figure for what a delay "cost," a recommendation to
+things - a dollar figure for what a delay "cost," a recommendation to
 drop a vendor, an explanation for why a price moved. None of that is in
 the data. All of it was made up.
 
@@ -59,8 +59,8 @@ Notes on the columns that matter:
   `PO DateReceived` tells you how a vendor does against their own word,
   which is a different question from how long they take.
 - `PO DateRevised` is a vendor moving their own goalposts mid-order.
-  Nothing built on this yet — it's untouched by every earlier tool too.
-- `Quantity` vs `QtyReceived` vs `QtyThisShip` — a PO line can arrive in
+  Nothing built on this yet - it's untouched by every earlier tool too.
+- `Quantity` vs `QtyReceived` vs `QtyThisShip` - a PO line can arrive in
   pieces. Untouched so far.
 - `ITEM NO` looks like each vendor's own part number, **not** a shared
   code across vendors. Two vendors selling the same physical thing will
@@ -77,7 +77,7 @@ tool. The tool assumes a clean file is sitting there when it runs.
 
 ### 2. Inventory ledger (for idea 6)
 
-Stock movement per SKU, March to present, ledger format — rows of
+Stock movement per SKU, March to present, ledger format - rows of
 movement, not snapshots. Gives on-hand and usage rate.
 
 ### 3. Component list / BOM (for idea 5 only)
@@ -94,14 +94,14 @@ combination:
 
 Same parent SKU can have several combos where one component swaps out.
 `ComponentSKU` joins to `ITEM NO` / `INVENTORY ID` in the PO file.
-`QtyPerUnit` is needed for cost rollup — add it when the list is built
+`QtyPerUnit` is needed for cost rollup - add it when the list is built
 out, or the per-unit cost can't be exact.
 
 ---
 
 ## Shared rules for all the date math
 
-- Lead time is counted in **business days** — weekends and the Ontario
+- Lead time is counted in **business days** - weekends and the Ontario
   holiday list excluded. Both earlier projects (the JS forecasting tool
   and the PowerShell/Python vendor scripts) already do it this way.
 - When converting a lead time into a suggested date, **round up**. Never
@@ -109,7 +109,7 @@ out, or the per-unit cost can't be exact.
   it as rounded up so nobody thinks it's the raw median.
 - Use the **median**, not the average, for typical lead time. One
   disaster order shouldn't drag the number.
-- Minimum history before showing a number: roughly 6–8 orders. Below
+- Minimum history before showing a number: roughly 6-8 orders. Below
   that, say so instead of guessing.
 - Every screen shows the date of the data file it read. The ledger and
   the PO file both keep moving; nobody should act on stale numbers
@@ -145,19 +145,19 @@ First vs latest unit cost, percent change, biggest single jump.
 
 ### 3. Pattern
 
-Whether cost and lead time move together for an item. Correlation only —
+Whether cost and lead time move together for an item. Correlation only -
 not a claim about cause.
 
 Needs: `ITEM NO`, `UnitCost`, `PO Date`, `PO DateReceived`.
 Correlation between the per-order cost series and the per-order lead
-time series, both in PO Date order. Needs 6–8+ orders or it's noise.
+time series, both in PO Date order. Needs 6-8+ orders or it's noise.
 
 > "Same item, same vendor, four orders this year: price and lead time
-> went up together every time. Correlation 0.81 — strong."
+> went up together every time. Correlation 0.81 - strong."
 
 ### 4. Habits
 
-Whether *when* and *how big* you buy changes what you get — from the
+Whether *when* and *how big* you buy changes what you get - from the
 vendor you already have. Not about switching vendors.
 
 Needs: `PO Date` (→ season), `Quantity` (→ size bucket), `UnitCost`,
@@ -176,11 +176,11 @@ waiting.
 
 Needs: the BOM file + lead time and cost per component from the PO file.
 Per parent SKU + combo: pull each component's lead time, take the
-longest — that's the earliest the build can start. Sum component costs
+longest - that's the earliest the build can start. Sum component costs
 (× QtyPerUnit) for a cost-to-build.
 
-> "SKU1 needs three parts. Two arrive in under two weeks. The third —
-> sku-b, Vendor 2 — takes five. That's the date that matters. Parts
+> "SKU1 needs three parts. Two arrive in under two weeks. The third -
+> sku-b, Vendor 2 - takes five. That's the date that matters. Parts
 > cost: $47.20 a unit."
 
 SAP calls this the material availability date. It doesn't care which
@@ -203,16 +203,16 @@ its own.
 
 > "You have 40 units of sku-b on hand, using 6 a week. At that rate you
 > run out in 6.7 weeks. Vendor 2 takes 5 weeks to deliver it. Order now
-> and you're fine — order two weeks from now and you'll run dry before
+> and you're fine - order two weeks from now and you'll run dry before
 > the truck arrives."
 
 **Output: an action list, grouped by vendor.** Nine columns, nothing
-spare — each one either states the problem or states the move:
+spare - each one either states the problem or states the move:
 
 | SKU | Vendor | On hand | Weekly usage | Weeks left | Open PO (qty + date) | Real lead time | Order by | Suggested qty |
 
 Splitting into multiple POs: the tool can group by vendor and break a
-large order into several under a ceiling — but the ceiling is a number
+large order into several under a ceiling - but the ceiling is a number
 the user types in. The tool has no idea what the approval limits are and
 must not invent one.
 
@@ -223,9 +223,9 @@ must not invent one.
 New page in `index.html` alongside the NCR generator, paint reader,
 material transfer form and tariff dashboard.
 
-1. **Landing** — pick a vendor, pick a timeline.
-2. **Views 1–5** — the vendor/timeline choice drives all of them.
-3. **Runout tab** — separate, ignores the vendor/timeline choice
+1. **Landing** - pick a vendor, pick a timeline.
+2. **Views 1-5** - the vendor/timeline choice drives all of them.
+3. **Runout tab** - separate, ignores the vendor/timeline choice
    entirely. Click it and get the whole-building picture.
 
 Every screen shows "inventory as of [date]" and "purchase orders as of
@@ -245,7 +245,7 @@ Decision: the **tool** is public, the **data** is not.
   own machine.
 
 **Be honest about the passphrase.** On a public static site, a
-passphrase in the page is not security — anyone can read the page source
+passphrase in the page is not security - anyone can read the page source
 and find it, and anything actually published at a public URL can be
 fetched directly. It is a doorbell, not a lock: fine for "don't wander
 in here by accident," useless against anyone who looks. The real
@@ -278,7 +278,7 @@ more than the enthusiastic one.
 
 - Name of the tool.
 - Whether to build the `Supplier ID → vendor name` lookup file.
-- `QtyPerUnit` in the BOM — needed for exact cost rollup, may be filled
+- `QtyPerUnit` in the BOM - needed for exact cost rollup, may be filled
   in later once more combos are logged.
 - Whether the cross-vendor comparison (same physical item, two vendors)
   is worth the manual crosswalk file it would require. Parked.
@@ -292,18 +292,18 @@ Three tools already exist outside this repo. Worth reading before
 rebuilding anything, mostly so the same logic isn't reinvented
 differently.
 
-- **`purchasing.py`** — ETL. Walks a folder of per-vendor Excel exports,
+- **`purchasing.py`** - ETL. Walks a folder of per-vendor Excel exports,
   forces them into a fixed schema, rebuilds a SQLite DB per run.
-- **`vendor_analysis.ps1`** — PowerShell wrapper that writes out two
+- **`vendor_analysis.ps1`** - PowerShell wrapper that writes out two
   Python scripts, installs deps, scans an input folder, prompts for each
   vendor's standard lead time, and produces Excel + PDF + charts + a
   PowerPoint per vendor plus a master scorecard. Business-day math with
   an Ontario holiday list. Splits Cardinal by `Tag` into Stock/Custom.
-- **`vendor_analysis_gui.py`** — the most finished one. PyQt6 desktop
+- **`vendor_analysis_gui.py`** - the most finished one. PyQt6 desktop
   app over three SQLite DBs, hardcoded vendor list, per-vendor and
   cross-vendor prompts, clickable matplotlib charts, exports one
   annotated Excel workbook with plain-English explanations of each flag.
-- **`main.js`** (Universal Forecasting Tool, v1) — different problem:
+- **`main.js`** (Universal Forecasting Tool, v1) - different problem:
   reorder timing, not vendor scoring. Browser-only, reads two CSVs,
   infers consumption by diffing cycle-count columns, does adaptive ABC
   classification, and produces PLACE ORDER / REVIEW / NO ACTION per SKU
