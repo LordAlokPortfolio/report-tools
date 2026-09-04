@@ -2,35 +2,39 @@
 
 Working log of cleaning rules for the raw PO history file (KV Custom Windows
 and Doors), built from a column-by-column profiling pass. Companion to
-`MATERIAL-TOOL-SPEC.md` — that file describes the reporting tool; this one
-describes how the raw file gets from "messy" to "the clean file the tool
-assumes is sitting there."
+`CLEANING-PO-INVENTORY-TABLE-AND-VENDOR-ANALYSIS-SPEC.md` — that file
+describes the reporting tool; this one describes how the raw file gets from
+"messy" to "the clean file the tool assumes is sitting there."
 
 **Rule for this log: rules only, never data.** No real row values, no sample
 values, no counts derived from the live file get written here. Only the
 decision and the reasoning behind it.
 
-Source: `scripts/profile-po-data.ts` — an Office Script that scans the raw
-sheet in Excel and reports issue counts per column without ever leaving
-Excel or this conversation's chat context.
+These rules repeat every time a new PO export gets cleaned, so they're
+written down precisely enough to re-apply without re-deriving them from
+scratch. `scripts/clean-po-data.ts` is the current implementation.
 
 ---
 
 ## Columns excluded from cleaning entirely
 
-These are left untouched in the source file and skipped by every check in
-the profiler. Not "cleaned," not "checked" — out of scope.
+Left untouched in the source file, moved to the right side of the output
+table (not deleted, not hidden from the file) by `clean-po-data.ts` because
+no report view uses them.
 
 | Column | Reason |
 |---|---|
 | `ID` | Not used by any report view. |
-| `PO DateRevised` | Untouched by every earlier tool too (per spec); not in scope. |
 | `SpecialRequest` | Free text, not used by any report view. |
 | `QtyThisShip` | Not used by any report view (yet). |
 | `Scanned` | Not used by any report view. |
 | `ShipLocalle` | Not used by any report view. |
 | `Tag` | Not used by any report view. |
 | `ShipBy` | Unparseable as a date in 100% of rows — not a usable date column, and out of scope for cleaning. |
+
+`PO DateRevised` is kept in the output table (it's part of the necessary
+columns) but no cleaning rule is applied to it — see "Explicitly not
+cleaned" below.
 
 ## Resolved rules
 
@@ -46,51 +50,92 @@ missing.
 most common value (~55% of rows), it is not being treated as "uncategorized"
 or blanked out. No transformation applied.
 
+### PO Date, PO DateReceived — strip time-of-day
+**Decision: keep date only.** Both columns carry a time component that
+isn't needed. Rule: if the cell is a number (a real Excel date/time serial),
+floor it to drop the time fraction. Applied after the NULL-fill rules below,
+so a filled-in PO DateReceived also gets floored.
+
+### PO DateReceived = "NULL"
+Two-case rule based on `POLineClosed` (`-1` = closed, `0` = open):
+
+- **Closed (`POLineClosed = -1`)** → fill from that row's `PO DateRequired`
+  value.
+- **Open (`POLineClosed = 0`)** → fill from `PO Date` + this supplier's
+  median working-day lead time. The median is computed from that same
+  supplier's *other* closed orders where both `PO Date` and `PO DateReceived`
+  are real (non-NULL) dates — working days = Mon–Fri, counted between the
+  two dates. **If that supplier has no such historical orders, leave the
+  cell as `"NULL"`** — never invent a lead time with nothing behind it, per
+  the "only what the data can prove" rule in the spec.
+- No minimum sample-size threshold is enforced (unlike the 6–8 order
+  minimum described for the *reporting* tool's Speed/Pattern views in the
+  spec) — even a single historical closed order for a supplier is used as
+  its median. If this turns out to produce noisy fills, revisit.
+
+### QtyReceived = 0
+Two-case rule based on `POLineClosed`:
+
+- **Open (`POLineClosed = 0`)** → leave as `0`. This is correct, not an
+  error — the order genuinely hasn't been received yet.
+- **Closed (`POLineClosed = -1`)** → replace `0` with that row's `Quantity`
+  value. A closed order implies it was fully received, so `QtyReceived`
+  should equal `Quantity`.
+
 ### INVENTORY ID — leading/trailing whitespace
 **Decision: trim.** Uncontroversial — whitespace-only difference, trimming
-can't lose information. (Small count relative to file size; applies to the
-cleaning script when it's built, not yet implemented.)
+can't lose information. Flagged by the earlier profiling pass; not yet
+wired into `clean-po-data.ts` (only the rules above are implemented so far
+— add this when picked back up).
+
+### Explicitly NOT cleaned
+
+- **`PO DateRevised`** — an earlier draft of this log had a rule for this
+  column (NULL + closed → copy the `Quantity` value into it). That rule was
+  flagged as suspicious (it would put a quantity number into a date column)
+  and was **dropped** when the rules were restated. No cleaning is applied
+  to `PO DateRevised`.
 
 ## Open — needs a decision
 
-### Duplicate PO No + ITEM NO (24 rows across 24 combos)
-Per `MATERIAL-TOOL-SPEC.md`, a PO line can legitimately arrive in partial
-shipments, which would make the same PO No + ITEM NO appear more than once
-with different `QtyThisShip` / `PO DateReceived`. Not yet determined whether
-the flagged rows are partial shipments (expected, not an error) or true
-duplicate rows (an error to dedupe).
+### Duplicate PO No + ITEM NO (24 rows across 24 combos, as of the last profiling run)
+Per the spec, a PO line can legitimately arrive in partial shipments, which
+would make the same PO No + ITEM NO appear more than once with different
+`QtyThisShip` / `PO DateReceived`. Not yet determined whether the flagged
+rows are partial shipments (expected, not an error) or true duplicate rows.
 
 **Next step:** check the flagged rows directly in Excel. For each duplicate
 PO No + ITEM NO pair, compare `QtyThisShip` and `PO DateReceived` across the
 occurrences:
 - Different `QtyThisShip` / `PO DateReceived` per occurrence → partial
   shipment, expected, not an error.
-- Identical across all fields → true duplicate row, needs dedup rule.
+- Identical across all fields → true duplicate row, needs a dedup rule.
 
-### PO DateReceived — unparseable (2,657 rows)
-Not blank — something is in these cells that isn't a valid date. Need to
-know what (text placeholder like "N/A"/"Pending"? wrong format? stray
-characters?) before a parsing/fallback rule can be written.
-
-### PO DateRequired — unparseable (24 rows)
-Same open question as above, much smaller count.
-
-### Negative UnitCost (5 rows)
+### Negative UnitCost (5 rows, as of the last profiling run)
 Not yet asked — likely returns/credits, but unconfirmed. Needs a decision:
 keep as-is (if returns are real), or flag as a data-entry error.
 
-### Non-numeric QtyReceived (3 rows)
-Not yet asked. Needs a decision on what's actually in these 3 cells.
+### Non-numeric QtyReceived (3 rows, as of the last profiling run)
+Not yet asked. Needs a decision on what's actually in those cells.
 
 ---
 
+## Known limitation
+
+**No company holiday calendar.** "Working days" in the lead-time
+calculation means Monday–Friday only — no Ontario statutory holidays are
+excluded, unlike the business-day math described for the earlier
+PowerShell/Python vendor tools in the spec. This can overstate a computed
+lead time slightly around holidays. Add a holiday list if this needs to be
+exact.
+
 ## Process
 
-1. Run `scripts/profile-po-data.ts` in Excel (Automate tab) against the raw
-   PO history sheet. It never modifies the sheet — only adds a read-only
-   "Profile Report" sheet.
-2. Go through each issue type together; user confirms the business meaning
-   and the resolution rule.
+1. `scripts/clean-po-data.ts` runs in Excel (Automate tab) against the raw
+   PO history sheet. It never modifies the source sheet — writes a cleaned,
+   reordered copy to a new "Clean Data" sheet.
+2. Any new issue type found gets discussed here before a rule is written —
+   business meaning first, code second.
 3. Record the resolved rule here (no data, ever).
-4. Once every open issue above is resolved, turn this log into an actual
-   cleaning script/tool.
+4. Once the open items above are resolved, extend `clean-po-data.ts` to
+   cover them.

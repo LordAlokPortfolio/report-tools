@@ -1,20 +1,41 @@
 // Office Script — run from Excel's "Automate" tab (Excel Online or desktop M365).
-// Does NOT modify your data. Reads the PO history sheet in row batches (to stay
-// under the Office Scripts payload limit) and writes a summary of issues to a
-// new "Profile Report" sheet. Eight columns (ID, PO DateRevised, SpecialRequest,
-// QtyThisShip, Scanned, ShipLocalle, Tag, ShipBy) are skipped during analysis —
-// left alone in your file, just not checked here since they don't matter for
-// cleaning. UnitCost of 0 is treated as a legitimate value, not an error.
+// Cleans the raw PO history sheet according to the rules documented in
+// CLEANING-LOG.md. Does NOT modify the source sheet -- writes a cleaned,
+// reordered copy to a new "Clean Data" sheet (replaced if this is re-run).
+//
+// Rules applied (see CLEANING-LOG.md for the full writeup):
+// 1. PO Date, PO DateReceived: strip time-of-day, keep date only.
+// 2. PO DateReceived = "NULL":
+//      POLineClosed = -1 (closed) -> fill from PO DateRequired (same row).
+//      POLineClosed = 0  (open)   -> fill from PO Date + this supplier's
+//                                     median working-day lead time, computed
+//                                     from that supplier's other closed
+//                                     orders (real PO Date -> PO DateReceived
+//                                     pairs). No historical data for that
+//                                     supplier -> leave as "NULL" (never
+//                                     invent a number with nothing behind it).
+// 3. QtyReceived = 0:
+//      POLineClosed = 0  (open)   -> leave as 0 (order genuinely not received yet).
+//      POLineClosed = -1 (closed) -> replace with this row's Quantity value
+//                                     (closed order implies fully received).
+// 4. PO DateRevised: untouched. No rule applied.
+// 5. Columns not used by any report view are moved to the right side of the
+//    output table, not deleted, not hidden from the file -- just out of the
+//    way of the columns the reports actually read.
+//
+// Limitation: "working days" here means Mon-Fri only. No company holiday
+// calendar is available to this script, so statutory holidays are not
+// excluded from the day count. Document this if it matters to a report.
 //
 // How to run:
-// 1. Open the workbook with the PO history sheet active (or edit SHEET_NAME below).
-// 2. Automate tab -> New Script -> delete the placeholder code -> paste this file's contents.
-// 3. Run. If you still hit the payload-limit error, lower CHUNK_SIZE and re-run.
-// 4. Read the "Profile Report" sheet it creates (or replaces if run again).
+// 1. Open the workbook with the raw PO history sheet active (or edit SHEET_NAME below).
+// 2. Automate tab -> open this script -> Run.
+// 3. If you hit the payload-limit error, lower CHUNK_SIZE and re-run.
+// 4. Read the new "Clean Data" sheet. The original sheet is untouched.
 
 function main(workbook: ExcelScript.Workbook) {
   const SHEET_NAME = ""; // leave blank to use the active sheet, or set e.g. "PO History"
-  const CHUNK_SIZE = 2000; // rows per read; lower this if you still hit the payload limit
+  const CHUNK_SIZE = 2000; // rows per read/write; lower this if you hit the payload limit
 
   const sheet = SHEET_NAME
     ? workbook.getWorksheet(SHEET_NAME)
@@ -29,135 +50,140 @@ function main(workbook: ExcelScript.Workbook) {
   const headerIndex: { [key: string]: number } = {};
   headers.forEach((h, i) => (headerIndex[h] = i));
 
-  // Columns excluded from analysis (kept in the file, just not checked/reported here).
-  const EXCLUDED_COLS = ["ID", "PO DateRevised", "SpecialRequest", "QtyThisShip", "Scanned", "ShipLocalle", "Tag", "ShipBy"];
+  // Columns the report views actually use, kept on the left of the output table.
+  const NECESSARY_COLS = [
+    "PO No", "Supplier ID", "PO Date", "ITEM NO", "Quantity", "INVENTORY ID",
+    "PO DateReceived", "PO DateRequired", "PO DateRevised", "QtyReceived",
+    "POLineClosed", "UnitCost", "Category",
+  ];
+  // Not used by any report view -- kept in the output, just moved to the right.
+  const SIDE_COLS = ["ID", "SpecialRequest", "QtyThisShip", "Scanned", "Tag", "ShipLocalle", "ShipBy"];
 
-  const requiredCols = ["PO No", "Supplier ID", "PO Date", "ITEM NO", "INVENTORY ID"].filter(c => !EXCLUDED_COLS.includes(c));
-  const dateCols = ["PO Date", "PO DateReceived", "PO DateRequired", "PO DateRevised", "ShipBy"].filter(c => !EXCLUDED_COLS.includes(c));
-  const numCols = ["Quantity", "QtyReceived", "QtyThisShip", "UnitCost"].filter(c => !EXCLUDED_COLS.includes(c));
-  const textCols = ["Supplier ID", "ITEM NO", "INVENTORY ID", "SpecialRequest", "Tag", "ShipLocalle", "Category", "PO No"].filter(c => !EXCLUDED_COLS.includes(c));
-  const distinctCols = ["POLineClosed", "Scanned", "Tag", "Category", "ShipLocalle"].filter(c => !EXCLUDED_COLS.includes(c));
+  const outputCols = [...NECESSARY_COLS, ...SIDE_COLS].filter(c => headerIndex[c] !== undefined);
 
-  const issueMap = new Map<string, number[]>();
-  function flag(type: string, column: string, rowNum: number) {
-    const key = type + "||" + column;
-    if (!issueMap.has(key)) issueMap.set(key, []);
-    issueMap.get(key).push(rowNum);
+  function isNullCell(v: string | number | boolean): boolean {
+    return typeof v === "string" && v.trim().toUpperCase() === "NULL";
   }
 
-  const dupKeyRows = new Map<string, number[]>();
-  const distinctValues = new Map<string, Map<string, number>>();
-  for (const col of distinctCols) distinctValues.set(col, new Map<string, number>());
+  // Excel serial date (with or without a time fraction) -> whole calendar day, as an integer serial.
+  function excelSerialToUTCDate(serial: number): Date {
+    return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000);
+  }
+  function isWeekendSerial(daySerial: number): boolean {
+    const dow = excelSerialToUTCDate(daySerial).getUTCDay();
+    return dow === 0 || dow === 6;
+  }
+  function workingDaysBetween(startSerial: number, endSerial: number): number {
+    let count = 0;
+    const s = Math.floor(startSerial);
+    const e = Math.floor(endSerial);
+    for (let day = s + 1; day <= e; day++) {
+      if (!isWeekendSerial(day)) count++;
+    }
+    return count;
+  }
+  function median(nums: number[]): number {
+    const sorted = [...nums].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  }
 
-  let total = 0;
+  const poNoIdx = headerIndex["PO No"];
+  const supplierIdx = headerIndex["Supplier ID"];
+  const poDateIdx = headerIndex["PO Date"];
+  const poDateReceivedIdx = headerIndex["PO DateReceived"];
+  const poDateRequiredIdx = headerIndex["PO DateRequired"];
+  const poLineClosedIdx = headerIndex["POLineClosed"];
+  const quantityIdx = headerIndex["Quantity"];
+  const qtyReceivedIdx = headerIndex["QtyReceived"];
+
+  // Pass 1: collect each supplier's working-day lead time from their closed
+  // orders with real (non-NULL) PO Date / PO DateReceived pairs.
+  const leadTimesBySupplier = new Map<string, number[]>();
 
   for (let start = 1; start < totalRows; start += CHUNK_SIZE) {
     const rowsInChunk = Math.min(CHUNK_SIZE, totalRows - start);
     const chunk = sheet.getRangeByIndexes(start, 0, rowsInChunk, totalCols).getValues();
-    total += chunk.length;
 
-    for (let i = 0; i < chunk.length; i++) {
-      const row = chunk[i];
-      const rowNum = start + i + 1; // 1-based sheet row number
-
-      for (const col of requiredCols) {
-        const idx = headerIndex[col];
-        if (idx === undefined) continue;
-        const v = row[idx];
-        if (v === "" || v === null || v === undefined) {
-          flag("Blank required field", col, rowNum);
-        }
-      }
-
-      for (const col of dateCols) {
-        const idx = headerIndex[col];
-        if (idx === undefined) continue;
-        const v = row[idx];
-        if (v === "" || v === null || v === undefined) continue;
-        if (typeof v !== "number") {
-          flag("Unparseable date", col, rowNum);
-        }
-      }
-
-      for (const col of numCols) {
-        const idx = headerIndex[col];
-        if (idx === undefined) continue;
-        const v = row[idx];
-        if (v === "" || v === null || v === undefined) continue;
-        if (typeof v !== "number") {
-          flag("Non-numeric value", col, rowNum);
-        } else {
-          if (v < 0) flag("Negative value", col, rowNum);
-        }
-      }
-
-      for (const col of textCols) {
-        const idx = headerIndex[col];
-        if (idx === undefined) continue;
-        const v = row[idx];
-        if (typeof v === "string" && v !== v.trim()) {
-          flag("Leading/trailing whitespace", col, rowNum);
-        }
-      }
-
-      const poIdx = headerIndex["PO No"];
-      const itemIdx = headerIndex["ITEM NO"];
-      if (poIdx !== undefined && itemIdx !== undefined) {
-        const key = String(row[poIdx]) + "||" + String(row[itemIdx]);
-        if (!dupKeyRows.has(key)) dupKeyRows.set(key, []);
-        dupKeyRows.get(key).push(rowNum);
-      }
-
-      for (const col of distinctCols) {
-        const idx = headerIndex[col];
-        if (idx === undefined) continue;
-        const v = row[idx];
-        const key = v === null || v === undefined || v === "" ? "(blank)" : String(v);
-        const m = distinctValues.get(col);
-        m.set(key, (m.get(key) || 0) + 1);
+    for (const row of chunk) {
+      const closed = row[poLineClosedIdx] === -1;
+      const poDate = row[poDateIdx];
+      const poDateReceived = row[poDateReceivedIdx];
+      if (closed && typeof poDate === "number" && typeof poDateReceived === "number") {
+        const supplier = String(row[supplierIdx]);
+        const days = workingDaysBetween(poDate, poDateReceived);
+        if (!leadTimesBySupplier.has(supplier)) leadTimesBySupplier.set(supplier, []);
+        leadTimesBySupplier.get(supplier).push(days);
       }
     }
   }
 
-  dupKeyRows.forEach(rowNums => {
-    if (rowNums.length > 1) {
-      rowNums.forEach(r => flag("Duplicate PO No + ITEM NO", "PO No / ITEM NO", r));
-    }
+  const medianLeadTimeBySupplier = new Map<string, number>();
+  leadTimesBySupplier.forEach((days, supplier) => {
+    medianLeadTimeBySupplier.set(supplier, median(days));
   });
 
-  const existing = workbook.getWorksheet("Profile Report");
+  // Pass 2: build the cleaned, reordered output.
+  const outHeader = outputCols;
+  const outRows: (string | number | boolean)[][] = [outHeader];
+
+  for (let start = 1; start < totalRows; start += CHUNK_SIZE) {
+    const rowsInChunk = Math.min(CHUNK_SIZE, totalRows - start);
+    const chunk = sheet.getRangeByIndexes(start, 0, rowsInChunk, totalCols).getValues();
+
+    for (const row of chunk) {
+      const cleaned = row.slice(); // copy; only touch the specific cells the rules cover
+      const closed = row[poLineClosedIdx] === -1;
+      const open = row[poLineClosedIdx] === 0;
+
+      // Rule: PO DateReceived = NULL
+      if (isNullCell(cleaned[poDateReceivedIdx])) {
+        if (closed) {
+          cleaned[poDateReceivedIdx] = cleaned[poDateRequiredIdx];
+        } else if (open) {
+          const supplier = String(row[supplierIdx]);
+          const poDate = row[poDateIdx];
+          const supplierMedian = medianLeadTimeBySupplier.get(supplier);
+          if (typeof poDate === "number" && supplierMedian !== undefined) {
+            cleaned[poDateReceivedIdx] = Math.floor(poDate) + Math.ceil(supplierMedian);
+          } else {
+            cleaned[poDateReceivedIdx] = "NULL"; // uncalculable -- no supplier history, leave as NULL
+          }
+        }
+      }
+
+      // Rule: PO Date / PO DateReceived -- strip time-of-day
+      if (typeof cleaned[poDateIdx] === "number") {
+        cleaned[poDateIdx] = Math.floor(cleaned[poDateIdx] as number);
+      }
+      if (typeof cleaned[poDateReceivedIdx] === "number") {
+        cleaned[poDateReceivedIdx] = Math.floor(cleaned[poDateReceivedIdx] as number);
+      }
+
+      // Rule: QtyReceived = 0
+      if (cleaned[qtyReceivedIdx] === 0) {
+        if (closed) {
+          cleaned[qtyReceivedIdx] = cleaned[quantityIdx];
+        }
+        // open -> leave as 0, that's correct (not received yet)
+      }
+
+      // PO DateRevised: untouched, no rule.
+
+      outRows.push(outputCols.map(col => cleaned[headerIndex[col]]));
+    }
+  }
+
+  const existing = workbook.getWorksheet("Clean Data");
   if (existing) existing.delete();
-  const reportSheet = workbook.addWorksheet("Profile Report");
+  const outSheet = workbook.addWorksheet("Clean Data");
 
-  const outRows: (string | number)[][] = [];
-  outRows.push(["Issue Type", "Column", "Count", "Sample Rows (up to 5)"]);
-
-  const entries = Array.from(issueMap.entries())
-    .map(([key, rowNums]) => {
-      const [type, column] = key.split("||");
-      return { type, column, count: rowNums.length, samples: rowNums.slice(0, 5) };
-    })
-    .sort((a, b) => b.count - a.count);
-
-  for (const e of entries) {
-    outRows.push([e.type, e.column, e.count, e.samples.join(", ")]);
+  for (let start = 0; start < outRows.length; start += CHUNK_SIZE) {
+    const rowsInChunk = Math.min(CHUNK_SIZE, outRows.length - start);
+    const slice = outRows.slice(start, start + rowsInChunk);
+    outSheet.getRangeByIndexes(start, 0, rowsInChunk, outputCols.length).setValues(slice);
   }
 
-  outRows.push(["", "", "", ""]);
-  outRows.push(["--- Distinct value counts (categorical columns) ---", "", "", ""]);
-  distinctValues.forEach((m, col) => {
-    outRows.push([`Column: ${col}`, "", "", ""]);
-    const sorted = Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
-    for (const [val, count] of sorted) {
-      outRows.push(["", val, count, ""]);
-    }
-  });
-
-  outRows.push(["", "", "", ""]);
-  outRows.push([`Total data rows scanned: ${total}`, "", "", ""]);
-
-  const outRange = reportSheet.getRangeByIndexes(0, 0, outRows.length, 4);
-  outRange.setValues(outRows);
-  reportSheet.getUsedRange().getFormat().autofitColumns();
-  reportSheet.activate();
+  outSheet.getUsedRange().getFormat().autofitColumns();
+  outSheet.activate();
 }
