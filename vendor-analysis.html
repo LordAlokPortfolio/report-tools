@@ -511,24 +511,36 @@
       container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view. This tab ignores the vendor/timeline picked above — it's a whole-building question."]));
       return;
     }
-    container.appendChild(el("p", { class: "as-of" }, [`Inventory ledger as of ${fmtDate(ledgerAsOf)}. Purchase orders as of ${fmtDate(poAsOf)}.`]));
+    container.appendChild(el("p", { class: "as-of" }, [`Inventory ledger (tbl_HISTORY) as of ${fmtDate(ledgerAsOf)}. Purchase orders as of ${fmtDate(poAsOf)}.`]));
 
-    // On-hand + weekly usage per SKU from ledger movement rows.
+    // tbl_HISTORY: ID, INVENTORY NAME, DATE, QTY, TYPE, BATCH_ID, BATCH_TIME, SORT_DATETIME.
+    // TYPE semantics (confirmed): Count = snapshot, resets on-hand to QTY at that DATE.
+    // Receivings = adds QTY. Transfers = always subtracts QTY (usage). Any other TYPE is
+    // unrecognized -- skipped, not guessed, and counted so it's visible rather than silent.
     const bySku = new Map();
+    let unrecognizedTypeCount = 0;
+    const unrecognizedTypes = new Set();
     ledgerRows.forEach(r => {
-      const sku = String(r["INVENTORY ID"] || r["SKU"] || "").trim();
+      const sku = String(r["ID"] || "").trim();
       if (!sku) return;
-      const qty = Number(r["Quantity"] || r["Qty"] || 0);
-      const d = toDate(r["Date"]);
+      const qty = Number(r["QTY"] || 0);
+      const type = String(r["TYPE"] || "").trim().toLowerCase();
+      const d = toDate(r["SORT_DATETIME"] || r["DATE"]);
       if (!bySku.has(sku)) bySku.set(sku, { movements: [] });
-      bySku.get(sku).movements.push({ date: d, qty });
+      if (type !== "count" && type !== "receivings" && type !== "transfers") {
+        unrecognizedTypeCount++;
+        unrecognizedTypes.add(String(r["TYPE"] || "(blank)"));
+        return; // not applied to the running total -- direction unknown
+      }
+      bySku.get(sku).movements.push({ date: d, qty, type });
     });
 
-    // Median lead time and current vendor per SKU, from PO history (all vendors, closed orders).
+    // Median lead time, current vendor, and open POs per SKU, matched via ID
+    // (the PO table's ID column, resolved from Da Vinci File -- same key as tbl_HISTORY.ID).
     const leadBySku = new Map();
     const vendorBySku = new Map();
     poRows.filter(isClosed).forEach(r => {
-      const sku = String(r["INVENTORY ID"] || "").trim();
+      const sku = String(r["ID"] || "").trim();
       if (!sku) return;
       const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
       const bd = businessDaysBetween(d1, d2);
@@ -538,29 +550,46 @@
       }
       vendorBySku.set(sku, r["Supplier ID"]);
     });
-
-    // Open POs per SKU.
     const openBySku = new Map();
     poRows.filter(isOpen).forEach(r => {
-      const sku = String(r["INVENTORY ID"] || "").trim();
+      const sku = String(r["ID"] || "").trim();
       if (!sku) return;
       if (!openBySku.has(sku)) openBySku.set(sku, []);
       openBySku.get(sku).push({ qty: r["Quantity"], date: toDate(r["PO DateReceived"]) || toDate(r["PO DateRequired"]) });
     });
 
+    if (unrecognizedTypeCount > 0) {
+      container.appendChild(el("div", { class: "callout warn" }, [
+        `${unrecognizedTypeCount} ledger row(s) have a TYPE this tool doesn't recognize (${Array.from(unrecognizedTypes).join(", ")}) and were excluded from on-hand/usage math rather than guessed. Tell me their direction (add/subtract/snapshot) and I'll add them.`
+      ]));
+    }
+
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["SKU", "Vendor", "On hand", "Weekly usage", "Weeks left", "Open PO", "Real lead time", "Order by", "Suggested qty"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["ID", "Vendor", "On hand", "Weekly usage", "Weeks left", "Open PO", "Real lead time", "Order by", "Suggested qty"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     let any = false;
     bySku.forEach((rec, sku) => {
       const sorted = rec.movements.filter(m => m.date).sort((a, b) => a.date - b.date);
       if (sorted.length < 2) return;
-      const onHand = sorted[sorted.length - 1].qty; // ledger assumed to carry a running/on-hand style figure per row
-      const spanDays = (sorted[sorted.length - 1].date - sorted[0].date) / 86400000;
-      const totalOut = sorted.reduce((sum, m) => sum + (m.qty < 0 ? -m.qty : 0), 0);
-      const weeklyUsage = spanDays > 0 ? (totalOut / spanDays) * 7 : 0;
-      if (weeklyUsage <= 0) return;
+
+      // Running on-hand: Count resets to QTY, Receivings adds, Transfers subtracts.
+      let onHand = null;
+      let transfersTotal = 0;
+      let firstDate = null, lastDate = null;
+      sorted.forEach(m => {
+        if (m.type === "count") onHand = m.qty;
+        else if (m.type === "receivings") onHand = (onHand || 0) + m.qty;
+        else if (m.type === "transfers") { onHand = (onHand || 0) - m.qty; transfersTotal += m.qty; }
+        if (firstDate === null) firstDate = m.date;
+        lastDate = m.date;
+      });
+      if (onHand === null) return; // never saw a Count to establish a baseline
+
+      const spanDays = (lastDate - firstDate) / 86400000;
+      const weeklyUsage = spanDays > 0 ? (transfersTotal / spanDays) * 7 : 0;
+      if (weeklyUsage <= 0) return; // no observed usage -- can't compute a runout date, don't guess one
+
       const weeksLeft = onHand / weeklyUsage;
       const leadTimes = leadBySku.get(sku);
       const leadDays = leadTimes && leadTimes.length >= MIN_HISTORY ? Math.ceil(median(leadTimes)) : null;
@@ -582,7 +611,7 @@
     });
     table.appendChild(tbody);
     if (!any) {
-      container.appendChild(el("p", { class: "insufficient" }, ["No SKU in the ledger has enough movement history to compute a usage rate yet."]));
+      container.appendChild(el("p", { class: "insufficient" }, ["No ID in the ledger has both a Count baseline and observed Transfers usage yet — can't compute a runout date without both."]));
       return;
     }
     container.appendChild(table);
