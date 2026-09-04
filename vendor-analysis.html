@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v34 - 2026-09-04 - Fixed Runout: real TYPE values are singular, not plural</div>
+<div class="version-badge">v35 - 2026-09-04 - New Mix tab (order-frequency MVP); passphrase rotated</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -145,6 +145,7 @@
       <button class="tab-btn" data-tab="shortship">Shortfall</button>
       <button class="tab-btn" data-tab="cadence">Frequency</button>
       <button class="tab-btn" data-tab="concentration">Concentration</button>
+      <button class="tab-btn" data-tab="mix">Mix</button>
       <button class="tab-btn" data-tab="habits">Habits</button>
       <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
       <button class="tab-btn" data-tab="runout">Runout</button>
@@ -154,6 +155,7 @@
     <div class="tab-view" id="tab-shortship"></div>
     <div class="tab-view" id="tab-cadence"></div>
     <div class="tab-view" id="tab-concentration"></div>
+    <div class="tab-view" id="tab-mix"></div>
     <div class="tab-view" id="tab-habits"></div>
     <div class="tab-view" id="tab-bottleneck"></div>
     <div class="tab-view" id="tab-runout"></div>
@@ -168,7 +170,7 @@
   // ---------- Public/private gate ----------
   // Doorbell, not a lock -- anyone can read this in the page source. Change this
   // string to update the passphrase later.
-  const PASSPHRASE = "ALOK";
+  const PASSPHRASE = "KVDOORS26";
 
   // ---------- OneDrive / Graph config ----------
   // Fill in the exact sheet tab names before use -- these are best guesses from
@@ -1015,6 +1017,58 @@
     ]));
   }
 
+  // ---------- Mix: this vendor's own product breakdown, to find their MVP item(s) ----------
+  function renderMix() {
+    const container = document.getElementById("tab-mix");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Mix - what does this vendor's business with us actually look like?"]));
+    container.appendChild(el("p", { class: "note" }, [
+      "Uses the vendor/timeline picked above. Share is each code's number of orders as a fraction of this vendor's total order count -- not quantity or dollars."
+    ]));
+    const rows = filteredRows().filter(isStockItem);
+    const byItem = new Map();
+    let totalOrders = 0;
+    rows.forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      if (!item) return;
+      if (!byItem.has(item)) byItem.set(item, { qty: 0, orders: 0 });
+      const rec = byItem.get(item);
+      if (typeof r["Quantity"] === "number") rec.qty += r["Quantity"];
+      rec.orders += 1;
+      totalOrders += 1;
+    });
+
+    if (byItem.size === 0 || totalOrders === 0) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No stock item orders for this vendor/timeline."]));
+      return;
+    }
+
+    const entries = Array.from(byItem.entries()).map(([item, rec]) => ({
+      item, qty: rec.qty, orders: rec.orders, share: (rec.orders / totalOrders) * 100,
+    }));
+    entries.sort((a, b) => b.orders - a.orders);
+
+    const mvp = entries[0];
+    container.appendChild(el("p", { class: "stat" }, [
+      `MVP item: ${itemLabel(mvp.item)} - ${mvp.share.toFixed(0)}% of every order placed with this vendor (${mvp.orders} of ${totalOrders} orders).`
+    ]));
+
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Total qty ordered", "Share of vendor's order count"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    entries.forEach((e, i) => {
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [itemLabel(e.item)]),
+        el("td", null, [String(e.orders)]),
+        el("td", null, [String(e.qty)]),
+        el("td", { class: i === 0 ? "change-up" : "" }, [`${e.share.toFixed(1)}%`]),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
   // ---------- View 4: Habits ----------
   function renderHabits() {
     const container = document.getElementById("tab-habits");
@@ -1261,6 +1315,7 @@
     renderShortShip();
     renderCadence();
     renderConcentration();
+    renderMix();
     renderHabits();
     renderBottleneck();
     renderRunout();
