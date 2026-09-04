@@ -150,9 +150,9 @@
   };
   const GRAPH_SCOPES = ["User.Read", "Files.Read"];
   const WORKBOOK_FILENAME = "tblINVENTORY_PO.xlsx"; // found by name, not by path -- avoids path/nesting guessing
-  const PO_SHEET_NAME = "PO-INVENTORY-TABLE";
-  const HISTORY_SHEET_NAME = "HISTORY SHEET"; // table tbl_HISTORY lives on this sheet
-  const BOM_SHEET_NAME = "BOTTLENECK";        // still being built per the user -- may not have BOM columns yet
+  const PO_SHEET_NAME = "PO-INVENTORY-TABLE "; // trailing space is real -- confirmed via live diagnostic
+  const HISTORY_SHEET_NAME = "HISTORY SHEET";  // table tbl_HISTORY lives on this sheet
+  const BOM_SHEET_NAME = "BOTTLENECK ";        // trailing space is real; still being built, may not have BOM columns yet
 
   let msalApp = null;
   let workbookItemId = null;
