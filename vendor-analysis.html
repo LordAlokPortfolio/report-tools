@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v19 - 2026-09-04 - Exclude custom-order $0 pricing from cost math</div>
+<div class="version-badge">v20 - 2026-09-04 - Temporary ID-column diagnostic on Creep</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -505,6 +505,29 @@
     const container = document.getElementById("tab-creep");
     container.innerHTML = "";
     container.appendChild(el("h2", null, ["Creep - price rising quietly over many orders"]));
+
+    // Temporary diagnostic: show what's actually in the ID column, so we can see
+    // whether isStockItem() is reading the right column/values without guessing.
+    const preFilterRows = filteredRows();
+    const idSamples = new Map(); // "number"/"text-like-number"/"text" -> {count, examples: Set}
+    preFilterRows.forEach(r => {
+      const v = r["ID"];
+      const kind = typeof v === "number" ? "number (passes filter)"
+        : (typeof v === "string" && /^[0-9.]+$/.test(v.trim())) ? "numeric text (passes filter)"
+        : "other/text (EXCLUDED by filter)";
+      if (!idSamples.has(kind)) idSamples.set(kind, { count: 0, examples: new Set() });
+      const entry = idSamples.get(kind);
+      entry.count++;
+      if (entry.examples.size < 3) entry.examples.add(JSON.stringify(v));
+    });
+    const diagLines = [];
+    idSamples.forEach((v, kind) => {
+      diagLines.push(`${kind}: ${v.count} rows, examples: ${Array.from(v.examples).join(", ")}`);
+    });
+    container.appendChild(el("div", { class: "callout warn" }, [
+      "DIAGNOSTIC (temporary) - what the ID column actually contains for this vendor/timeline: " + diagLines.join(" | ")
+    ]));
+
     const rows = filteredRows().filter(isStockItem).filter(r => typeof r["UnitCost"] === "number");
     const byItem = new Map();
     rows.forEach(r => {
