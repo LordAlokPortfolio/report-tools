@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v14 — 2026-09-04 — Pattern rethought as actionable</div>
+<div class="version-badge">v15 — 2026-09-04 — Speed/Creep simplified to plain sentences</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -459,25 +459,16 @@
     const recentMed = Math.ceil(median(recentOrders.map(o => o.leadTime)));
     const shifted = Math.abs(recentMed - overallMed) >= 3 || Math.abs(recentMed - overallMed) / overallMed >= 0.3;
 
-    container.appendChild(el("p", null, [
-      el("span", { class: "stat" }, [`${recentMed} business days`]),
-      ` — current lead time, based on the ${recentN} most recent closed order${recentN === 1 ? "" : "s"}.`
-    ]));
-    if (shifted) {
-      container.appendChild(el("div", { class: "callout warn" }, [
-        `This vendor's recent lead time (${recentMed} bd) differs meaningfully from the ${orders.length}-order timeline median (${overallMed} bd). Something changed — treat the recent figure as the current reality, not the long-run median.`
-      ]));
-    }
+    const expectDate = fmtDate(new Date(Date.now() + recentMed * 86400000));
+    const headline = shifted
+      ? `Right now this vendor is taking about ${recentMed} business days — that's a real change from the ${overallMed}-day pace across this timeline. Order today, expect it around ${expectDate}, and plan around the new pace, not the old one.`
+      : `This vendor is taking about ${recentMed} business days lately, in line with their ${overallMed}-day pace across this timeline. Order today, expect it around ${expectDate}.`;
+    container.appendChild(el("p", { class: "stat" }, [headline]));
     container.appendChild(el("p", { class: "note" }, [
-      `For context: across all ${orders.length} closed orders in this timeline, median is ${overallMed} bd, ranging from ${min} to ${max} bd.`
-    ]));
-    container.appendChild(el("p", null, [
-      "If ordering today, expect receipt around ",
-      el("span", { class: "stat" }, [fmtDate(new Date(Date.now() + recentMed * 86400000))]),
-      " (using the recent figure)."
+      `Based on the ${recentN} most recent order${recentN === 1 ? "" : "s"} (current pace) vs. all ${orders.length} closed orders in this timeline (${min}–${max} bd range, ${overallMed} bd median).`
     ]));
 
-    container.appendChild(el("h2", null, ["Per-PO lead time"]));
+    container.appendChild(el("h2", null, ["Order-by-order detail"]));
     const table = el("table", null, [
       el("thead", null, [el("tr", null, ["PO No", "PO Date", "PO DateReceived", "Lead time (business days)", "Vs. recent"].map(h => el("th", null, [h])))]),
     ]);
@@ -552,7 +543,7 @@
           ? pearsonCorrelation(qtyPairs.map(p => p.cost), qtyPairs.map(p => p.qty)) : null;
 
         if (corrLead === null && corrQty === null) {
-          tiedTo = "not enough history to check";
+          tiedTo = "Not enough history to check";
         } else {
           const candidates = [];
           if (corrLead !== null) candidates.push({ label: "lead time", r: corrLead });
@@ -560,8 +551,8 @@
           candidates.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
           const best = candidates[0];
           tiedTo = Math.abs(best.r) >= 0.5
-            ? `moves with ${best.label} (r=${best.r.toFixed(2)})`
-            : `no clear tie to lead time or order size (r=${candidates.map(c => c.label + " " + c.r.toFixed(2)).join(", ")})`;
+            ? `Tends to rise with ${best.label}`
+            : `No clear link to lead time or order size`;
         }
       }
 
