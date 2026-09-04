@@ -14,6 +14,11 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  .version-badge {
+    position: fixed; top: 10px; right: 14px; font-size: 11px; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 5px;
+    padding: 3px 8px; z-index: 100;
+  }
   header { padding: 20px 28px; border-bottom: 1px solid var(--border); background: var(--panel); }
   header h1 { margin: 0 0 4px; font-size: 20px; }
   header p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -57,6 +62,8 @@
 </style>
 </head>
 <body>
+
+<div class="version-badge">v13 — 2026-09-04 — Speed/Creep recency update</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
