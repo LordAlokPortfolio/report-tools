@@ -316,8 +316,17 @@
         `Loaded ${poRows.length.toLocaleString()} PO rows live from OneDrive as of ${fmtDate(poAsOf)}.`;
       populateLanding();
     } catch (err) {
+      let diag = "";
+      try {
+        const root = await graphGet("/me/drive/root/children?$select=name,folder,file");
+        diag = " Items actually in your OneDrive root: " +
+          root.value.map(i => i.name + (i.folder ? "/" : "")).join(", ") + ".";
+      } catch (diagErr) {
+        diag = " (Could not even list the OneDrive root to help diagnose: " + diagErr.message + ")";
+      }
       document.getElementById("loadStatus").textContent =
-        "Could not read from OneDrive: " + err.message + " — check WORKBOOK_PATH and the sheet name constants (PO_SHEET_NAME / HISTORY_SHEET_NAME / BOM_SHEET_NAME) match the live workbook exactly.";
+        "Could not read from OneDrive: " + err.message +
+        " — check WORKBOOK_PATH and the sheet name constants match the live workbook exactly." + diag;
     }
   }
 
