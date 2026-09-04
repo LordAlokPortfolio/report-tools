@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vendor &amp; Material Analysis — KV Custom Windows and Doors</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://js.live.net/v8.0/OneDrive.js"></script>
 <style>
   :root {
     --bg: #f7f7f5; --panel: #ffffff; --border: #dcdcd6; --text: #1c1c1a;
@@ -61,22 +63,38 @@
 <main>
 
   <section class="panel">
-    <h2>1. Load your files</h2>
+    <h2>1. Connect to the workbook</h2>
     <div class="row">
       <div class="field">
-        <label for="poFile">PO history (cleaned) — required</label>
+        <button class="primary" id="signInBtn">Sign in with Microsoft</button>
+      </div>
+      <div class="field">
+        <button class="primary" id="pickFileBtn" disabled>Choose workbook (OneDrive)</button>
+      </div>
+      <div class="field">
+        <button class="primary" id="refreshBtn" disabled>Refresh data</button>
+      </div>
+    </div>
+    <p class="note" id="loadStatus">Sign in, then pick the workbook once from OneDrive. After that, Refresh re-reads whatever is currently saved in it — nothing is uploaded anywhere; the file is read live from your OneDrive.</p>
+  </section>
+
+  <section class="panel" id="manualUploadPanel">
+    <h2>Or load files manually (fallback)</h2>
+    <div class="row">
+      <div class="field">
+        <label for="poFile">PO history (cleaned)</label>
         <input type="file" id="poFile" accept=".xlsx,.xls,.csv">
       </div>
       <div class="field">
-        <label for="bomFile">Component list / BOM — optional, needed for Bottleneck</label>
+        <label for="bomFile">Component list / BOM</label>
         <input type="file" id="bomFile" accept=".xlsx,.xls,.csv">
       </div>
       <div class="field">
-        <label for="ledgerFile">Inventory ledger — optional, needed for Runout</label>
+        <label for="ledgerFile">Inventory ledger (tbl_HISTORY)</label>
         <input type="file" id="ledgerFile" accept=".xlsx,.xls,.csv">
       </div>
     </div>
-    <p class="note" id="loadStatus">No file loaded yet. Nothing is uploaded anywhere — parsing happens in your browser only.</p>
+    <p class="note">Use this only if the OneDrive sign-in above isn't working.</p>
   </section>
 
   <section class="panel" id="landingPanel" style="display:none;">
@@ -122,6 +140,26 @@
 <script>
 (function () {
   "use strict";
+
+  // ---------- OneDrive / Graph config ----------
+  // Fill in the exact sheet tab names before use -- these are best guesses from
+  // conversation, not confirmed against the live workbook.
+  const MSAL_CONFIG = {
+    auth: {
+      clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
+      authority: "https://login.microsoftonline.com/972ad3c5-73ca-4f41-89d7-56485631c283",
+      redirectUri: window.location.href.split("?")[0].split("#")[0],
+    },
+    cache: { cacheLocation: "localStorage" },
+  };
+  const GRAPH_SCOPES = ["User.Read", "Files.Read.Selected"];
+  const PO_SHEET_NAME = "PO-Inventory-Table"; // CONFIRM against the live workbook
+  const HISTORY_SHEET_NAME = "History";       // table tbl_HISTORY lives on this sheet
+  const BOM_SHEET_NAME = "";                  // set once the BOM sheet exists
+
+  let msalApp = null;
+  let graphAccessToken = null;
+  let oneDriveFile = null; // { driveId, itemId }
 
   // ---------- state ----------
   let poRows = [];       // array of row objects, keyed by header
@@ -232,6 +270,105 @@
     if (!f) return;
     readSheetAsRows(f, function (rows) { ledgerRows = rows; ledgerAsOf = new Date(); renderAll(); });
   });
+
+  // ---------- OneDrive / Microsoft Graph ----------
+  // Converts a Graph usedRange response ({values: [[...header],[...row],...]})
+  // into the same "array of row objects keyed by header" shape readSheetAsRows
+  // produces from an uploaded file, so every render* function works unchanged.
+  function usedRangeToRows(valuesGrid) {
+    if (!valuesGrid || valuesGrid.length < 1) return [];
+    const headers = valuesGrid[0].map(h => String(h).trim());
+    return valuesGrid.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i] === "" ? "" : row[i]; });
+      return obj;
+    });
+  }
+
+  async function graphGet(path) {
+    const res = await fetch("https://graph.microsoft.com/v1.0" + path, {
+      headers: { Authorization: "Bearer " + graphAccessToken },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Graph request failed (${res.status}) for ${path}: ${body}`);
+    }
+    return res.json();
+  }
+
+  async function fetchSheetRows(sheetName) {
+    if (!sheetName) return null;
+    const path = `/drives/${oneDriveFile.driveId}/items/${oneDriveFile.itemId}` +
+      `/workbook/worksheets('${encodeURIComponent(sheetName)}')/usedRange(valuesOnly=true)`;
+    const data = await graphGet(path);
+    return usedRangeToRows(data.values);
+  }
+
+  async function refreshFromOneDrive() {
+    if (!oneDriveFile) return;
+    document.getElementById("loadStatus").textContent = "Reading live data from OneDrive…";
+    try {
+      poRows = (await fetchSheetRows(PO_SHEET_NAME)) || [];
+      poAsOf = new Date();
+      ledgerRows = await fetchSheetRows(HISTORY_SHEET_NAME);
+      if (ledgerRows) ledgerAsOf = new Date();
+      bomRows = await fetchSheetRows(BOM_SHEET_NAME);
+      document.getElementById("loadStatus").textContent =
+        `Loaded ${poRows.length.toLocaleString()} PO rows live from OneDrive as of ${fmtDate(poAsOf)}.`;
+      populateLanding();
+    } catch (err) {
+      document.getElementById("loadStatus").textContent =
+        "Could not read from OneDrive: " + err.message + " — check the sheet name constants (PO_SHEET_NAME / HISTORY_SHEET_NAME / BOM_SHEET_NAME) match the live workbook's tab names exactly.";
+    }
+  }
+
+  document.getElementById("signInBtn").addEventListener("click", async function () {
+    try {
+      msalApp = new msal.PublicClientApplication(MSAL_CONFIG);
+      await msalApp.initialize();
+      const loginResult = await msalApp.loginPopup({ scopes: GRAPH_SCOPES });
+      const tokenResult = await msalApp.acquireTokenSilent({
+        scopes: GRAPH_SCOPES, account: loginResult.account,
+      }).catch(() => msalApp.acquireTokenPopup({ scopes: GRAPH_SCOPES, account: loginResult.account }));
+      graphAccessToken = tokenResult.accessToken;
+      document.getElementById("loadStatus").textContent = "Signed in. Now choose the workbook from OneDrive.";
+      document.getElementById("pickFileBtn").disabled = false;
+    } catch (err) {
+      document.getElementById("loadStatus").textContent = "Sign-in failed: " + err.message;
+    }
+  });
+
+  document.getElementById("pickFileBtn").addEventListener("click", function () {
+    if (!graphAccessToken) return;
+    OneDrive.open({
+      clientId: MSAL_CONFIG.auth.clientId,
+      action: "share",
+      multiSelect: false,
+      advanced: { accessToken: graphAccessToken, endpointHint: "https://graph.microsoft.com/" },
+      success: function (response) {
+        const item = response.value[0];
+        oneDriveFile = { driveId: item.parentReference.driveId, itemId: item.id };
+        localStorage.setItem("vendorAnalysisOneDriveFile", JSON.stringify(oneDriveFile));
+        document.getElementById("refreshBtn").disabled = false;
+        refreshFromOneDrive();
+      },
+      cancel: function () {},
+      error: function (err) {
+        document.getElementById("loadStatus").textContent = "File picker error: " + (err && err.message ? err.message : String(err));
+      },
+    });
+  });
+
+  document.getElementById("refreshBtn").addEventListener("click", refreshFromOneDrive);
+
+  // Restore a previously picked file's reference so a returning visit doesn't need re-picking
+  // (still needs a fresh sign-in for a valid access token).
+  (function restoreOneDriveFile() {
+    const saved = localStorage.getItem("vendorAnalysisOneDriveFile");
+    if (saved) {
+      try { oneDriveFile = JSON.parse(saved); document.getElementById("refreshBtn").disabled = false; } catch (e) {}
+    }
+  })();
 
   // ---------- landing ----------
   function populateLanding() {
