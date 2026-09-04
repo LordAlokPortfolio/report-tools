@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v16 — 2026-09-04 — Speed table sorted newest-first</div>
+<div class="version-badge">v17 — 2026-09-04 — Pattern collapses repeated "no link" rows</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -607,10 +607,6 @@
       if (!byItem.has(item)) byItem.set(item, []);
       byItem.get(item).push({ date: d1, cost: r["UnitCost"], leadTime: bd });
     });
-    const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "What history shows", "So what"].map(h => el("th", null, [h])))]),
-    ]);
-    const tbody = el("tbody");
     const entries = [];
     byItem.forEach((points, item) => {
       if (points.length < MIN_HISTORY) return;
@@ -634,36 +630,56 @@
       const corr = pearsonCorrelation(points.map(p => p.cost), points.map(p => p.leadTime));
       entries.push({ item, count: points.length, same, total, rate, corr });
     });
-    entries.sort((a, b) => b.rate - a.rate);
-    entries.forEach(e => {
-      let label, soWhat, cls;
-      if (e.rate >= 0.75) {
-        label = "Strong tendency"; cls = "change-up";
-        soWhat = "Treat a lead-time increase as an early signal to expect cost to rise too — worth budgeting for, and worth raising with this vendor.";
-      } else if (e.rate > 0.5) {
-        label = "Some tendency"; cls = "";
-        soWhat = "Cost sometimes follows lead time here, but not reliably enough to count on.";
-      } else {
-        label = "No consistent tendency"; cls = "low-confidence";
-        soWhat = "Lead time and cost have moved independently for this item — one isn't a useful early warning for the other.";
-      }
-      tbody.appendChild(el("tr", null, [
-        el("td", null, [e.item]),
-        el("td", null, [String(e.count)]),
-        el("td", { class: cls }, [
-          `${label} — cost moved with lead time ${e.same} of ${e.total} times it changed (${(e.rate * 100).toFixed(0)}%)` +
-          (e.corr !== null ? ` [r=${e.corr.toFixed(2)}]` : "")
-        ]),
-        el("td", { class: "note" }, [soWhat]),
-      ]));
-    });
-    table.appendChild(tbody);
     if (entries.length === 0) {
       container.appendChild(notEnoughHistory(0));
       container.appendChild(el("p", { class: "note" }, [`(No item in this vendor/timeline has ${MIN_HISTORY}+ closed orders with at least 5 actual lead-time changes to compare against.)`]));
       return;
     }
-    container.appendChild(table);
+
+    entries.forEach(e => {
+      e.tier = e.rate >= 0.75 ? "strong" : e.rate > 0.5 ? "some" : "none";
+    });
+    const strong = entries.filter(e => e.tier === "strong").sort((a, b) => b.rate - a.rate);
+    const some = entries.filter(e => e.tier === "some").sort((a, b) => b.rate - a.rate);
+    const noneCount = entries.length - strong.length - some.length;
+
+    if (strong.length === 0 && some.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        `None of the ${entries.length} items with enough history show cost reliably following lead time in this timeline — lead time isn't a useful early-warning signal for cost here.`
+      ]));
+      return;
+    }
+
+    if (strong.length > 0) {
+      container.appendChild(el("p", { class: "stat" }, [
+        `${strong.length} of ${entries.length} item${entries.length === 1 ? "" : "s"} show a strong tendency — when lead time stretches, cost has reliably followed:`
+      ]));
+      const strongTable = el("table", null, [
+        el("thead", null, [el("tr", null, ["Item", "Orders", "How often cost followed lead time"].map(h => el("th", null, [h])))]),
+      ]);
+      const tbody = el("tbody");
+      strong.forEach(e => {
+        tbody.appendChild(el("tr", null, [
+          el("td", null, [e.item]),
+          el("td", null, [String(e.count)]),
+          el("td", { class: "change-up" }, [`${e.same} of ${e.total} times (${(e.rate * 100).toFixed(0)}%)`]),
+        ]));
+      });
+      strongTable.appendChild(tbody);
+      container.appendChild(strongTable);
+      container.appendChild(el("p", { class: "note" }, ["Treat a lead-time increase on these items as an early signal to expect cost to rise too — worth budgeting for and worth raising with this vendor."]));
+    }
+
+    if (some.length > 0) {
+      container.appendChild(el("p", { class: "note" }, [
+        `${some.length} more item${some.length === 1 ? "" : "s"} show some tendency but not reliably enough to count on: ${some.map(e => e.item).join(", ")}.`
+      ]));
+    }
+    if (noneCount > 0) {
+      container.appendChild(el("p", { class: "note" }, [
+        `${noneCount} other item${noneCount === 1 ? "" : "s"} with enough history show no consistent link between lead time and cost, and aren't listed.`
+      ]));
+    }
     container.appendChild(el("p", { class: "note" }, ["This describes what happened together in the past, not what caused what — it does not claim cost changes because lead time changes, or the reverse."]));
   }
 
