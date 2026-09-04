@@ -56,10 +56,13 @@ floor it to drop the time fraction. Applied after the NULL-fill rules below,
 so a filled-in PO DateReceived also gets floored.
 
 ### PO DateReceived = "NULL"
-Two-case rule based on `POLineClosed` (`-1` = closed, `0` = open):
+Based on `POLineClosed` (`-1` = closed, `0` = open):
 
-- **Closed (`POLineClosed = -1`)** → fill from that row's `PO DateRequired`
-  value.
+- **Closed (`POLineClosed = -1`)** → left as `"NULL"`. Previously filled from
+  `PO DateRequired`, but that column was confirmed unreliable
+  (purchaser-entered, not trustworthy) - see "PO DateRequired is not used"
+  below. No other source exists for a closed order's real receipt date, so
+  it stays NULL rather than being filled from bad data.
 - **Open (`POLineClosed = 0`)** → fill from `PO Date` + this supplier's
   median working-day lead time. The median is computed from that same
   supplier's *other* closed orders where both `PO Date` and `PO DateReceived`
@@ -124,6 +127,24 @@ forgotten if this ever needs re-joining to Supplier ID elsewhere.
   hypothesis was partial shipments vs. true duplicates; not pursued further.)
 - **Negative UnitCost** - decision: ignore, no rule. (Earlier hypothesis was
   returns/credits; not pursued further.)
+
+### PO DateRequired is not used
+**Decision: confirmed unreliable by the purchaser - do not use it for
+anything, cleaning or reporting.** Moved out of the necessary-columns list
+into the side columns in `clean-po-data.ts` (still present in the file,
+just no longer treated as a trustworthy source). This also retired the
+`PO DateReceived` NULL-fill rule for closed orders (see above) and the
+reporting tool's use of it as an open-PO expected-date fallback.
+
+### UnitCost is not trusted
+**Decision: stop treating any dollar figure in this dataset as reliable.**
+Purchasers send custom POs with `$0` as a placeholder price, not a real
+cost - this contaminates cost-based analysis in ways a simple filter
+couldn't fully catch (see `PROJECT-STATUS-V20.md` for the diagnostic that
+surfaced this). No cleaning rule currently exists for `UnitCost` because
+none was found that reliably separates real pricing from placeholder
+pricing; the reporting tool has stopped building features that depend on
+it rather than continue patching around it.
 
 ---
 

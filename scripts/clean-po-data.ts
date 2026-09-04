@@ -7,7 +7,9 @@
 // Rules applied:
 // 1. PO Date, PO DateReceived: strip time-of-day, keep date only.
 // 2. PO DateReceived = "NULL":
-//      POLineClosed = -1 (closed) -> fill from PO DateRequired (same row).
+//      POLineClosed = -1 (closed) -> left as "NULL". PO DateRequired is NOT
+//                                     used as a fallback -- confirmed unreliable
+//                                     (purchaser-entered, not trustworthy).
 //      POLineClosed = 0  (open)   -> fill from PO Date + this supplier's
 //                                     median working-day lead time, computed
 //                                     from that supplier's other closed
@@ -64,10 +66,12 @@ function main(workbook: ExcelScript.Workbook) {
 
   const NECESSARY_COLS = [
     "PO No", "Supplier ID", "PO Date", "ITEM NO", "Quantity", "INVENTORY ID",
-    "PO DateReceived", "PO DateRequired", "PO DateRevised", "QtyReceived",
+    "PO DateReceived", "PO DateRevised", "QtyReceived",
     "POLineClosed", "UnitCost", "Category",
   ];
-  const SIDE_COLS = ["ID", "SpecialRequest", "QtyThisShip", "Scanned", "Tag", "ShipLocalle", "ShipBy"];
+  // PO DateRequired: confirmed unreliable (purchaser-entered) -- not used by any
+  // cleaning rule or report view anymore. Kept in the file, moved out of the way.
+  const SIDE_COLS = ["ID", "PO DateRequired", "SpecialRequest", "QtyThisShip", "Scanned", "Tag", "ShipLocalle", "ShipBy"];
   const outputCols = [...NECESSARY_COLS, ...SIDE_COLS].filter(c => headerIndex[c] !== undefined);
 
   function isNullCell(v: string | number | boolean): boolean {
@@ -98,7 +102,6 @@ function main(workbook: ExcelScript.Workbook) {
   const supplierIdx = headerIndex["Supplier ID"];
   const poDateIdx = headerIndex["PO Date"];
   const poDateReceivedIdx = headerIndex["PO DateReceived"];
-  const poDateRequiredIdx = headerIndex["PO DateRequired"];
   const poLineClosedIdx = headerIndex["POLineClosed"];
   const quantityIdx = headerIndex["Quantity"];
   const qtyReceivedIdx = headerIndex["QtyReceived"];
@@ -171,10 +174,12 @@ function main(workbook: ExcelScript.Workbook) {
       const open = row[poLineClosedIdx] === 0;
 
       // Rule: PO DateReceived = NULL
+      // Closed orders are no longer filled from PO DateRequired -- the purchaser
+      // confirmed that column is itself unreliable, so it can't be trusted as a
+      // stand-in for a real receipt date. Left as "NULL" rather than filled from
+      // bad data.
       if (isNullCell(cleaned[poDateReceivedIdx])) {
-        if (closed) {
-          cleaned[poDateReceivedIdx] = cleaned[poDateRequiredIdx];
-        } else if (open) {
+        if (open) {
           const supplier = String(row[supplierIdx]);
           const poDate = row[poDateIdx];
           const supplierMedian = medianLeadTimeBySupplier.get(supplier);

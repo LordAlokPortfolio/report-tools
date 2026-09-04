@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v20 - 2026-09-04 - Temporary ID-column diagnostic on Creep</div>
+<div class="version-badge">v21 - 2026-09-04 - Stopped using PO DateRequired (confirmed unreliable)</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -900,12 +900,26 @@
       }
       vendorBySku.set(sku, r["Supplier ID"]);
     });
+    // PO DateRequired is not used -- confirmed unreliable (purchaser-entered).
+    // For an open PO with no real PO DateReceived yet, the expected date is
+    // derived from this SKU's own median lead time (from its closed-order
+    // history) applied to that PO's PO Date -- not a guess pulled from a
+    // column known to be wrong.
     const openBySku = new Map();
     poRows.filter(isOpen).forEach(r => {
       const sku = String(r["ID"] || "").trim();
       if (!sku) return;
       if (!openBySku.has(sku)) openBySku.set(sku, []);
-      openBySku.get(sku).push({ qty: r["Quantity"], date: toDate(r["PO DateReceived"]) || toDate(r["PO DateRequired"]) });
+      const received = toDate(r["PO DateReceived"]);
+      let expected = received;
+      if (!expected) {
+        const poDate = toDate(r["PO Date"]);
+        const leadTimes = leadBySku.get(sku);
+        if (poDate && leadTimes && leadTimes.length >= MIN_HISTORY) {
+          expected = new Date(poDate.getTime() + Math.ceil(median(leadTimes)) * 86400000);
+        }
+      }
+      openBySku.get(sku).push({ qty: r["Quantity"], date: expected });
     });
 
     if (unrecognizedTypeCount > 0) {
