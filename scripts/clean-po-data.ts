@@ -7,9 +7,12 @@
 // Rules applied:
 // 1. PO Date, PO DateReceived: strip time-of-day, keep date only.
 // 2. PO DateReceived = "NULL":
-//      POLineClosed = -1 (closed) -> left as "NULL". PO DateRequired is NOT
-//                                     used as a fallback -- confirmed unreliable
-//                                     (purchaser-entered, not trustworthy).
+//      POLineClosed = -1 (closed) -> fill from PO DateRequired (same row).
+//                                     PO DateRequired is confirmed unreliable in
+//                                     general and used NOWHERE else in this
+//                                     script or the reporting tool -- this one
+//                                     narrow fallback is intentional (least-bad
+//                                     stand-in for a genuinely missing date).
 //      POLineClosed = 0  (open)   -> fill from PO Date + this supplier's
 //                                     median working-day lead time, computed
 //                                     from that supplier's other closed
@@ -69,8 +72,10 @@ function main(workbook: ExcelScript.Workbook) {
     "PO DateReceived", "PO DateRevised", "QtyReceived",
     "POLineClosed", "UnitCost", "Category",
   ];
-  // PO DateRequired: confirmed unreliable (purchaser-entered) -- not used by any
-  // cleaning rule or report view anymore. Kept in the file, moved out of the way.
+  // PO DateRequired: confirmed unreliable (purchaser-entered) and not used by
+  // any report view. Still read internally by one narrow cleaning fallback
+  // below (closed order, no real PO DateReceived) -- kept in the file, just
+  // moved out of the report-facing columns.
   const SIDE_COLS = ["ID", "PO DateRequired", "SpecialRequest", "QtyThisShip", "Scanned", "Tag", "ShipLocalle", "ShipBy"];
   const outputCols = [...NECESSARY_COLS, ...SIDE_COLS].filter(c => headerIndex[c] !== undefined);
 
@@ -102,6 +107,7 @@ function main(workbook: ExcelScript.Workbook) {
   const supplierIdx = headerIndex["Supplier ID"];
   const poDateIdx = headerIndex["PO Date"];
   const poDateReceivedIdx = headerIndex["PO DateReceived"];
+  const poDateRequiredIdx = headerIndex["PO DateRequired"];
   const poLineClosedIdx = headerIndex["POLineClosed"];
   const quantityIdx = headerIndex["Quantity"];
   const qtyReceivedIdx = headerIndex["QtyReceived"];
@@ -174,12 +180,14 @@ function main(workbook: ExcelScript.Workbook) {
       const open = row[poLineClosedIdx] === 0;
 
       // Rule: PO DateReceived = NULL
-      // Closed orders are no longer filled from PO DateRequired -- the purchaser
-      // confirmed that column is itself unreliable, so it can't be trusted as a
-      // stand-in for a real receipt date. Left as "NULL" rather than filled from
-      // bad data.
+      // PO DateRequired is confirmed unreliable in general, but this one narrow
+      // fallback is intentional -- for a closed order with no real receipt date
+      // at all, it's still the least-bad stand-in available. Not used anywhere
+      // else in this script or the reporting tool.
       if (isNullCell(cleaned[poDateReceivedIdx])) {
-        if (open) {
+        if (closed) {
+          cleaned[poDateReceivedIdx] = cleaned[poDateRequiredIdx];
+        } else if (open) {
           const supplier = String(row[supplierIdx]);
           const poDate = row[poDateIdx];
           const supplierMedian = medianLeadTimeBySupplier.get(supplier);

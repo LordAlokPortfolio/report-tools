@@ -58,11 +58,12 @@ so a filled-in PO DateReceived also gets floored.
 ### PO DateReceived = "NULL"
 Based on `POLineClosed` (`-1` = closed, `0` = open):
 
-- **Closed (`POLineClosed = -1`)** → left as `"NULL"`. Previously filled from
-  `PO DateRequired`, but that column was confirmed unreliable
-  (purchaser-entered, not trustworthy) - see "PO DateRequired is not used"
-  below. No other source exists for a closed order's real receipt date, so
-  it stays NULL rather than being filled from bad data.
+- **Closed (`POLineClosed = -1`)** → fill from that row's `PO DateRequired`
+  value. `PO DateRequired` is confirmed unreliable in general (see "PO
+  DateRequired is not used" below) and this is the ONLY place it's used
+  anywhere in cleaning or reporting - kept as a narrow, intentional
+  exception because it's still the least-bad stand-in for a closed order
+  with no real receipt date at all.
 - **Open (`POLineClosed = 0`)** → fill from `PO Date` + this supplier's
   median working-day lead time. The median is computed from that same
   supplier's *other* closed orders where both `PO Date` and `PO DateReceived`
@@ -128,13 +129,16 @@ forgotten if this ever needs re-joining to Supplier ID elsewhere.
 - **Negative UnitCost** - decision: ignore, no rule. (Earlier hypothesis was
   returns/credits; not pursued further.)
 
-### PO DateRequired is not used
-**Decision: confirmed unreliable by the purchaser - do not use it for
-anything, cleaning or reporting.** Moved out of the necessary-columns list
-into the side columns in `clean-po-data.ts` (still present in the file,
-just no longer treated as a trustworthy source). This also retired the
-`PO DateReceived` NULL-fill rule for closed orders (see above) and the
-reporting tool's use of it as an open-PO expected-date fallback.
+### PO DateRequired is not used (one narrow exception)
+**Decision: confirmed unreliable by the purchaser - do not use it as a
+general-purpose data source.** Moved out of the necessary-columns list into
+the side columns in `clean-po-data.ts` (still present in the file, just no
+longer treated as a trustworthy source for reporting). The reporting tool's
+use of it as an open-PO expected-date fallback in Runout is retired.
+
+**The one exception**: the `PO DateReceived` NULL-fill rule for closed
+orders (above) still uses it - confirmed intentional. Everywhere else,
+treat this column as untrustworthy.
 
 ### UnitCost is not trusted
 **Decision: stop treating any dollar figure in this dataset as reliable.**
