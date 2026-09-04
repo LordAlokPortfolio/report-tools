@@ -212,3 +212,12 @@ filename search and then by worksheet-ID matching).
   names only for an `ID` that column doesn't cover. This is a display-only
   change - no cleaning-script logic or column position assumption changed,
   since the tool reads by header name (`"Name"`), not by column letter.
+- **v42** - Added a stockout-count KPI to Runout: walks the same ledger
+  movements Runout already reads and counts every time an ID's running
+  on-hand crosses from above zero to zero-or-below, in date order. Reported
+  as a total plus a per-ID breakdown table, sorted worst-first. This is a
+  historical count, not a forecast, and doesn't invent a dollar figure -
+  it's the one number that directly answers "did we run out," meant to be
+  tracked over time as the "never run out" mandate's actual scorecard.
+  Confirmed with the user: every `ID` is single-sourced (no two suppliers
+  share an `ID`), so this count needs no per-vendor disambiguation.

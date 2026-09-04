@@ -64,7 +64,7 @@
 </head>
 <body>
 
-<div class="version-badge">v41 - 2026-09-04 - itemLabel() now prefers PO-INVENTORY-TABLE's own "Name" column (user-added) over Da Vinci/ledger names</div>
+<div class="version-badge">v42 - 2026-09-04 - Runout adds a stockout-count KPI: counts real times an ID's on-hand crossed to zero-or-below, from the ledger, no forecasting</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -1288,6 +1288,14 @@
       ]));
     }
 
+    // Stockout count: how many times an ID's running on-hand actually crossed
+    // from positive to zero-or-below, walked chronologically through this same
+    // ledger. This is a count of real past failures, not a forecast -- it's the
+    // one number that directly answers "never run out" without inventing a
+    // dollar cost or any other figure the data can't support.
+    const stockoutsBySku = new Map();
+    let totalStockoutEvents = 0;
+
     const table = el("table", null, [
       el("thead", null, [el("tr", null, ["ID", "Vendor", "On hand", "Weekly usage", "Weeks left", "Open PO", "Real lead time", "Order by", "Suggested qty"].map(h => el("th", null, [h])))]),
     ]);
@@ -1305,14 +1313,25 @@
       let onHand = null;
       let transfersTotal = 0;
       let firstDate = null, lastDate = null;
+      let stockoutEvents = 0;
+      let wasPositive = false;
       sorted.forEach(m => {
         if (m.type === "count") onHand = m.qty;
         else if (m.type === "receivings") onHand = (onHand || 0) + m.qty;
         else if (m.type === "transfers") { onHand = (onHand || 0) - m.qty; transfersTotal += m.qty; }
         else if (m.type === "rejection") onHand = (onHand || 0) - m.qty;
+        if (onHand !== null) {
+          const isPositive = onHand > 0;
+          if (wasPositive && !isPositive) stockoutEvents++; // crossed from stocked to zero/below
+          wasPositive = isPositive;
+        }
         if (firstDate === null) firstDate = m.date;
         lastDate = m.date;
       });
+      if (stockoutEvents > 0) {
+        stockoutsBySku.set(sku, stockoutEvents);
+        totalStockoutEvents += stockoutEvents;
+      }
       if (onHand === null) return; // never saw a Count to establish a baseline
 
       const spanDays = (lastDate - firstDate) / 86400000;
@@ -1345,6 +1364,35 @@
     }
     container.appendChild(table);
     container.appendChild(el("p", { class: "note" }, ["Suggested qty is left blank - splitting into multiple POs needs an approval-limit ceiling only you can supply. This tool won't invent one."]));
+
+    // ---- Stockout count (historical, whole-ledger) ----
+    container.appendChild(el("h3", null, ["How many times has this actually happened"]));
+    if (totalStockoutEvents === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        "No ID in this ledger has crossed from having stock to zero-or-below yet, based on the Count/Receiving/Transfer/Rejection history read here."
+      ]));
+    } else {
+      container.appendChild(el("p", { class: "stat" }, [
+        `${totalStockoutEvents} stockout event${totalStockoutEvents === 1 ? "" : "s"} across ${stockoutsBySku.size} ID${stockoutsBySku.size === 1 ? "" : "s"}, counted from the ledger - not modeled, not estimated.`
+      ]));
+      const skuTable = el("table", null, [
+        el("thead", null, [el("tr", null, ["ID", "Stockout events"].map(h => el("th", null, [h])))]),
+      ]);
+      const skuTbody = el("tbody");
+      Array.from(stockoutsBySku.entries())
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([sku, count]) => {
+          skuTbody.appendChild(el("tr", null, [
+            el("td", null, [itemLabel(sku)]),
+            el("td", null, [String(count)]),
+          ]));
+        });
+      skuTable.appendChild(skuTbody);
+      container.appendChild(skuTable);
+      container.appendChild(el("p", { class: "note" }, [
+        "A stockout event is counted each time this ID's running on-hand crosses from above zero to zero or below, walking the ledger in date order. This is a record of what already happened, not a prediction - track it over time to see whether it's going down."
+      ]));
+    }
   }
 
   function renderAll() {
