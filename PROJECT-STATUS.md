@@ -205,3 +205,10 @@ filename search and then by worksheet-ID matching).
   match what the tab measures (does order size/season change vendor
   response), which reads more like a vendor-behavior test than a record of
   the user's own habits.
+- **v41** - `itemLabel()` (the "ID - Name" resolver used by Mix, Frequency,
+  and Shortfall) now prefers a "Name" column the user added directly to
+  `PO-INVENTORY-TABLE` (column U as of this writing - a user-maintained,
+  more-readable name per `ID`), falling back to Da Vinci File / ledger
+  names only for an `ID` that column doesn't cover. This is a display-only
+  change - no cleaning-script logic or column position assumption changed,
+  since the tool reads by header name (`"Name"`), not by column letter.

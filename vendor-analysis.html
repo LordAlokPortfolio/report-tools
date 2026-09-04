@@ -64,7 +64,7 @@
 </head>
 <body>
 
-<div class="version-badge">v40 - 2026-09-04 - Habits tab renamed to Sensitivity</div>
+<div class="version-badge">v41 - 2026-09-04 - itemLabel() now prefers PO-INVENTORY-TABLE's own "Name" column (user-added) over Da Vinci/ledger names</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -727,14 +727,18 @@
     }
     return false;
   }
-  // ID alone isn't readable -- ledgerRows (tbl_HISTORY) carries both ID and
-  // INVENTORY NAME, so label as "ID - Name" wherever an ID is shown to a person.
+  // ID alone isn't readable -- PO-INVENTORY-TABLE's own "Name" column (user-added,
+  // column U) is the preferred source, since it's the user's own readable naming.
+  // Da Vinci File / ledgerRows (tbl_HISTORY) fill in any ID that column doesn't cover.
   function itemLabel(id) {
-    if (!ledgerRows && !daVinciRows) return String(id);
+    if (!poRows.length && !ledgerRows && !daVinciRows) return String(id);
     if (!itemLabel._map) {
       itemLabel._map = new Map();
-      // Da Vinci File covers every code (not just ones with ledger movement),
-      // so build from it first, then fill any gaps from the ledger.
+      poRows.forEach(r => {
+        const rid = String(r["ID"] || "").trim();
+        const name = String(r["Name"] || "").trim();
+        if (rid && name && !itemLabel._map.has(rid)) itemLabel._map.set(rid, name);
+      });
       (daVinciRows || []).forEach(r => {
         const rid = String(r["ID"] || "").trim();
         const name = String(r["INVENTORY NAME"] || "").trim();
