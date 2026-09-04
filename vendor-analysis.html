@@ -6,7 +6,6 @@
 <title>Vendor &amp; Material Analysis — KV Custom Windows and Doors</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/2.32.2/js/msal-browser.min.js"></script>
-<script src="https://js.live.net/v7.2/OneDrive.js"></script>
 <style>
   :root {
     --bg: #f7f7f5; --panel: #ffffff; --border: #dcdcd6; --text: #1c1c1a;
@@ -69,13 +68,10 @@
         <button class="primary" id="signInBtn">Sign in with Microsoft</button>
       </div>
       <div class="field">
-        <button class="primary" id="pickFileBtn" disabled>Choose workbook (OneDrive)</button>
-      </div>
-      <div class="field">
         <button class="primary" id="refreshBtn" disabled>Refresh data</button>
       </div>
     </div>
-    <p class="note" id="loadStatus">Sign in, then pick the workbook once from OneDrive. After that, Refresh re-reads whatever is currently saved in it — nothing is uploaded anywhere; the file is read live from your OneDrive.</p>
+    <p class="note" id="loadStatus">Sign in, then Refresh re-reads whatever is currently saved in the workbook at its fixed OneDrive path — nothing is uploaded anywhere; the file is read live from OneDrive.</p>
   </section>
 
   <section class="panel" id="manualUploadPanel">
@@ -152,14 +148,17 @@
     },
     cache: { cacheLocation: "localStorage" },
   };
-  const GRAPH_SCOPES = ["User.Read", "Files.Read.Selected"];
+  const GRAPH_SCOPES = ["User.Read", "Files.Read"];
+  // Path relative to OneDrive root, from "C:\Users\akulkarni\OneDrive - KV Custom
+  // Windows & Doors\WAREHOUSE AUDITS 2026\tblINVENTORY_PO.xlsx" -- everything after
+  // the "OneDrive - KV Custom Windows & Doors\" part.
+  const WORKBOOK_PATH = "WAREHOUSE AUDITS 2026/tblINVENTORY_PO.xlsx";
   const PO_SHEET_NAME = "PO-INVENTORY-TABLE";
   const HISTORY_SHEET_NAME = "HISTORY SHEET"; // table tbl_HISTORY lives on this sheet
   const BOM_SHEET_NAME = "BOTTLENECK";        // still being built per the user -- may not have BOM columns yet
 
   let msalApp = null;
   let graphAccessToken = null;
-  let oneDriveFile = null; // { driveId, itemId }
 
   // ---------- state ----------
   let poRows = [];       // array of row objects, keyed by header
@@ -298,14 +297,14 @@
 
   async function fetchSheetRows(sheetName) {
     if (!sheetName) return null;
-    const path = `/drives/${oneDriveFile.driveId}/items/${oneDriveFile.itemId}` +
+    const path = `/me/drive/root:/${encodeURI(WORKBOOK_PATH)}:` +
       `/workbook/worksheets('${encodeURIComponent(sheetName)}')/usedRange(valuesOnly=true)`;
     const data = await graphGet(path);
     return usedRangeToRows(data.values);
   }
 
   async function refreshFromOneDrive() {
-    if (!oneDriveFile) return;
+    if (!graphAccessToken) return;
     document.getElementById("loadStatus").textContent = "Reading live data from OneDrive…";
     try {
       poRows = (await fetchSheetRows(PO_SHEET_NAME)) || [];
@@ -318,7 +317,7 @@
       populateLanding();
     } catch (err) {
       document.getElementById("loadStatus").textContent =
-        "Could not read from OneDrive: " + err.message + " — check the sheet name constants (PO_SHEET_NAME / HISTORY_SHEET_NAME / BOM_SHEET_NAME) match the live workbook's tab names exactly.";
+        "Could not read from OneDrive: " + err.message + " — check WORKBOOK_PATH and the sheet name constants (PO_SHEET_NAME / HISTORY_SHEET_NAME / BOM_SHEET_NAME) match the live workbook exactly.";
     }
   }
 
@@ -331,44 +330,15 @@
         scopes: GRAPH_SCOPES, account: loginResult.account,
       }).catch(() => msalApp.acquireTokenPopup({ scopes: GRAPH_SCOPES, account: loginResult.account }));
       graphAccessToken = tokenResult.accessToken;
-      document.getElementById("loadStatus").textContent = "Signed in. Now choose the workbook from OneDrive.";
-      document.getElementById("pickFileBtn").disabled = false;
+      document.getElementById("loadStatus").textContent = "Signed in.";
+      document.getElementById("refreshBtn").disabled = false;
+      refreshFromOneDrive();
     } catch (err) {
       document.getElementById("loadStatus").textContent = "Sign-in failed: " + err.message;
     }
   });
 
-  document.getElementById("pickFileBtn").addEventListener("click", function () {
-    if (!graphAccessToken) return;
-    OneDrive.open({
-      clientId: MSAL_CONFIG.auth.clientId,
-      action: "share",
-      multiSelect: false,
-      advanced: { accessToken: graphAccessToken, endpointHint: "https://graph.microsoft.com/" },
-      success: function (response) {
-        const item = response.value[0];
-        oneDriveFile = { driveId: item.parentReference.driveId, itemId: item.id };
-        localStorage.setItem("vendorAnalysisOneDriveFile", JSON.stringify(oneDriveFile));
-        document.getElementById("refreshBtn").disabled = false;
-        refreshFromOneDrive();
-      },
-      cancel: function () {},
-      error: function (err) {
-        document.getElementById("loadStatus").textContent = "File picker error: " + (err && err.message ? err.message : String(err));
-      },
-    });
-  });
-
   document.getElementById("refreshBtn").addEventListener("click", refreshFromOneDrive);
-
-  // Restore a previously picked file's reference so a returning visit doesn't need re-picking
-  // (still needs a fresh sign-in for a valid access token).
-  (function restoreOneDriveFile() {
-    const saved = localStorage.getItem("vendorAnalysisOneDriveFile");
-    if (saved) {
-      try { oneDriveFile = JSON.parse(saved); document.getElementById("refreshBtn").disabled = false; } catch (e) {}
-    }
-  })();
 
   // ---------- landing ----------
   function populateLanding() {
