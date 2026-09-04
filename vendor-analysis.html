@@ -437,30 +437,47 @@
       container.appendChild(notEnoughHistory(orders.length));
       return;
     }
+    orders.sort((a, b) => a.date - b.date);
     const leadTimes = orders.map(o => o.leadTime);
-    const med = Math.ceil(median(leadTimes));
+    const overallMed = Math.ceil(median(leadTimes));
     const min = Math.min(...leadTimes), max = Math.max(...leadTimes);
+
+    // A vendor's lead time isn't necessarily stable over a multi-year history --
+    // if it shifted (e.g. 10 days -> 35 days), a long-window median blends the old
+    // and new regimes into a number that describes neither. So: the RECENT figure
+    // (last up to 3 orders) is the headline; the full-timeline median is shown as
+    // context, with a shift called out explicitly when the two diverge.
+    const recentN = Math.min(3, orders.length);
+    const recentOrders = orders.slice(-recentN);
+    const recentMed = Math.ceil(median(recentOrders.map(o => o.leadTime)));
+    const shifted = Math.abs(recentMed - overallMed) >= 3 || Math.abs(recentMed - overallMed) / overallMed >= 0.3;
+
     container.appendChild(el("p", null, [
-      el("span", { class: "stat" }, [`${med} business days`]),
-      ` median lead time, rounded up, based on ${orders.length} closed orders in this timeline. `,
-      el("span", { class: "stat" }, [`Ranged from ${min} to ${max} business days`]),
-      " across individual orders — see the per-PO breakdown below for the actual spread."
+      el("span", { class: "stat" }, [`${recentMed} business days`]),
+      ` — current lead time, based on the ${recentN} most recent closed order${recentN === 1 ? "" : "s"}.`
+    ]));
+    if (shifted) {
+      container.appendChild(el("div", { class: "callout warn" }, [
+        `This vendor's recent lead time (${recentMed} bd) differs meaningfully from the ${orders.length}-order timeline median (${overallMed} bd). Something changed — treat the recent figure as the current reality, not the long-run median.`
+      ]));
+    }
+    container.appendChild(el("p", { class: "note" }, [
+      `For context: across all ${orders.length} closed orders in this timeline, median is ${overallMed} bd, ranging from ${min} to ${max} bd.`
     ]));
     container.appendChild(el("p", null, [
       "If ordering today, expect receipt around ",
-      el("span", { class: "stat" }, [fmtDate(new Date(Date.now() + med * 86400000))]),
-      "."
+      el("span", { class: "stat" }, [fmtDate(new Date(Date.now() + recentMed * 86400000))]),
+      " (using the recent figure)."
     ]));
 
-    orders.sort((a, b) => a.date - b.date);
     container.appendChild(el("h2", null, ["Per-PO lead time"]));
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["PO No", "PO Date", "PO DateReceived", "Lead time (business days)", "Vs. median"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["PO No", "PO Date", "PO DateReceived", "Lead time (business days)", "Vs. recent"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     orders.forEach(o => {
-      const diff = o.leadTime - med;
-      const diffText = diff === 0 ? "on median" : (diff > 0 ? `+${diff} slower` : `${diff} faster`);
+      const diff = o.leadTime - recentMed;
+      const diffText = diff === 0 ? "on recent" : (diff > 0 ? `+${diff} slower` : `${diff} faster`);
       tbody.appendChild(el("tr", null, [
         el("td", null, [String(o.poNo)]),
         el("td", null, [fmtDate(o.date)]),
@@ -490,7 +507,7 @@
       byItem.get(item).push(r);
     });
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "First cost", "Latest cost", "Change", "Biggest single jump"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["Item", "Orders", "First cost", "Latest cost", "Change", "Biggest single jump", "Tied to"].map(h => el("th", null, [h])))]),
       ]);
     const tbody = el("tbody");
     const entries = [];
@@ -503,25 +520,73 @@
       for (let i = 1; i < itemRows.length; i++) {
         biggestJump = Math.max(biggestJump, Math.abs(itemRows[i]["UnitCost"] - itemRows[i - 1]["UnitCost"]));
       }
-      entries.push({ item, count: itemRows.length, first, last, pctChange, biggestJump });
+
+      // Only look for what an INCREASE might be tied to -- correlation only, never
+      // a causal claim, and only when there's enough paired data to mean anything.
+      let tiedTo = null;
+      const isIncrease = pctChange !== null && pctChange > 0.5; // >0.5% -- ignore noise-level "increases"
+      if (isIncrease) {
+        const costs = itemRows.map(r => r["UnitCost"]);
+        const qtys = itemRows.map(r => typeof r["Quantity"] === "number" ? r["Quantity"] : null);
+        const leadPairs = itemRows
+          .filter(isClosed)
+          .map(r => {
+            const bd = businessDaysBetween(toDate(r["PO Date"]), toDate(r["PO DateReceived"]));
+            return bd === null ? null : { cost: r["UnitCost"], leadTime: bd };
+          })
+          .filter(p => p !== null);
+        const qtyPairs = itemRows
+          .map((r, i) => (qtys[i] === null ? null : { cost: r["UnitCost"], qty: qtys[i] }))
+          .filter(p => p !== null);
+
+        let corrLead = leadPairs.length >= MIN_HISTORY
+          ? pearsonCorrelation(leadPairs.map(p => p.cost), leadPairs.map(p => p.leadTime)) : null;
+        let corrQty = qtyPairs.length >= MIN_HISTORY
+          ? pearsonCorrelation(qtyPairs.map(p => p.cost), qtyPairs.map(p => p.qty)) : null;
+
+        if (corrLead === null && corrQty === null) {
+          tiedTo = "not enough history to check";
+        } else {
+          const candidates = [];
+          if (corrLead !== null) candidates.push({ label: "lead time", r: corrLead });
+          if (corrQty !== null) candidates.push({ label: "order size", r: corrQty });
+          candidates.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+          const best = candidates[0];
+          tiedTo = Math.abs(best.r) >= 0.5
+            ? `moves with ${best.label} (r=${best.r.toFixed(2)})`
+            : `no clear tie to lead time or order size (r=${candidates.map(c => c.label + " " + c.r.toFixed(2)).join(", ")})`;
+        }
+      }
+
+      entries.push({ item, count: itemRows.length, first, last, pctChange, biggestJump, tiedTo });
     });
     entries.sort((a, b) => Math.abs(b.pctChange || 0) - Math.abs(a.pctChange || 0));
+    const anyIncrease = entries.some(e => e.pctChange !== null && e.pctChange > 0.5);
     entries.forEach(e => {
-      const changeClass = e.pctChange === null ? "" : (e.pctChange > 0 ? "change-up" : e.pctChange < 0 ? "change-down" : "");
+      const changeClass = e.pctChange === null ? "" : (e.pctChange > 0.5 ? "change-up" : e.pctChange < -0.5 ? "change-down" : "");
       const rowClass = e.count < 4 ? "thin-row" : "";
+      const changeText = e.pctChange === null ? "—"
+        : Math.abs(e.pctChange) <= 0.5 ? "No change"
+        : (e.pctChange > 0 ? "+" : "") + e.pctChange.toFixed(1) + "%";
       tbody.appendChild(el("tr", { class: rowClass }, [
         el("td", null, [e.item]),
         el("td", { class: e.count < 4 ? "low-confidence" : "" }, [String(e.count)]),
         el("td", null, [fmtMoney(e.first)]),
         el("td", null, [fmtMoney(e.last)]),
-        el("td", { class: changeClass }, [e.pctChange === null ? "—" : (e.pctChange > 0 ? "+" : "") + e.pctChange.toFixed(1) + "%"]),
+        el("td", { class: changeClass }, [changeText]),
         el("td", null, [fmtMoney(e.biggestJump)]),
+        el("td", { class: "note" }, [e.tiedTo || "—"]),
       ]));
     });
     table.appendChild(tbody);
     if (entries.length === 0) {
       container.appendChild(el("p", { class: "insufficient" }, ["No item in this vendor/timeline has more than one order with a usable UnitCost — nothing to compare."]));
       return;
+    }
+    if (!anyIncrease) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        `No price increase from this vendor across any item in this timeline.`
+      ]));
     }
     container.appendChild(table);
   }
