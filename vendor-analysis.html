@@ -64,7 +64,7 @@
 </head>
 <body>
 
-<div class="version-badge">v39 - 2026-09-04 - Tabs grouped with a divider; Frequency sorted by order count; Habits heading rewritten; About tab leads with what each tab does</div>
+<div class="version-badge">v40 - 2026-09-04 - Habits tab renamed to Sensitivity</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -1095,11 +1095,11 @@
     container.appendChild(table);
   }
 
-  // ---------- View 4: Habits ----------
+  // ---------- View 4: Sensitivity ----------
   function renderHabits() {
     const container = document.getElementById("tab-habits");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Habits - does a bigger order, or a different time of year, get delivered faster or slower?"]));
+    container.appendChild(el("h2", null, ["Sensitivity - does a bigger order, or a different time of year, get delivered faster or slower?"]));
     const rows = filteredRows().filter(isClosed).filter(r => typeof r["Quantity"] === "number");
     if (rows.length === 0) {
       container.appendChild(notEnoughHistory(0));

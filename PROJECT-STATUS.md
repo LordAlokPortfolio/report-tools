@@ -23,7 +23,7 @@ reporting on it:
    tabs plus an About tab against the cleaned data - all of them price-free
    (see "Pricing is unreliable" below for why). The tab bar is split into
    two visually divided groups: vendor-scoped (Speed, Shortfall, Frequency,
-   Mix, Habits, Bottleneck) and whole-inventory (Concentration, Runout),
+   Mix, Sensitivity, Bottleneck) and whole-inventory (Concentration, Runout),
    followed by About.
 
 ## The workbook (live, in OneDrive)
@@ -80,7 +80,7 @@ flagged as unreliable.
 | **Shortfall** (replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
 | **Frequency** (replaces Pattern's slot, was "Reorder Cadence") | Working | Gap between consecutive `PO Date`s for the same item, restricted to stock items (`isStockItem()`). Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. Sorted by total order count descending (most-ordered item first), not by recency. |
 | **Mix** | Working | Per selected vendor: MVP item by share of order count (not quantity/volume) - which single code makes up the biggest share of everything ordered from that vendor. |
-| **Habits** | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading rewritten (v39) into a plain sentence: "does a bigger order, or a different time of year, get delivered faster or slower?" |
+| **Sensitivity** (renamed from "Habits" in v40) | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading (v39): "does a bigger order, or a different time of year, get delivered faster or slower?" |
 | **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
 | **Concentration** (was "Vendor Concentration") | Working | Whole-building view (ignores vendor/timeline picker, like Runout). Columns: Vendor, Codes ordered, Total codes by vendor, % of assigned catalog ordered (Da Vinci master list), Most-ordered code. Custom-order rows excluded via `isStockItem()`. |
 | **Runout** | Working, price-independent. On-hand and usage rate computed from `tbl_HISTORY` (`Count`/`RECEIVING`/`TRANSFER`/`REJECTION`, singular and plural both matched), lead time from the PO table's closed orders, matched via `ID`. `REJECTION` subtracts on-hand but is excluded from usage-rate demand. |
@@ -201,3 +201,7 @@ filename search and then by worksheet-ID matching).
   English sentence. About tab and the spec doc both restructured to open
   directly with what each tab does, instruction-manual style, instead of
   starting with unprompted narrative.
+- **v40** - "Habits" tab renamed to "Sensitivity" - the old name didn't
+  match what the tab measures (does order size/season change vendor
+  response), which reads more like a vendor-behavior test than a record of
+  the user's own habits.
