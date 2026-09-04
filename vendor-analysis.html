@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v27 - 2026-09-04 - Reuse one Excel session instead of re-opening every call</div>
+<div class="version-badge">v28 - 2026-09-04 - Read large sheets in chunks, not one giant response</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -406,14 +406,34 @@
     return match.id;
   }
 
+  const ROW_CHUNK_SIZE = 2000; // mirrors clean-po-data.ts's CHUNK_SIZE
+
+  // A single usedRange(valuesOnly=true) call on a large sheet (e.g. 42k+ rows)
+  // exceeds Graph's response payload limit -- same problem the Office Script hit,
+  // fixed the same way: read in row chunks via explicit range addresses instead
+  // of asking for the whole sheet's values in one response.
   async function fetchSheetRows(sheetName) {
     if (!sheetName) return null;
     const itemId = await findWorkbookItemId();
     const sheetId = await findWorksheetId(sheetName);
-    const path = `/me/drive/items/${itemId}` +
-      `/workbook/worksheets('${sheetId}')/usedRange(valuesOnly=true)`;
-    const data = await graphGet(path);
-    return usedRangeToRows(data.values);
+    const base = `/me/drive/items/${itemId}/workbook/worksheets('${sheetId}')`;
+
+    // Metadata only (address/rowCount/columnCount) -- no cell values, so this
+    // request stays small even on a huge sheet.
+    const meta = await graphGet(`${base}/usedRange(valuesOnly=true)?$select=address,rowCount,columnCount`);
+    const addr = meta.address.includes("!") ? meta.address.split("!")[1] : meta.address;
+    const [, endColLetter] = addr.split(":");
+    const lastCol = endColLetter.match(/[A-Z]+/)[0];
+    const totalRows = meta.rowCount;
+
+    const allRows = [];
+    for (let start = 1; start <= totalRows; start += ROW_CHUNK_SIZE) {
+      const end = Math.min(start + ROW_CHUNK_SIZE - 1, totalRows);
+      const rangeAddr = `A${start}:${lastCol}${end}`;
+      const chunk = await graphGet(`${base}/range(address='${rangeAddr}')?$select=values`);
+      allRows.push(...chunk.values);
+    }
+    return usedRangeToRows(allRows);
   }
 
   async function refreshFromOneDrive() {
