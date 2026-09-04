@@ -70,7 +70,7 @@
 </head>
 <body>
 
-<div class="version-badge">v44 - 2026-09-04 - Fixed vendorBySku to cover open POs too (Actions was silently empty for any SKU without a closed order yet); moved Bottleneck to the whole-inventory group (its computation already ignores the vendor picker)</div>
+<div class="version-badge">v45 - 2026-09-04 - About tab: each tab's explanation cut to one sentence, grouped under Category 1 (vendor-scoped) / Category 2 (whole-inventory); added the missing Actions entry</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -1503,37 +1503,18 @@
       paragraphs.forEach(p => container.appendChild(el("p", null, [p])));
     };
 
-    section("Speed", [
-      "How long this vendor actually takes right now, not what they quoted once. Weighted toward their most recent orders, because a vendor's pace can genuinely shift and blending that shift into years of older history would hide it instead of catching it."
-    ]);
+    container.appendChild(el("h3", null, ["Category 1 - about the vendor selected above"]));
+    section("Speed", ["How long this vendor actually takes right now, weighted toward their most recent orders."]);
+    section("Shortfall", ["What was ordered vs. what actually arrived, per item, for this vendor."]);
+    section("Frequency", ["Which items are being reordered more often than their own history suggests."]);
+    section("Mix", ["Which single item is the biggest share of everything ordered from this vendor - the MVP item."]);
+    section("Sensitivity", ["Does a bigger order, or a different time of year, get delivered faster or slower by this vendor."]);
+    section("Actions", ["One card per SKU this vendor supplies that's coming due for reorder, soonest first."]);
 
-    section("Shortfall", [
-      "What was ordered vs. what actually arrived, per item, for the vendor selected above. Catches a vendor who quietly ships less than the PO said, order after order - a pattern nobody sees unless someone is counting boxes against the PO."
-    ]);
-
-    section("Frequency", [
-      "Which items are being reordered more often than their own history suggests, ranked by how many times each has been ordered. It doesn't say why the rhythm changed - could be rising usage, could be nobody noticing - it just flags it."
-    ]);
-
-    section("Mix", [
-      "For the vendor selected above: which single item is the biggest share of everything ordered from them, by order count. That's the MVP item - the one worth watching most closely if this vendor ever became unreliable."
-    ]);
-
-    section("Sensitivity", [
-      "Does a bigger order, or a different time of year, get delivered faster or slower by this vendor. About this vendor's behavior toward you specifically, not a comparison between vendors."
-    ]);
-
-    section("Bottleneck", [
-      "For anything built from multiple purchased parts: a build only moves as fast as its slowest component. Pulls the real lead time for each part in a bill of materials and reports the date that actually governs the build."
-    ]);
-
-    section("Concentration", [
-      "Ignores the vendor picked above - this is a whole-building view. Which vendors would hurt the most if they disappeared: how many inventory codes each one is the only source for, and what share of everything assigned to them has actually been ordered."
-    ]);
-
-    section("Runout", [
-      "Also ignores the vendor picked above, since running out of something is a whole-building question, not a per-vendor one. Reads the inventory ledger directly - on hand, usage rate, lead time - and says plainly whether ordering today is soon enough."
-    ]);
+    container.appendChild(el("h3", null, ["Category 2 - whole-inventory, ignores the vendor picked above"]));
+    section("Bottleneck", ["For anything built from multiple parts, the slowest component's lead time sets the build date."]);
+    section("Concentration", ["Which vendors would hurt the most if they disappeared, by how many codes only they supply."]);
+    section("Runout", ["What's about to run dry across the whole building, and whether ordering today is soon enough."]);
 
     section("The one rule behind all of it", [
       "The tool only says what the data can prove. Early drafts kept drifting toward inventing things - a dollar figure for what a delay cost, a recommendation to drop a vendor, an explanation for why a price moved. None of that lives in the data, so it would have been made up, and a tool that quietly guesses is worse than one that says \"I don't have enough here to tell you.\" Every number this tool prints traces back to an actual column in the workbook, to arithmetic on those columns, or to something the user typed in themselves."
