@@ -24,7 +24,6 @@ no report view uses them.
 
 | Column | Reason |
 |---|---|
-| `ID` | Not used by any report view. |
 | `SpecialRequest` | Free text, not used by any report view. |
 | `QtyThisShip` | Not used by any report view (yet). |
 | `Scanned` | Not used by any report view. |
@@ -90,6 +89,29 @@ can't lose information.
 **Decision: replace with that row's `Quantity` value.** Same resolution as
 the `QtyReceived = 0` + closed case above — if `QtyReceived` isn't a usable
 number at all, treat it the same way: fall back to `Quantity`.
+
+### ID — resolved via lookup against the "Da Vinci File" sheet
+**Decision: no longer excluded.** The workbook now also holds a "Da Vinci
+File" reference sheet (inventory master: `ID, INVENTORY ID, INVENTORY NAME,
+DESCRIPTION, ...`) whose `ID` column is the actual unique inventory-code ID
+used elsewhere (the user's history table). Rule: match this sheet's
+`INVENTORY ID` (after whitespace trim) against Da Vinci File's `INVENTORY
+ID`, and replace this sheet's `ID` cell with Da Vinci File's `ID` value for
+that match. **No match found → left unchanged**, not blanked or guessed.
+
+### Supplier ID — resolved via lookup against the "Supplier File" sheet
+**Decision: `Supplier ID` cells are overwritten with the supplier's name.**
+The workbook also holds a "Supplier File" reference sheet (`SUPPLIER ID,
+SUPPLIER NAME, ADDRESS, ...`). Rule: match `Supplier ID` (after whitespace
+trim) against Supplier File's `SUPPLIER ID`, and replace the cell with
+Supplier File's `SUPPLIER NAME`. **No match found → left unchanged** (still
+the original code, not blanked).
+
+**Explicitly considered and rejected:** keeping the Supplier ID code
+alongside a new Supplier Name column, so the code (a stable join key) isn't
+lost and the lookup can be safely re-run later. User confirmed the
+overwrite is intentional anyway — noting the tradeoff here so it isn't
+forgotten if this ever needs re-joining to Supplier ID elsewhere.
 
 ### Explicitly NOT cleaned / no rule
 
