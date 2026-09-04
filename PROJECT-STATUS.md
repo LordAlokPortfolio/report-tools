@@ -1,7 +1,7 @@
-# Project Status - PO Cleaning & Vendor Analysis (through v22)
+# Project Status - PO Cleaning & Vendor Analysis (through v39)
 
 Snapshot of what this branch (`alok-idea/cleaning-po-inventory-table-and-vendor-analysis`)
-has actually built, as of the vendor-analysis.html "v22" tag. Written so a
+has actually built, as of the vendor-analysis.html "v39" tag. Written so a
 later session (or a later you) can pick this up without re-deriving it.
 Supersedes the file's original "through v20" version - kept as one file,
 not a new one per version, so it doesn't fork into stale copies.
@@ -19,9 +19,12 @@ reporting on it:
    resolves `ID` and `Supplier ID` via lookups against two reference sheets,
    and reorders columns. Every rule is documented in `CLEANING-LOG.md`.
 2. **Reporting** (`vendor-analysis.html`) - a standalone web page, not yet
-   linked into the main toolkit's `index.html`, implementing seven analysis
-   views against the cleaned data - all of them price-free (see "Pricing is
-   unreliable" below for why).
+   linked into the main toolkit's `index.html`, implementing eight analysis
+   tabs plus an About tab against the cleaned data - all of them price-free
+   (see "Pricing is unreliable" below for why). The tab bar is split into
+   two visually divided groups: vendor-scoped (Speed, Shortfall, Frequency,
+   Mix, Habits, Bottleneck) and whole-inventory (Concentration, Runout),
+   followed by About.
 
 ## The workbook (live, in OneDrive)
 
@@ -63,23 +66,25 @@ file-upload fallback panel still exists in case the OneDrive path breaks.
 Nothing is cached beyond the browser session except the workbook's item ID
 (in `localStorage`, not sensitive). Every "Refresh" re-reads live.
 
-## The seven views - current state
+## The eight tabs (plus About) - current state
 
 Creep and Pattern are **retired**, not just fixed - their core premise was
 price itself ("is price rising," "does cost move with lead time"), so once
 `UnitCost` is untrustworthy there's no non-cost version of either question
-to fall back to. Replaced with three new views built only from data nobody
-has flagged as unreliable.
+to fall back to. Replaced with new views built only from data nobody has
+flagged as unreliable.
 
-| View | Status | Notes |
+| Tab | Status | Notes |
 |---|---|---|
 | **Speed** | Working | Headline is the median of the vendor's last 3 closed orders ("current pace"), not a multi-year blended median - a vendor's lead time can genuinely shift (e.g. 10 days -> 35 days) and a long-window median hides that. Full-timeline median shown as context, with an explicit callout when the two diverge. Per-PO table, newest first. |
-| **Short-shipping** (new, replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
-| **Reorder Cadence** (new, replaces Pattern's slot) | Working | Gap between consecutive `PO Date`s for the same item. Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. |
-| **Vendor Concentration** (new) | Working | Whole-building view (ignores vendor/timeline picker, like Runout). Which vendors are the sole source for at least one item, based on every stock item's supplier history. |
-| **Habits** | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. |
+| **Shortfall** (replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
+| **Frequency** (replaces Pattern's slot, was "Reorder Cadence") | Working | Gap between consecutive `PO Date`s for the same item, restricted to stock items (`isStockItem()`). Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. Sorted by total order count descending (most-ordered item first), not by recency. |
+| **Mix** | Working | Per selected vendor: MVP item by share of order count (not quantity/volume) - which single code makes up the biggest share of everything ordered from that vendor. |
+| **Habits** | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading rewritten (v39) into a plain sentence: "does a bigger order, or a different time of year, get delivered faster or slower?" |
 | **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
-| **Runout** | Working, price-independent. On-hand and usage rate computed from `tbl_HISTORY` (Count/Receivings/Transfers), lead time from the PO table's closed orders, matched via `ID`. |
+| **Concentration** (was "Vendor Concentration") | Working | Whole-building view (ignores vendor/timeline picker, like Runout). Columns: Vendor, Codes ordered, Total codes by vendor, % of assigned catalog ordered (Da Vinci master list), Most-ordered code. Custom-order rows excluded via `isStockItem()`. |
+| **Runout** | Working, price-independent. On-hand and usage rate computed from `tbl_HISTORY` (`Count`/`RECEIVING`/`TRANSFER`/`REJECTION`, singular and plural both matched), lead time from the PO table's closed orders, matched via `ID`. `REJECTION` subtracts on-hand but is excluded from usage-rate demand. |
+| **About** (new) | Working | In-page tab describing the tool; restructured (v39) to lead directly with what each tab does, instruction-manual style, instead of opening with narrative. |
 
 ## Pricing is unreliable - the reason this status doc exists
 
@@ -168,3 +173,31 @@ filename search and then by worksheet-ID matching).
   Short-shipping, Reorder Cadence, and Vendor Concentration. Dropped the
   cost columns from Habits and Bottleneck. As of this version, no view in
   the tool depends on price at all.
+- **v23-v37** (not individually logged here) - Added the Mix tab (MVP by
+  order-count share, corrected from an initial quantity/volume-share
+  implementation). Renamed "Reorder Cadence" to "Frequency" and "Vendor
+  Concentration" to "Concentration." Fixed Runout's TYPE matching to accept
+  singular `RECEIVING`/`TRANSFER`/`REJECTION` (real ledger values), not just
+  plural. Confirmed `REJECTION` subtracts on-hand but is excluded from
+  usage-rate demand. Fixed Short-shipping and Frequency to group by `ID`
+  (canonical resolved identifier) instead of `ITEM NO` (vendor-specific,
+  unreliable), with `isStockItem()` filtering added to both. Reworked
+  Concentration's columns: replaced "Only they supply" (which coincidentally
+  matched "Codes ordered") with "Total codes by vendor," reordered columns,
+  converted "Codes assigned to them" to a percentage instead of a raw
+  fraction. Added the About tab. Rewrote
+  `CLEANING-PO-INVENTORY-TABLE-AND-VENDOR-ANALYSIS-SPEC.md` from stale
+  pre-build planning notes into continuous human prose. Restored
+  `PO DateRequired` as the one narrow exception in the closed-order
+  `PO DateReceived` NULL-fill rule after briefly dropping it entirely.
+  Security incident: a passphrase value was leaked into a commit message,
+  rotated to a new passphrase, offending commit reworded via interactive
+  rebase and force-push.
+- **v38** - New About tab content; spec rewritten in plain human prose.
+- **v39** - Tab bar split into two visually divided groups (Speed,
+  Shortfall, Frequency, Mix, Habits, Bottleneck | Concentration, Runout),
+  with About after. Frequency's sort fixed to rank by total order count
+  descending instead of recency. Habits' heading rewritten into a plain
+  English sentence. About tab and the spec doc both restructured to open
+  directly with what each tab does, instruction-manual style, instead of
+  starting with unprompted narrative.
