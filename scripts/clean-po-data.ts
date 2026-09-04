@@ -46,7 +46,7 @@
 function main(workbook: ExcelScript.Workbook) {
   const SHEET_NAME = ""; // leave blank to use the active sheet, or set e.g. "PO History"
   const DA_VINCI_SHEET_NAME = "Da Vinci File";
-  const SUPPLIER_SHEET_NAME = "Supplier File";
+  const SUPPLIER_SHEET_NAME = "SUPPLIER FILE";
   const CHUNK_SIZE = 2000; // rows per read/write; lower this if you hit the payload limit
 
   const sheet = SHEET_NAME
