@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v17 — 2026-09-04 — Pattern collapses repeated "no link" rows</div>
+<div class="version-badge">v18 — 2026-09-04 — Fixed Creep's zero-cost divide-by-zero bug</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -493,9 +493,6 @@
     const container = document.getElementById("tab-creep");
     container.innerHTML = "";
     container.appendChild(el("h2", null, ["Creep — price rising quietly over many orders"]));
-    container.appendChild(el("p", { class: "note" }, [
-      "Sorted by size of change, biggest first. Rows with only 2–3 orders are dimmed — thin evidence, worth noting but not treating the same as an item with a long history."
-    ]));
     const rows = filteredRows().filter(r => typeof r["UnitCost"] === "number");
     const byItem = new Map();
     rows.forEach(r => {
@@ -504,16 +501,17 @@
       if (!byItem.has(item)) byItem.set(item, []);
       byItem.get(item).push(r);
     });
-    const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "First cost", "Latest cost", "Change", "Biggest single jump", "Tied to"].map(h => el("th", null, [h])))]),
-      ]);
-    const tbody = el("tbody");
     const entries = [];
     byItem.forEach((itemRows, item) => {
       if (itemRows.length < 2) return; // need at least two points to show a change
       itemRows.sort((a, b) => toDate(a["PO Date"]) - toDate(b["PO Date"]));
       const first = itemRows[0]["UnitCost"], last = itemRows[itemRows.length - 1]["UnitCost"];
+      // Percent change is undefined when starting from $0 (a real, legitimate value --
+      // samples/internal transfers) -- dividing by zero can't be silently treated as
+      // "no change" when the item clearly went from nothing to something.
       const pctChange = first !== 0 ? ((last - first) / first) * 100 : null;
+      const fromZero = first === 0 && last > 0;
+      const isIncrease = fromZero || (pctChange !== null && pctChange > 0.5);
       let biggestJump = 0;
       for (let i = 1; i < itemRows.length; i++) {
         biggestJump = Math.max(biggestJump, Math.abs(itemRows[i]["UnitCost"] - itemRows[i - 1]["UnitCost"]));
@@ -522,7 +520,6 @@
       // Only look for what an INCREASE might be tied to -- correlation only, never
       // a causal claim, and only when there's enough paired data to mean anything.
       let tiedTo = null;
-      const isIncrease = pctChange !== null && pctChange > 0.5; // >0.5% -- ignore noise-level "increases"
       if (isIncrease) {
         const costs = itemRows.map(r => r["UnitCost"]);
         const qtys = itemRows.map(r => typeof r["Quantity"] === "number" ? r["Quantity"] : null);
@@ -556,37 +553,59 @@
         }
       }
 
-      entries.push({ item, count: itemRows.length, first, last, pctChange, biggestJump, tiedTo });
+      entries.push({ item, count: itemRows.length, first, last, pctChange, fromZero, isIncrease, biggestJump, tiedTo });
     });
-    entries.sort((a, b) => Math.abs(b.pctChange || 0) - Math.abs(a.pctChange || 0));
-    const anyIncrease = entries.some(e => e.pctChange !== null && e.pctChange > 0.5);
-    entries.forEach(e => {
-      const changeClass = e.pctChange === null ? "" : (e.pctChange > 0.5 ? "change-up" : e.pctChange < -0.5 ? "change-down" : "");
+
+    if (entries.length === 0) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No item in this vendor/timeline has more than one order with a usable UnitCost — nothing to compare."]));
+      return;
+    }
+
+    const increased = entries.filter(e => e.isIncrease);
+    const notIncreasedCount = entries.length - increased.length;
+
+    if (increased.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        `No price increase from this vendor across any of the ${entries.length} items with more than one order in this timeline.`
+      ]));
+      return;
+    }
+
+    // Sort worst first: a from-$0 jump has no percentage to compare with, but it's
+    // an unambiguous new cost, so it sorts above any percentage-based increase.
+    increased.sort((a, b) => {
+      const sa = a.fromZero ? Infinity : a.pctChange;
+      const sb = b.fromZero ? Infinity : b.pctChange;
+      return sb - sa;
+    });
+
+    container.appendChild(el("p", { class: "stat" }, [
+      `${increased.length} of ${entries.length} items increased in price in this timeline:`
+    ]));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "First cost", "Latest cost", "Change", "Biggest single jump", "Tied to"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    increased.forEach(e => {
       const rowClass = e.count < 4 ? "thin-row" : "";
-      const changeText = e.pctChange === null ? "—"
-        : Math.abs(e.pctChange) <= 0.5 ? "No change"
-        : (e.pctChange > 0 ? "+" : "") + e.pctChange.toFixed(1) + "%";
+      const changeText = e.fromZero ? "New cost (was $0)" : "+" + e.pctChange.toFixed(1) + "%";
       tbody.appendChild(el("tr", { class: rowClass }, [
         el("td", null, [e.item]),
         el("td", { class: e.count < 4 ? "low-confidence" : "" }, [String(e.count)]),
         el("td", null, [fmtMoney(e.first)]),
         el("td", null, [fmtMoney(e.last)]),
-        el("td", { class: changeClass }, [changeText]),
+        el("td", { class: "change-up" }, [changeText]),
         el("td", null, [fmtMoney(e.biggestJump)]),
         el("td", { class: "note" }, [e.tiedTo || "—"]),
       ]));
     });
     table.appendChild(tbody);
-    if (entries.length === 0) {
-      container.appendChild(el("p", { class: "insufficient" }, ["No item in this vendor/timeline has more than one order with a usable UnitCost — nothing to compare."]));
-      return;
-    }
-    if (!anyIncrease) {
-      container.appendChild(el("div", { class: "callout ok" }, [
-        `No price increase from this vendor across any item in this timeline.`
+    container.appendChild(table);
+    if (notIncreasedCount > 0) {
+      container.appendChild(el("p", { class: "note" }, [
+        `${notIncreasedCount} other item${notIncreasedCount === 1 ? "" : "s"} showed no increase (flat or down) and aren't listed. Rows with only 2–3 orders above are dimmed — thin evidence.`
       ]));
     }
-    container.appendChild(table);
   }
 
   // ---------- View 3: Pattern ----------
