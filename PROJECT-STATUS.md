@@ -81,7 +81,7 @@ flagged as unreliable.
 | **Speed** | Working | Headline is the median of the vendor's last 3 closed orders ("current pace"), not a multi-year blended median - a vendor's lead time can genuinely shift (e.g. 10 days -> 35 days) and a long-window median hides that. Full-timeline median shown as context, with an explicit callout when the two diverge. Per-PO table, newest first. |
 | **Shortfall** (replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
 | **Frequency** (replaces Pattern's slot, was "Reorder Cadence") | Working | Gap between consecutive `PO Date`s for the same item, restricted to stock items (`isStockItem()`). Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. Sorted by total order count descending (most-ordered item first), not by recency. |
-| **Mix** | Working | Per selected vendor: MVP item by share of order count (not quantity/volume) - which single code makes up the biggest share of everything ordered from that vendor. |
+| **Mix** | Working | Per selected vendor: MVP score is a 50/50 blend of share of order count and share of received quantity (`QtyReceived`) - fixed in v46 after pure order-count share let a code ordered often in tiny amounts outrank one ordered less often but in real volume. |
 | **Sensitivity** (renamed from "Habits" in v40) | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading (v39): "does a bigger order, or a different time of year, get delivered faster or slower?" |
 | **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
 | **Actions** (new, v43) | Working | Vendor-scoped: for the selected vendor, one card per SKU with a computable runout date, sorted soonest-due first. Reuses `computeRunoutRows()`, the same computation Runout uses, filtered to `r.vendor === selected vendor`. Relies on the confirmed fact that no two suppliers share an `ID` - no separate relationship-key lookup needed. |
@@ -241,3 +241,13 @@ filename search and then by worksheet-ID matching).
   group - its own computation already reads across all vendors/history and
   ignores the vendor picker, so it was categorized wrong, not just placed
   wrong.
+- **v45** - About tab: each tab's explanation cut to one sentence, grouped
+  under Category 1 (vendor-scoped) / Category 2 (whole-inventory), matching
+  the tab bar's own grouping. Added the missing Actions entry.
+- **v46** - Fixed a real bug in Mix: MVP was ranked purely by order-count
+  share, so a code ordered 19 times for a total of 33 units outranked one
+  ordered 8 times for 800 units. MVP score is now a 50/50 blend of
+  order-count share and received-quantity share (`QtyReceived`, not the
+  ordered `Quantity`, since that's what actually arrived). Table now shows
+  both shares plus the blended score, not just one number pretending to be
+  the whole picture.

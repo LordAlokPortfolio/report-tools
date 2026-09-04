@@ -21,9 +21,11 @@ own history suggests, ranked by how many times each has been ordered.
 Doesn't say why the rhythm changed; just flags it.
 
 **Mix** — for the vendor selected, which single item is the biggest
-share of everything ordered from them, by order count. That's the MVP
-item — the one worth watching most closely if that vendor ever became
-unreliable.
+deal in the relationship, blending how often it's ordered with how
+much has actually been received (50/50, so a code ordered constantly
+in small amounts can't outrank one ordered less often but in real
+volume, and vice versa). That's the MVP item — the one worth watching
+most closely if that vendor ever became unreliable.
 
 **Sensitivity** — does a bigger order, or a different time of year, get
 delivered faster or slower by this vendor. About this vendor's

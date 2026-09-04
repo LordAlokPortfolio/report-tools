@@ -70,7 +70,7 @@
 </head>
 <body>
 
-<div class="version-badge">v45 - 2026-09-04 - About tab: each tab's explanation cut to one sentence, grouped under Category 1 (vendor-scoped) / Category 2 (whole-inventory); added the missing Actions entry</div>
+<div class="version-badge">v46 - 2026-09-04 - Fixed Mix's MVP ranking: was pure order-count share, letting a code ordered often in tiny amounts outrank one ordered less often but in real volume. Now a 50/50 blend of order-count share and received-quantity share</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -1060,20 +1060,30 @@
     const container = document.getElementById("tab-mix");
     container.innerHTML = "";
     container.appendChild(el("h2", null, ["Mix - what does this vendor's business with us actually look like?"]));
+    // MVP = ordered often AND in real volume, not just often. A code ordered
+    // 19 times for 2 units each shouldn't outrank one ordered 8 times for 100
+    // units each -- pure order-count share was doing exactly that. Blended
+    // 50/50 with share of received quantity (QtyReceived -- what actually
+    // arrived, not just what was typed on the PO) so neither frequency alone
+    // nor one huge one-off order can dominate on its own.
+    const FREQ_WEIGHT = 0.5, QTY_WEIGHT = 0.5;
     container.appendChild(el("p", { class: "note" }, [
-      "Uses the vendor/timeline picked above. Share is each code's number of orders as a fraction of this vendor's total order count -- not quantity or dollars."
+      `Uses the vendor/timeline picked above. MVP score blends two shares: ${(FREQ_WEIGHT * 100).toFixed(0)}% this code's share of the vendor's order count, ${(QTY_WEIGHT * 100).toFixed(0)}% its share of the vendor's total received quantity (QtyReceived). Neither number alone tells the real story -- ordered often but in tiny amounts, or huge but a one-off, both undersell or oversell what this code actually means to the relationship.`
     ]));
     const rows = filteredRows().filter(isStockItem);
     const byItem = new Map();
     let totalOrders = 0;
+    let totalQty = 0;
     rows.forEach(r => {
       const item = String(r["ID"] || "").trim();
       if (!item) return;
       if (!byItem.has(item)) byItem.set(item, { qty: 0, orders: 0 });
       const rec = byItem.get(item);
-      if (typeof r["Quantity"] === "number") rec.qty += r["Quantity"];
+      const received = typeof r["QtyReceived"] === "number" ? r["QtyReceived"] : 0;
+      rec.qty += received;
       rec.orders += 1;
       totalOrders += 1;
+      totalQty += received;
     });
 
     if (byItem.size === 0 || totalOrders === 0) {
@@ -1081,30 +1091,43 @@
       return;
     }
 
-    const entries = Array.from(byItem.entries()).map(([item, rec]) => ({
-      item, qty: rec.qty, orders: rec.orders, share: (rec.orders / totalOrders) * 100,
-    }));
-    entries.sort((a, b) => b.orders - a.orders);
+    const entries = Array.from(byItem.entries()).map(([item, rec]) => {
+      const orderShare = rec.orders / totalOrders;
+      const qtyShare = totalQty > 0 ? rec.qty / totalQty : 0;
+      return {
+        item, qty: rec.qty, orders: rec.orders,
+        orderShare: orderShare * 100, qtyShare: qtyShare * 100,
+        score: (FREQ_WEIGHT * orderShare + QTY_WEIGHT * qtyShare) * 100,
+      };
+    });
+    entries.sort((a, b) => b.score - a.score);
 
     const mvp = entries[0];
     container.appendChild(el("p", { class: "stat" }, [
-      `MVP item: ${itemLabel(mvp.item)} - ${mvp.share.toFixed(0)}% of every order placed with this vendor (${mvp.orders} of ${totalOrders} orders).`
+      `MVP item: ${itemLabel(mvp.item)} - ${mvp.orders} of ${totalOrders} orders (${mvp.orderShare.toFixed(0)}%), ${mvp.qty} of ${totalQty} units received (${mvp.qtyShare.toFixed(0)}%).`
     ]));
 
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "Total qty ordered", "Share of vendor's order count"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Share of order count", "Qty received", "Share of qty received", "MVP score"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     entries.forEach((e, i) => {
       tbody.appendChild(el("tr", null, [
         el("td", null, [itemLabel(e.item)]),
         el("td", null, [String(e.orders)]),
+        el("td", null, [`${e.orderShare.toFixed(1)}%`]),
         el("td", null, [String(e.qty)]),
-        el("td", { class: i === 0 ? "change-up" : "" }, [`${e.share.toFixed(1)}%`]),
+        el("td", null, [`${e.qtyShare.toFixed(1)}%`]),
+        el("td", { class: i === 0 ? "change-up" : "" }, [e.score.toFixed(1)]),
       ]));
     });
     table.appendChild(tbody);
     container.appendChild(table);
+    if (totalQty === 0) {
+      container.appendChild(el("div", { class: "callout warn" }, [
+        "No QtyReceived data for this vendor/timeline -- every order here is still open. MVP score is currently order-count share only until something closes."
+      ]));
+    }
   }
 
   // ---------- View 4: Sensitivity ----------
@@ -1507,7 +1530,7 @@
     section("Speed", ["How long this vendor actually takes right now, weighted toward their most recent orders."]);
     section("Shortfall", ["What was ordered vs. what actually arrived, per item, for this vendor."]);
     section("Frequency", ["Which items are being reordered more often than their own history suggests."]);
-    section("Mix", ["Which single item is the biggest share of everything ordered from this vendor - the MVP item."]);
+    section("Mix", ["Which single item is the biggest deal with this vendor by both how often and how much - the MVP item."]);
     section("Sensitivity", ["Does a bigger order, or a different time of year, get delivered faster or slower by this vendor."]);
     section("Actions", ["One card per SKU this vendor supplies that's coming due for reorder, soonest first."]);
 
