@@ -1,2 +1,1 @@
-# ncr-generator
-NCR Generator - Warehouse Tool
+# Warehouse Tool
