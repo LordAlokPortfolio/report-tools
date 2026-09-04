@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v32 - 2026-09-04 - Concentration column order: ordered, total, %, top code</div>
+<div class="version-badge">v33 - 2026-09-04 - Passphrase gate: sample data public, ALOK unlocks live OneDrive</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -72,7 +72,22 @@
 
 <main>
 
-  <section class="panel">
+  <section class="panel" id="gatePanel" style="display:none;">
+    <h2>Connect your own data</h2>
+    <p class="note">You're viewing sample data below (fake numbers, for demonstration only). Enter the passphrase to unlock a live connection to the real OneDrive workbook.</p>
+    <div class="row">
+      <div class="field">
+        <label for="passphraseInput">Passphrase</label>
+        <input type="password" id="passphraseInput" placeholder="Passphrase">
+      </div>
+      <div class="field">
+        <button class="primary" id="unlockBtn">Unlock</button>
+      </div>
+    </div>
+    <p class="note" id="gateStatus"></p>
+  </section>
+
+  <section class="panel" id="connectPanel" style="display:none;">
     <h2>1. Connect to the workbook</h2>
     <div class="row">
       <div class="field">
@@ -149,6 +164,11 @@
 <script>
 (function () {
   "use strict";
+
+  // ---------- Public/private gate ----------
+  // Doorbell, not a lock -- anyone can read this in the page source. Change this
+  // string to update the passphrase later.
+  const PASSPHRASE = "ALOK";
 
   // ---------- OneDrive / Graph config ----------
   // Fill in the exact sheet tab names before use -- these are best guesses from
@@ -439,6 +459,151 @@
     }
     return usedRangeToRows(allRows);
   }
+
+  // ---------- Sample/demo data (shown publicly, no passphrase) ----------
+  // Deterministic (seeded), fake vendor/item names and numbers -- fine to publish
+  // publicly per the spec's "public tool, private data" rule. Exercises all seven
+  // views: several vendors with different typical lead times, some short-shipped
+  // orders, some open orders, a couple of custom-order ($0, non-numeric ID) rows,
+  // and ledger movement history for Runout.
+  function seededRandom(seed) {
+    let s = seed;
+    return function () {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    };
+  }
+  function generateSampleData() {
+    const rand = seededRandom(42);
+    const vendors = [
+      { id: "V1", name: "Acme Glass Co", leadDays: 5 },
+      { id: "V2", name: "Northern Aluminum Supply", leadDays: 10 },
+      { id: "V3", name: "Riverside Hardware Ltd", leadDays: 20 },
+      { id: "V4", name: "Sample Vendor Group", leadDays: 35 },
+    ];
+    const itemNames = [
+      "Frame Channel 2in", "Glass Panel Clear", "Hinge Assembly", "Weatherstrip Roll",
+      "Sill Track Alum", "Lock Mechanism", "Screen Mesh Panel", "Corner Bracket",
+      "Spacer Bar", "Gasket Seal Kit", "Handle Set Chrome", "Sash Balance",
+    ];
+    const items = itemNames.map((name, i) => ({
+      id: String(1001 + i), name, vendor: vendors[i % vendors.length],
+    }));
+
+    const today = new Date();
+    const daysAgo = n => new Date(today.getTime() - n * 86400000);
+    const poRows = [];
+    const ledgerRows = [];
+    let poCounter = 1000;
+
+    items.forEach(item => {
+      const orderCount = 8 + Math.floor(rand() * 10);
+      let onHand = 50 + Math.floor(rand() * 100);
+      ledgerRows.push({ ID: item.id, "INVENTORY NAME": item.name, DATE: daysAgo(580), QTY: onHand, TYPE: "Count" });
+      let cursor = 580;
+      for (let i = 0; i < orderCount; i++) {
+        cursor -= Math.floor(20 + rand() * 40);
+        if (cursor < 3) cursor = 3;
+        const poDate = daysAgo(cursor);
+        const isRecent = cursor < 20;
+        const leadNoise = Math.floor((rand() - 0.5) * item.vendor.leadDays * 0.4);
+        const leadDays = Math.max(1, item.vendor.leadDays + leadNoise);
+        const qty = 10 + Math.floor(rand() * 90);
+        const shortShip = rand() < 0.12;
+        const qtyReceived = shortShip ? Math.max(1, qty - Math.floor(qty * (0.1 + rand() * 0.3))) : qty;
+        const closed = !isRecent || rand() > 0.3;
+        poCounter++;
+        poRows.push({
+          "PO No": "SAMPLE-" + poCounter,
+          "Supplier ID": item.vendor.name,
+          "PO Date": poDate,
+          "ITEM NO": item.id,
+          "Quantity": qty,
+          "ID": item.id,
+          "PO DateReceived": closed ? daysAgo(cursor - leadDays) : "NULL",
+          "PO DateRequired": daysAgo(cursor - item.vendor.leadDays),
+          "PO DateRevised": "",
+          "QtyReceived": closed ? qtyReceived : 0,
+          "POLineClosed": closed ? -1 : 0,
+          "UnitCost": Math.round((5 + rand() * 40) * 100) / 100,
+          "Category": "SAMPLE",
+        });
+        if (closed) {
+          onHand += qty;
+          ledgerRows.push({ ID: item.id, "INVENTORY NAME": item.name, DATE: daysAgo(cursor - leadDays), QTY: qty, TYPE: "Receivings" });
+        }
+        const usage = Math.floor(5 + rand() * 15);
+        onHand = Math.max(0, onHand - usage);
+        ledgerRows.push({ ID: item.id, "INVENTORY NAME": item.name, DATE: daysAgo(Math.max(1, cursor - 5)), QTY: usage, TYPE: "Transfers" });
+      }
+      // A couple of custom-order rows per item's vendor, to demonstrate the
+      // stock-vs-custom-order filter working on sample data too.
+      if (rand() < 0.5) {
+        poCounter++;
+        poRows.push({
+          "PO No": "SAMPLE-" + poCounter,
+          "Supplier ID": item.vendor.name,
+          "PO Date": daysAgo(Math.floor(rand() * 300)),
+          "ITEM NO": "CUSTOM",
+          "Quantity": 1,
+          "ID": `Custom order of: ${item.vendor.name}`,
+          "PO DateReceived": daysAgo(Math.floor(rand() * 250)),
+          "PO DateRequired": "",
+          "PO DateRevised": "",
+          "QtyReceived": 1,
+          "POLineClosed": -1,
+          "UnitCost": 0,
+          "Category": "SAMPLE",
+        });
+      }
+    });
+
+    const daVinciRows = items.map(item => ({
+      ID: item.id, "INVENTORY ID": item.id, "INVENTORY NAME": item.name, "SUPPLIER ID": item.vendor.id,
+    }));
+    const supplierFileRows = vendors.map(v => ({ "SUPPLIER ID": v.id, "SUPPLIER NAME": v.name }));
+
+    return { poRows, ledgerRows, daVinciRows, supplierFileRows };
+  }
+
+  function loadSampleData() {
+    const sample = generateSampleData();
+    poRows = sample.poRows;
+    ledgerRows = sample.ledgerRows;
+    daVinciRows = sample.daVinciRows;
+    supplierFileRows = sample.supplierFileRows;
+    bomRows = null;
+    poAsOf = new Date();
+    ledgerAsOf = new Date();
+    itemLabel._map = null;
+    document.getElementById("loadStatus").textContent = "Viewing sample data (fake numbers) - enter the passphrase above to connect your real OneDrive workbook.";
+    populateLanding();
+  }
+
+  const UNLOCK_KEY = "vendorAnalysisUnlocked";
+  function isUnlocked() {
+    try { return localStorage.getItem(UNLOCK_KEY) === "true"; } catch (e) { return false; }
+  }
+  function showUnlockedUI() {
+    document.getElementById("gatePanel").style.display = "none";
+    document.getElementById("connectPanel").style.display = "block";
+  }
+  function showLockedUI() {
+    document.getElementById("gatePanel").style.display = "block";
+    document.getElementById("connectPanel").style.display = "none";
+    loadSampleData();
+  }
+  document.getElementById("unlockBtn").addEventListener("click", function () {
+    const entered = document.getElementById("passphraseInput").value.trim().toLowerCase();
+    if (entered === PASSPHRASE.trim().toLowerCase()) {
+      try { localStorage.setItem(UNLOCK_KEY, "true"); } catch (e) {}
+      document.getElementById("gateStatus").textContent = "";
+      showUnlockedUI();
+    } else {
+      document.getElementById("gateStatus").textContent = "That passphrase isn't right - still viewing sample data.";
+    }
+  });
+  if (isUnlocked()) { showUnlockedUI(); } else { showLockedUI(); }
 
   async function refreshFromOneDrive() {
     if (!graphAccessToken) return;
