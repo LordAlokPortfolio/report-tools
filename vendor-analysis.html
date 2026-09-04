@@ -150,9 +150,10 @@
   };
   const GRAPH_SCOPES = ["User.Read", "Files.Read"];
   const WORKBOOK_FILENAME = "tblINVENTORY_PO.xlsx"; // found by name, not by path -- avoids path/nesting guessing
-  const PO_SHEET_NAME = "PO-INVENTORY-TABLE "; // trailing space is real -- confirmed via live diagnostic
-  const HISTORY_SHEET_NAME = "HISTORY SHEET";  // table tbl_HISTORY lives on this sheet
-  const BOM_SHEET_NAME = "BOTTLENECK ";        // trailing space is real; still being built, may not have BOM columns yet
+  // Matched trimmed + case-insensitive against the live workbook, so exact whitespace doesn't matter.
+  const PO_SHEET_NAME = "PO-INVENTORY-TABLE";
+  const HISTORY_SHEET_NAME = "HISTORY SHEET"; // table tbl_HISTORY lives on this sheet
+  const BOM_SHEET_NAME = "BOTTLENECK";        // still being built per the user -- may not have BOM columns yet
 
   let msalApp = null;
   let workbookItemId = null;
@@ -305,11 +306,34 @@
     return workbookItemId;
   }
 
+  let worksheetListCache = null;
+
+  function normalizeSheetName(s) {
+    return String(s).trim().toLowerCase();
+  }
+
+  async function findWorksheetId(configuredName) {
+    if (!configuredName) return null;
+    const itemId = await findWorkbookItemId();
+    if (!worksheetListCache) {
+      const data = await graphGet(`/me/drive/items/${itemId}/workbook/worksheets?$select=id,name`);
+      worksheetListCache = data.value;
+    }
+    const target = normalizeSheetName(configuredName);
+    const match = worksheetListCache.find(s => normalizeSheetName(s.name) === target);
+    if (!match) {
+      const names = worksheetListCache.map(s => `"${s.name}"`).join(", ");
+      throw new Error(`No worksheet matching "${configuredName}" (trimmed/case-insensitive). Actual sheets: ${names}.`);
+    }
+    return match.id;
+  }
+
   async function fetchSheetRows(sheetName) {
     if (!sheetName) return null;
     const itemId = await findWorkbookItemId();
+    const sheetId = await findWorksheetId(sheetName);
     const path = `/me/drive/items/${itemId}` +
-      `/workbook/worksheets('${encodeURIComponent(sheetName)}')/usedRange(valuesOnly=true)`;
+      `/workbook/worksheets('${sheetId}')/usedRange(valuesOnly=true)`;
     const data = await graphGet(path);
     return usedRangeToRows(data.values);
   }
@@ -317,6 +341,7 @@
   async function refreshFromOneDrive() {
     if (!graphAccessToken) return;
     document.getElementById("loadStatus").textContent = "Reading live data from OneDrive…";
+    worksheetListCache = null; // pick up any sheet renames since the last refresh
     try {
       poRows = (await fetchSheetRows(PO_SHEET_NAME)) || [];
       poAsOf = new Date();
@@ -327,18 +352,7 @@
         `Loaded ${poRows.length.toLocaleString()} PO rows live from OneDrive as of ${fmtDate(poAsOf)}.`;
       populateLanding();
     } catch (err) {
-      let diag = "";
-      try {
-        const itemId = await findWorkbookItemId();
-        const sheets = await graphGet(`/me/drive/items/${itemId}/workbook/worksheets?$select=name`);
-        diag = " Actual worksheet names Graph sees in this workbook: " +
-          sheets.value.map(s => `"${s.name}"`).join(", ") + ".";
-      } catch (diagErr) {
-        diag = " (Could not list worksheets to help diagnose: " + diagErr.message + ")";
-      }
-      document.getElementById("loadStatus").textContent =
-        "Could not read from OneDrive: " + err.message +
-        " — check WORKBOOK_FILENAME and the sheet name constants match the live workbook exactly." + diag;
+      document.getElementById("loadStatus").textContent = "Could not read from OneDrive: " + err.message;
     }
   }
 
