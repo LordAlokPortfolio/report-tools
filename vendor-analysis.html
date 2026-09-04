@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v21 - 2026-09-04 - Stopped using PO DateRequired (confirmed unreliable)</div>
+<div class="version-badge">v22 - 2026-09-04 - Retired Creep/Pattern, added 3 price-free views</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -127,16 +127,18 @@
   <section id="viewsSection" style="display:none;">
     <div class="tabs">
       <button class="tab-btn active" data-tab="speed">Speed</button>
-      <button class="tab-btn" data-tab="creep">Creep</button>
-      <button class="tab-btn" data-tab="pattern">Pattern</button>
+      <button class="tab-btn" data-tab="shortship">Short-shipping</button>
+      <button class="tab-btn" data-tab="cadence">Reorder Cadence</button>
+      <button class="tab-btn" data-tab="concentration">Vendor Concentration</button>
       <button class="tab-btn" data-tab="habits">Habits</button>
       <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
       <button class="tab-btn" data-tab="runout">Runout</button>
     </div>
 
     <div class="tab-view active" id="tab-speed"></div>
-    <div class="tab-view" id="tab-creep"></div>
-    <div class="tab-view" id="tab-pattern"></div>
+    <div class="tab-view" id="tab-shortship"></div>
+    <div class="tab-view" id="tab-cadence"></div>
+    <div class="tab-view" id="tab-concentration"></div>
     <div class="tab-view" id="tab-habits"></div>
     <div class="tab-view" id="tab-bottleneck"></div>
     <div class="tab-view" id="tab-runout"></div>
@@ -211,25 +213,9 @@
     const mid = Math.floor(arr.length / 2);
     return arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
   }
-  function pearsonCorrelation(xs, ys) {
-    const n = xs.length;
-    if (n < 2) return null;
-    const mx = xs.reduce((a, b) => a + b, 0) / n;
-    const my = ys.reduce((a, b) => a + b, 0) / n;
-    let num = 0, dx2 = 0, dy2 = 0;
-    for (let i = 0; i < n; i++) {
-      const dx = xs[i] - mx, dy = ys[i] - my;
-      num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
-    }
-    const denom = Math.sqrt(dx2 * dy2);
-    return denom === 0 ? null : num / denom;
-  }
   function fmtDate(d) {
     if (!d) return "-";
     return d.toISOString().slice(0, 10);
-  }
-  function fmtMoney(v) {
-    return typeof v === "number" ? "$" + v.toFixed(2) : "-";
   }
   function el(tag, attrs, children) {
     const e = document.createElement(tag);
@@ -500,35 +486,13 @@
     container.appendChild(table);
   }
 
-  // ---------- View 2: Creep ----------
-  function renderCreep() {
-    const container = document.getElementById("tab-creep");
+  // ---------- View 2: Short-shipping ----------
+  function renderShortShip() {
+    const container = document.getElementById("tab-shortship");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Creep - price rising quietly over many orders"]));
-
-    // Temporary diagnostic: show what's actually in the ID column, so we can see
-    // whether isStockItem() is reading the right column/values without guessing.
-    const preFilterRows = filteredRows();
-    const idSamples = new Map(); // "number"/"text-like-number"/"text" -> {count, examples: Set}
-    preFilterRows.forEach(r => {
-      const v = r["ID"];
-      const kind = typeof v === "number" ? "number (passes filter)"
-        : (typeof v === "string" && /^[0-9.]+$/.test(v.trim())) ? "numeric text (passes filter)"
-        : "other/text (EXCLUDED by filter)";
-      if (!idSamples.has(kind)) idSamples.set(kind, { count: 0, examples: new Set() });
-      const entry = idSamples.get(kind);
-      entry.count++;
-      if (entry.examples.size < 3) entry.examples.add(JSON.stringify(v));
-    });
-    const diagLines = [];
-    idSamples.forEach((v, kind) => {
-      diagLines.push(`${kind}: ${v.count} rows, examples: ${Array.from(v.examples).join(", ")}`);
-    });
-    container.appendChild(el("div", { class: "callout warn" }, [
-      "DIAGNOSTIC (temporary) - what the ID column actually contains for this vendor/timeline: " + diagLines.join(" | ")
-    ]));
-
-    const rows = filteredRows().filter(isStockItem).filter(r => typeof r["UnitCost"] === "number");
+    container.appendChild(el("h2", null, ["Short-shipping - did you get what you ordered?"]));
+    const rows = filteredRows().filter(isClosed)
+      .filter(r => typeof r["Quantity"] === "number" && typeof r["QtyReceived"] === "number");
     const byItem = new Map();
     rows.forEach(r => {
       const item = String(r["ITEM NO"] || "").trim();
@@ -538,203 +502,164 @@
     });
     const entries = [];
     byItem.forEach((itemRows, item) => {
-      if (itemRows.length < 2) return; // need at least two points to show a change
-      itemRows.sort((a, b) => toDate(a["PO Date"]) - toDate(b["PO Date"]));
-      const first = itemRows[0]["UnitCost"], last = itemRows[itemRows.length - 1]["UnitCost"];
-      // Percent change is undefined when starting from $0 (a real, legitimate value --
-      // samples/internal transfers) -- dividing by zero can't be silently treated as
-      // "no change" when the item clearly went from nothing to something.
-      const pctChange = first !== 0 ? ((last - first) / first) * 100 : null;
-      const fromZero = first === 0 && last > 0;
-      const isIncrease = fromZero || (pctChange !== null && pctChange > 0.5);
-      let biggestJump = 0;
-      for (let i = 1; i < itemRows.length; i++) {
-        biggestJump = Math.max(biggestJump, Math.abs(itemRows[i]["UnitCost"] - itemRows[i - 1]["UnitCost"]));
-      }
-
-      // Only look for what an INCREASE might be tied to -- correlation only, never
-      // a causal claim, and only when there's enough paired data to mean anything.
-      let tiedTo = null;
-      if (isIncrease) {
-        const costs = itemRows.map(r => r["UnitCost"]);
-        const qtys = itemRows.map(r => typeof r["Quantity"] === "number" ? r["Quantity"] : null);
-        const leadPairs = itemRows
-          .filter(isClosed)
-          .map(r => {
-            const bd = businessDaysBetween(toDate(r["PO Date"]), toDate(r["PO DateReceived"]));
-            return bd === null ? null : { cost: r["UnitCost"], leadTime: bd };
-          })
-          .filter(p => p !== null);
-        const qtyPairs = itemRows
-          .map((r, i) => (qtys[i] === null ? null : { cost: r["UnitCost"], qty: qtys[i] }))
-          .filter(p => p !== null);
-
-        let corrLead = leadPairs.length >= MIN_HISTORY
-          ? pearsonCorrelation(leadPairs.map(p => p.cost), leadPairs.map(p => p.leadTime)) : null;
-        let corrQty = qtyPairs.length >= MIN_HISTORY
-          ? pearsonCorrelation(qtyPairs.map(p => p.cost), qtyPairs.map(p => p.qty)) : null;
-
-        if (corrLead === null && corrQty === null) {
-          tiedTo = "Not enough history to check";
-        } else {
-          const candidates = [];
-          if (corrLead !== null) candidates.push({ label: "lead time", r: corrLead });
-          if (corrQty !== null) candidates.push({ label: "order size", r: corrQty });
-          candidates.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
-          const best = candidates[0];
-          tiedTo = Math.abs(best.r) >= 0.5
-            ? `Tends to rise with ${best.label}`
-            : `No clear link to lead time or order size`;
-        }
-      }
-
-      entries.push({ item, count: itemRows.length, first, last, pctChange, fromZero, isIncrease, biggestJump, tiedTo });
+      if (itemRows.length < 2) return;
+      const ordered = itemRows.reduce((s, r) => s + r["Quantity"], 0);
+      const received = itemRows.reduce((s, r) => s + r["QtyReceived"], 0);
+      const shortOrders = itemRows.filter(r => r["QtyReceived"] < r["Quantity"]).length;
+      if (shortOrders === 0) return; // never short-shipped -- nothing to report for this item
+      entries.push({ item, count: itemRows.length, ordered, received, shortOrders, shortfall: ordered - received });
     });
 
     if (entries.length === 0) {
-      container.appendChild(el("p", { class: "insufficient" }, ["No item in this vendor/timeline has more than one order with a usable UnitCost - nothing to compare."]));
-      return;
-    }
-
-    const increased = entries.filter(e => e.isIncrease);
-    const notIncreasedCount = entries.length - increased.length;
-
-    if (increased.length === 0) {
       container.appendChild(el("div", { class: "callout ok" }, [
-        `No price increase from this vendor across any of the ${entries.length} items with more than one order in this timeline.`
+        "No item from this vendor was ever short-shipped (received less than ordered) in this timeline."
       ]));
       return;
     }
 
-    // Sort worst first: a from-$0 jump has no percentage to compare with, but it's
-    // an unambiguous new cost, so it sorts above any percentage-based increase.
-    increased.sort((a, b) => {
-      const sa = a.fromZero ? Infinity : a.pctChange;
-      const sb = b.fromZero ? Infinity : b.pctChange;
-      return sb - sa;
-    });
-
+    entries.sort((a, b) => (b.shortOrders / b.count) - (a.shortOrders / a.count));
     container.appendChild(el("p", { class: "stat" }, [
-      `${increased.length} of ${entries.length} items increased in price in this timeline:`
+      `${entries.length} item${entries.length === 1 ? "" : "s"} from this vendor have been short-shipped at least once:`
     ]));
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "First cost", "Latest cost", "Change", "Biggest single jump", "Tied to"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Short-shipped orders", "Total ordered", "Total received", "Shortfall"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
-    increased.forEach(e => {
+    entries.forEach(e => {
       const rowClass = e.count < 4 ? "thin-row" : "";
-      const changeText = e.fromZero ? "New cost (was $0)" : "+" + e.pctChange.toFixed(1) + "%";
       tbody.appendChild(el("tr", { class: rowClass }, [
         el("td", null, [e.item]),
         el("td", { class: e.count < 4 ? "low-confidence" : "" }, [String(e.count)]),
-        el("td", null, [fmtMoney(e.first)]),
-        el("td", null, [fmtMoney(e.last)]),
-        el("td", { class: "change-up" }, [changeText]),
-        el("td", null, [fmtMoney(e.biggestJump)]),
-        el("td", { class: "note" }, [e.tiedTo || "-"]),
+        el("td", { class: "change-up" }, [`${e.shortOrders} of ${e.count} (${((e.shortOrders / e.count) * 100).toFixed(0)}%)`]),
+        el("td", null, [String(e.ordered)]),
+        el("td", null, [String(e.received)]),
+        el("td", null, [String(e.shortfall)]),
       ]));
     });
     table.appendChild(tbody);
     container.appendChild(table);
-    if (notIncreasedCount > 0) {
-      container.appendChild(el("p", { class: "note" }, [
-        `${notIncreasedCount} other item${notIncreasedCount === 1 ? "" : "s"} showed no increase (flat or down) and aren't listed. Rows with only 2-3 orders above are dimmed - thin evidence.`
-      ]));
-    }
+    container.appendChild(el("p", { class: "note" }, ["Rows with only 2-3 orders are dimmed - thin evidence. This counts what was ordered vs. what arrived; it doesn't say why."]));
   }
 
-  // ---------- View 3: Pattern ----------
-  function renderPattern() {
-    const container = document.getElementById("tab-pattern");
+  // ---------- View 3: Reorder Cadence ----------
+  function renderCadence() {
+    const container = document.getElementById("tab-cadence");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Pattern - when lead time moves, does cost move with it?"]));
-    container.appendChild(el("p", { class: "note" }, [
-      "Answers a specific business question: if this item's lead time stretches again, should you expect cost to move too? A correlation number doesn't answer that on its own - this counts how often cost actually moved the same direction as lead time, order to order."
-    ]));
-    const rows = filteredRows().filter(isClosed).filter(isStockItem).filter(r => typeof r["UnitCost"] === "number");
+    container.appendChild(el("h2", null, ["Reorder Cadence - is this item being ordered more often than it used to be?"]));
+    const rows = filteredRows();
     const byItem = new Map();
     rows.forEach(r => {
       const item = String(r["ITEM NO"] || "").trim();
-      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
-      const bd = businessDaysBetween(d1, d2);
-      if (!item || bd === null) return;
+      const d = toDate(r["PO Date"]);
+      if (!item || !d) return;
       if (!byItem.has(item)) byItem.set(item, []);
-      byItem.get(item).push({ date: d1, cost: r["UnitCost"], leadTime: bd });
+      byItem.get(item).push(d);
     });
     const entries = [];
-    byItem.forEach((points, item) => {
-      if (points.length < MIN_HISTORY) return;
-      points.sort((a, b) => a.date - b.date);
-
-      // Order-to-order: when lead time changed from one order to the next, did cost
-      // move the same direction? This is the answerable, actionable version of
-      // "does cost move with lead time" -- skip pairs where lead time didn't change,
-      // since there's no direction to compare against.
-      let same = 0, total = 0;
-      for (let i = 1; i < points.length; i++) {
-        const dLead = points[i].leadTime - points[i - 1].leadTime;
-        const dCost = points[i].cost - points[i - 1].cost;
-        if (dLead === 0) continue;
-        total++;
-        if (Math.sign(dCost) === Math.sign(dLead)) same++;
-      }
-      if (total < 5) return; // not enough actual lead-time changes to say anything
-
-      const rate = same / total;
-      const corr = pearsonCorrelation(points.map(p => p.cost), points.map(p => p.leadTime));
-      entries.push({ item, count: points.length, same, total, rate, corr });
+    byItem.forEach((dates, item) => {
+      if (dates.length < 5) return; // need at least 4 gaps to compare recent vs overall meaningfully
+      dates.sort((a, b) => a - b);
+      const gaps = [];
+      for (let i = 1; i < dates.length; i++) gaps.push((dates[i] - dates[i - 1]) / 86400000);
+      const overallAvg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+      const recentGaps = gaps.slice(-2);
+      const recentAvg = recentGaps.reduce((s, g) => s + g, 0) / recentGaps.length;
+      const tightened = recentAvg <= overallAvg * 0.7; // recent gap is meaningfully shorter
+      if (!tightened) return;
+      entries.push({ item, count: dates.length, overallAvg, recentAvg });
     });
+
     if (entries.length === 0) {
-      container.appendChild(notEnoughHistory(0));
-      container.appendChild(el("p", { class: "note" }, [`(No item in this vendor/timeline has ${MIN_HISTORY}+ closed orders with at least 5 actual lead-time changes to compare against.)`]));
-      return;
-    }
-
-    entries.forEach(e => {
-      e.tier = e.rate >= 0.75 ? "strong" : e.rate > 0.5 ? "some" : "none";
-    });
-    const strong = entries.filter(e => e.tier === "strong").sort((a, b) => b.rate - a.rate);
-    const some = entries.filter(e => e.tier === "some").sort((a, b) => b.rate - a.rate);
-    const noneCount = entries.length - strong.length - some.length;
-
-    if (strong.length === 0 && some.length === 0) {
       container.appendChild(el("div", { class: "callout ok" }, [
-        `None of the ${entries.length} items with enough history show cost reliably following lead time in this timeline - lead time isn't a useful early-warning signal for cost here.`
+        "No item from this vendor shows a meaningfully shorter gap between recent orders vs. its own history in this timeline."
       ]));
       return;
     }
 
-    if (strong.length > 0) {
-      container.appendChild(el("p", { class: "stat" }, [
-        `${strong.length} of ${entries.length} item${entries.length === 1 ? "" : "s"} show a strong tendency - when lead time stretches, cost has reliably followed:`
+    entries.sort((a, b) => (a.recentAvg / a.overallAvg) - (b.recentAvg / b.overallAvg));
+    container.appendChild(el("p", { class: "stat" }, [
+      `${entries.length} item${entries.length === 1 ? "" : "s"} are now being ordered noticeably more often than their own history:`
+    ]));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Usual gap between orders", "Recent gap"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    entries.forEach(e => {
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [e.item]),
+        el("td", null, [String(e.count)]),
+        el("td", null, [`${e.overallAvg.toFixed(0)} days`]),
+        el("td", { class: "change-up" }, [`${e.recentAvg.toFixed(0)} days`]),
       ]));
-      const strongTable = el("table", null, [
-        el("thead", null, [el("tr", null, ["Item", "Orders", "How often cost followed lead time"].map(h => el("th", null, [h])))]),
-      ]);
-      const tbody = el("tbody");
-      strong.forEach(e => {
-        tbody.appendChild(el("tr", null, [
-          el("td", null, [e.item]),
-          el("td", null, [String(e.count)]),
-          el("td", { class: "change-up" }, [`${e.same} of ${e.total} times (${(e.rate * 100).toFixed(0)}%)`]),
-        ]));
-      });
-      strongTable.appendChild(tbody);
-      container.appendChild(strongTable);
-      container.appendChild(el("p", { class: "note" }, ["Treat a lead-time increase on these items as an early signal to expect cost to rise too - worth budgeting for and worth raising with this vendor."]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["This says the ordering rhythm changed, not why - could be rising usage, could be a planning change. Worth asking, not assuming."]));
+  }
+
+  // ---------- View 4: Vendor Concentration ----------
+  function renderConcentration() {
+    const container = document.getElementById("tab-concentration");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Vendor Concentration - which vendors are a single point of failure?"]));
+    container.appendChild(el("p", { class: "note" }, [
+      "Whole-building view, ignores the vendor/timeline picked above. Custom-order rows are excluded (they're vendor-specific by definition, not comparable stock items)."
+    ]));
+    container.appendChild(el("p", { class: "as-of" }, [`Purchase orders as of ${fmtDate(poAsOf)}.`]));
+
+    const suppliersByItem = new Map();
+    poRows.filter(isStockItem).forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      const vendor = String(r["Supplier ID"] || "").trim();
+      if (!item || !vendor) return;
+      if (!suppliersByItem.has(item)) suppliersByItem.set(item, new Set());
+      suppliersByItem.get(item).add(vendor);
+    });
+
+    const singleSourceItemsByVendor = new Map();
+    const totalItemsByVendor = new Map();
+    poRows.filter(isStockItem).forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      const vendor = String(r["Supplier ID"] || "").trim();
+      if (!item || !vendor) return;
+      if (!totalItemsByVendor.has(vendor)) totalItemsByVendor.set(vendor, new Set());
+      totalItemsByVendor.get(vendor).add(item);
+      if (suppliersByItem.get(item).size === 1) {
+        if (!singleSourceItemsByVendor.has(vendor)) singleSourceItemsByVendor.set(vendor, new Set());
+        singleSourceItemsByVendor.get(vendor).add(item);
+      }
+    });
+
+    const entries = [];
+    totalItemsByVendor.forEach((items, vendor) => {
+      const singleSource = singleSourceItemsByVendor.get(vendor) || new Set();
+      if (singleSource.size === 0) return; // no dependency risk from this vendor
+      entries.push({ vendor, totalItems: items.size, singleSourceCount: singleSource.size });
+    });
+
+    if (entries.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, ["No vendor is the sole source for any item in this data."]));
+      return;
     }
 
-    if (some.length > 0) {
-      container.appendChild(el("p", { class: "note" }, [
-        `${some.length} more item${some.length === 1 ? "" : "s"} show some tendency but not reliably enough to count on: ${some.map(e => e.item).join(", ")}.`
+    entries.sort((a, b) => b.singleSourceCount - a.singleSourceCount);
+    container.appendChild(el("p", { class: "stat" }, [
+      `${entries.length} vendor${entries.length === 1 ? " is" : "s are"} the only source for at least one item:`
+    ]));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Vendor", "Total items supplied", "Items only they supply"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    entries.forEach(e => {
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [e.vendor]),
+        el("td", null, [String(e.totalItems)]),
+        el("td", { class: "change-up" }, [String(e.singleSourceCount)]),
       ]));
-    }
-    if (noneCount > 0) {
-      container.appendChild(el("p", { class: "note" }, [
-        `${noneCount} other item${noneCount === 1 ? "" : "s"} with enough history show no consistent link between lead time and cost, and aren't listed.`
-      ]));
-    }
-    container.appendChild(el("p", { class: "note" }, ["This describes what happened together in the past, not what caused what - it does not claim cost changes because lead time changes, or the reverse."]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["\"Only they supply\" means no other vendor has ever shipped this item in the data available - not that no alternate vendor exists in the world."]));
   }
 
   // ---------- View 4: Habits ----------
@@ -750,21 +675,18 @@
     const qtys = rows.map(r => r["Quantity"]).sort((a, b) => a - b);
     const sizeMedian = median(qtys);
     function quarterOf(d) { return "Q" + (Math.floor(d.getUTCMonth() / 3) + 1); }
-    const buckets = new Map(); // key = quarter|size -> {leadTimes:[], costs:[]}
+    const buckets = new Map(); // key = quarter|size -> {leadTimes:[]}
     rows.forEach(r => {
       const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
       const bd = businessDaysBetween(d1, d2);
       if (!d1 || bd === null) return;
       const size = r["Quantity"] >= sizeMedian ? "Large" : "Small";
       const key = quarterOf(d1) + " / " + size;
-      if (!buckets.has(key)) buckets.set(key, { leadTimes: [], costs: [] });
+      if (!buckets.has(key)) buckets.set(key, { leadTimes: [] });
       buckets.get(key).leadTimes.push(bd);
-      // Lead time is valid for custom orders too, but their $0 placeholder pricing isn't --
-      // only stock items (real numeric ID) feed the cost side of this bucket.
-      if (typeof r["UnitCost"] === "number" && isStockItem(r)) buckets.get(key).costs.push(r["UnitCost"]);
     });
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Quarter / size", "Orders", "Median lead time", "Median cost"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["Quarter / size", "Orders", "Median lead time"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     let any = false;
@@ -776,7 +698,6 @@
         el("td", null, [key]),
         el("td", null, [String(b.leadTimes.length)]),
         el("td", null, [Math.ceil(median(b.leadTimes)) + " business days"]),
-        el("td", null, [b.costs.length ? fmtMoney(median(b.costs)) : "-"]),
       ]));
     });
     table.appendChild(tbody);
@@ -797,21 +718,15 @@
       container.appendChild(el("div", { class: "callout warn" }, ["Upload a component list / BOM file (columns: ParentSKU, ComboID, ComponentSKU, QtyPerUnit) above to use this view."]));
       return;
     }
-    // Build median lead time + latest cost per component (ITEM NO / INVENTORY ID) across ALL vendors/history.
+    // Build median lead time per component (ITEM NO / INVENTORY ID) across ALL vendors/history.
     const perComponent = new Map();
     poRows.filter(isClosed).forEach(r => {
       const item = String(r["ITEM NO"] || r["INVENTORY ID"] || "").trim();
       if (!item) return;
       const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
       const bd = businessDaysBetween(d1, d2);
-      if (!perComponent.has(item)) perComponent.set(item, { leadTimes: [], lastCost: null, lastDate: null });
-      const rec = perComponent.get(item);
-      if (bd !== null) rec.leadTimes.push(bd);
-      // Lead time counts custom orders too; cost rollup only trusts stock items'
-      // real pricing (custom orders carry $0 placeholder pricing, not real cost).
-      if (typeof r["UnitCost"] === "number" && isStockItem(r) && (!rec.lastDate || d1 > rec.lastDate)) {
-        rec.lastCost = r["UnitCost"]; rec.lastDate = d1;
-      }
+      if (!perComponent.has(item)) perComponent.set(item, { leadTimes: [] });
+      if (bd !== null) perComponent.get(item).leadTimes.push(bd);
     });
     const combos = new Map(); // ParentSKU|ComboID -> [{ComponentSKU, QtyPerUnit}]
     bomRows.forEach(r => {
@@ -820,18 +735,17 @@
       combos.get(key).parts.push({ sku: String(r["ComponentSKU"] || "").trim(), qty: Number(r["QtyPerUnit"]) || 1 });
     });
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Parent SKU", "Combo", "Slowest component", "Build-start lead time", "Cost to build"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["Parent SKU", "Combo", "Slowest component", "Build-start lead time"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     let any = false;
     combos.forEach(c => {
-      let worstLead = null, worstPart = null, costSum = 0, costKnown = true;
+      let worstLead = null, worstPart = null;
       c.parts.forEach(p => {
         const rec = perComponent.get(p.sku);
-        if (!rec || rec.leadTimes.length < MIN_HISTORY) { costKnown = false; return; }
+        if (!rec || rec.leadTimes.length < MIN_HISTORY) return;
         const med = Math.ceil(median(rec.leadTimes));
         if (worstLead === null || med > worstLead) { worstLead = med; worstPart = p.sku; }
-        if (rec.lastCost !== null) costSum += rec.lastCost * p.qty; else costKnown = false;
       });
       if (worstLead === null) return;
       any = true;
@@ -840,7 +754,6 @@
         el("td", null, [String(c.combo)]),
         el("td", null, [worstPart]),
         el("td", null, [worstLead + " business days"]),
-        el("td", null, [costKnown ? fmtMoney(costSum) : "incomplete - some component costs unknown"]),
       ]));
     });
     table.appendChild(tbody);
@@ -985,8 +898,9 @@
   function renderAll() {
     if (!poRows.length) return;
     renderSpeed();
-    renderCreep();
-    renderPattern();
+    renderShortShip();
+    renderCadence();
+    renderConcentration();
     renderHabits();
     renderBottleneck();
     renderRunout();

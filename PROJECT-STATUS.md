@@ -1,8 +1,10 @@
-# Project Status - PO Cleaning & Vendor Analysis (through v20)
+# Project Status - PO Cleaning & Vendor Analysis (through v22)
 
 Snapshot of what this branch (`alok-idea/cleaning-po-inventory-table-and-vendor-analysis`)
-has actually built, as of the vendor-analysis.html "v20" tag. Written so a
+has actually built, as of the vendor-analysis.html "v22" tag. Written so a
 later session (or a later you) can pick this up without re-deriving it.
+Supersedes the file's original "through v20" version - kept as one file,
+not a new one per version, so it doesn't fork into stale copies.
 
 ---
 
@@ -17,8 +19,9 @@ reporting on it:
    resolves `ID` and `Supplier ID` via lookups against two reference sheets,
    and reorders columns. Every rule is documented in `CLEANING-LOG.md`.
 2. **Reporting** (`vendor-analysis.html`) - a standalone web page, not yet
-   linked into the main toolkit's `index.html`, implementing six analysis
-   views against the cleaned data.
+   linked into the main toolkit's `index.html`, implementing seven analysis
+   views against the cleaned data - all of them price-free (see "Pricing is
+   unreliable" below for why).
 
 ## The workbook (live, in OneDrive)
 
@@ -55,15 +58,22 @@ file-upload fallback panel still exists in case the OneDrive path breaks.
 Nothing is cached beyond the browser session except the workbook's item ID
 (in `localStorage`, not sensitive). Every "Refresh" re-reads live.
 
-## The six views - current state
+## The seven views - current state
+
+Creep and Pattern are **retired**, not just fixed - their core premise was
+price itself ("is price rising," "does cost move with lead time"), so once
+`UnitCost` is untrustworthy there's no non-cost version of either question
+to fall back to. Replaced with three new views built only from data nobody
+has flagged as unreliable.
 
 | View | Status | Notes |
 |---|---|---|
 | **Speed** | Working | Headline is the median of the vendor's last 3 closed orders ("current pace"), not a multi-year blended median - a vendor's lead time can genuinely shift (e.g. 10 days -> 35 days) and a long-window median hides that. Full-timeline median shown as context, with an explicit callout when the two diverge. Per-PO table, newest first. |
-| **Creep** | **Broken as a pricing signal - do not trust `UnitCost` from this data.** See "Pricing is unreliable" below. |
-| **Pattern** | Reworked away from raw correlation into an order-to-order "did cost move the same direction as lead time" tendency - but its cost side inherits the same pricing problem as Creep. The lead-time-only parts of the underlying logic are sound; the cost-linked half is not. |
-| **Habits** | Buckets orders by quarter x order-size, reporting median lead time (trustworthy) and median cost (not trustworthy) per bucket. |
-| **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Its lead-time rollup logic is sound; its cost rollup is not. |
+| **Short-shipping** (new, replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
+| **Reorder Cadence** (new, replaces Pattern's slot) | Working | Gap between consecutive `PO Date`s for the same item. Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. |
+| **Vendor Concentration** (new) | Working | Whole-building view (ignores vendor/timeline picker, like Runout). Which vendors are the sole source for at least one item, based on every stock item's supplier history. |
+| **Habits** | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. |
+| **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
 | **Runout** | Working, price-independent. On-hand and usage rate computed from `tbl_HISTORY` (Count/Receivings/Transfers), lead time from the PO table's closed orders, matched via `ID`. |
 
 ## Pricing is unreliable - the reason this status doc exists
@@ -78,27 +88,39 @@ after that filter - meaning either the filter's assumption about which
 column carries the custom-order marker is wrong, or the pricing data has
 deeper problems than one filter can fix.
 
-**Decision (this conversation): stop trying to fix `UnitCost`-based
-analysis. Treat every dollar figure in this dataset as untrustworthy until
-proven otherwise, and design the reporting tool around what the data
-*can* prove without price.** Creep in particular is fundamentally a
-price-based view and should be considered retired unless the pricing data
-gets a real fix at the source (not a filter in this tool).
+**Decision: stop trying to fix `UnitCost`-based analysis entirely.** Every
+dollar figure in this dataset is untrustworthy until proven otherwise. As
+of v22, no view in this tool depends on price at all. `isStockItem()`
+survived, repurposed: it now excludes custom-order rows (which aren't
+comparable stock items by definition) from Vendor Concentration, not from
+cost math.
+
+**Also confirmed unreliable, separately: `PO DateRequired`** (purchaser-
+entered, not trustworthy). Used in exactly one narrow, intentional
+exception (`clean-po-data.ts`'s closed-order `PO DateReceived` NULL-fill,
+the least-bad option when no real date exists at all) - nowhere else in
+cleaning or reporting.
 
 ## Columns confirmed trustworthy (no known contamination)
 
 `PO No`, `Supplier ID`/`SUPPLIER NAME`, `PO Date`, `PO DateReceived`,
-`PO DateRequired`, `ITEM NO`, `INVENTORY ID`, `ID` (post Da Vinci lookup),
-`Quantity`, `QtyReceived`, `POLineClosed`, `Category` (per earlier decision,
-even the literal value `"0"` is a real code, not blank). `tbl_HISTORY`'s
-`DATE`, `QTY`, `TYPE` for stock items.
+`ITEM NO`, `INVENTORY ID`, `ID` (post Da Vinci lookup), `Quantity`,
+`QtyReceived`, `POLineClosed`, `Category` (per earlier decision, even the
+literal value `"0"` is a real code, not blank). `tbl_HISTORY`'s `DATE`,
+`QTY`, `TYPE` for stock items.
+
+**Not on this list, deliberately: `UnitCost`, `PO DateRequired`.** Both
+confirmed unreliable - see above.
+
+**Not yet checked either way**: every other column not named here.
+Absence from this list isn't a claim of trustworthiness - it's what hasn't
+been verified or contradicted yet. Both `UnitCost` and `PO DateRequired`
+were assumed fine until someone with direct knowledge said otherwise; that
+same caution should apply to everything not yet stress-tested.
 
 ## Not yet done
 
 - Bottleneck needs real BOM data.
-- The `ID`-column diagnostic in Creep (v20) was never resolved - abandoned
-  in favor of dropping price-based analysis entirely per this session's
-  decision, rather than continuing to debug it.
 - Nothing on this branch is linked into `index.html` / the main toolkit yet
   - explicit standing instruction is to keep `main` untouched until the
   whole project is ready.
@@ -132,4 +154,11 @@ filename search and then by worksheet-ID matching).
   file on this branch, per explicit request.
 - **v20** - Added a live diagnostic to Creep to see what the `ID` column
   actually contains, after the v19 fix didn't hold up against real data.
-  Superseded by the decision to drop price-based analysis (this document).
+- **v21** - Stopped using `PO DateRequired` (confirmed unreliable by the
+  purchaser), then restored it as one narrow, intentional exception in
+  `clean-po-data.ts`'s closed-order NULL-fill rule once scope was clarified.
+- **v22** - Retired Creep and Pattern entirely (their core premise was
+  price, not just decorated with it - no non-cost version exists). Added
+  Short-shipping, Reorder Cadence, and Vendor Concentration. Dropped the
+  cost columns from Habits and Bottleneck. As of this version, no view in
+  the tool depends on price at all.
