@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v30 - 2026-09-04 - Concentration now shows assigned-catalog size + top code</div>
+<div class="version-badge">v31 - 2026-09-04 - Cadence renamed to Frequency; % instead of raw counts</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -128,7 +128,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="speed">Speed</button>
       <button class="tab-btn" data-tab="shortship">Shortfall</button>
-      <button class="tab-btn" data-tab="cadence">Cadence</button>
+      <button class="tab-btn" data-tab="cadence">Frequency</button>
       <button class="tab-btn" data-tab="concentration">Concentration</button>
       <button class="tab-btn" data-tab="habits">Habits</button>
       <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
@@ -676,20 +676,22 @@
   function renderCadence() {
     const container = document.getElementById("tab-cadence");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Reorder Cadence - is this item being ordered more often than it used to be?"]));
+    container.appendChild(el("h2", null, ["Frequency - is this item being ordered more often than it used to be?"]));
     const rows = filteredRows().filter(isStockItem);
     const byItem = new Map();
     rows.forEach(r => {
       const item = String(r["ID"] || "").trim();
       const d = toDate(r["PO Date"]);
+      const qty = typeof r["Quantity"] === "number" ? r["Quantity"] : null;
       if (!item || !d) return;
       if (!byItem.has(item)) byItem.set(item, []);
-      byItem.get(item).push(d);
+      byItem.get(item).push({ date: d, qty });
     });
     const entries = [];
-    byItem.forEach((dates, item) => {
-      if (dates.length < 5) return; // need at least 4 gaps to compare recent vs overall meaningfully
-      dates.sort((a, b) => a - b);
+    byItem.forEach((orders, item) => {
+      if (orders.length < 5) return; // need at least 4 gaps to compare recent vs overall meaningfully
+      orders.sort((a, b) => a.date - b.date);
+      const dates = orders.map(o => o.date);
       const gaps = [];
       for (let i = 1; i < dates.length; i++) gaps.push((dates[i] - dates[i - 1]) / 86400000);
       const overallAvg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
@@ -697,7 +699,9 @@
       const recentAvg = recentGaps.reduce((s, g) => s + g, 0) / recentGaps.length;
       const tightened = recentAvg <= overallAvg * 0.7; // recent gap is meaningfully shorter
       if (!tightened) return;
-      entries.push({ item, count: dates.length, overallAvg, recentAvg });
+      const lastDate = dates[dates.length - 1];
+      const maxQty = orders.reduce((m, o) => (o.qty !== null && o.qty > m ? o.qty : m), 0);
+      entries.push({ item, count: orders.length, overallAvg, recentAvg, lastDate, maxQty });
     });
 
     if (entries.length === 0) {
@@ -707,12 +711,13 @@
       return;
     }
 
-    entries.sort((a, b) => (a.recentAvg / a.overallAvg) - (b.recentAvg / b.overallAvg));
+    // Most recently ordered first; ties broken by largest single order quantity.
+    entries.sort((a, b) => (b.lastDate - a.lastDate) || (b.maxQty - a.maxQty));
     container.appendChild(el("p", { class: "stat" }, [
       `${entries.length} item${entries.length === 1 ? "" : "s"} are now being ordered noticeably more often than their own history:`
     ]));
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "Usual gap between orders", "Recent gap"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Usual gap between orders", "Recent gap", "Last ordered", "Largest order qty"].map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     entries.forEach(e => {
@@ -721,6 +726,8 @@
         el("td", null, [String(e.count)]),
         el("td", null, [`${e.overallAvg.toFixed(0)} days`]),
         el("td", { class: "change-up" }, [`${e.recentAvg.toFixed(0)} days`]),
+        el("td", null, [fmtDate(e.lastDate)]),
+        el("td", null, [String(e.maxQty)]),
       ]));
     });
     table.appendChild(tbody);
@@ -818,13 +825,14 @@
     container.appendChild(el("p", { class: "stat" }, [
       `${entries.length} vendor${entries.length === 1 ? " is" : "s are"} the only source for at least one item:`
     ]));
-    const headers = ["Vendor", "Codes ordered", "Codes assigned to them", "Only they supply", "Most-ordered code"];
+    const headers = ["Vendor", "Codes ordered", "% of assigned catalog ordered", "Only they supply", "Most-ordered code"];
     const table = el("table", null, [
       el("thead", null, [el("tr", null, headers.map(h => el("th", null, [h])))]),
     ]);
     const tbody = el("tbody");
     entries.forEach(e => {
-      const assignedText = e.assignedCount === null ? "-" : `${e.totalItems} of ${e.assignedCount}`;
+      const assignedText = e.assignedCount === null || e.assignedCount === 0
+        ? "-" : `${((e.totalItems / e.assignedCount) * 100).toFixed(0)}%`;
       const topText = e.topItem ? `${itemLabel(e.topItem)} (${e.topCount} orders)` : "-";
       tbody.appendChild(el("tr", null, [
         el("td", null, [e.vendor]),
@@ -837,7 +845,7 @@
     table.appendChild(tbody);
     container.appendChild(table);
     container.appendChild(el("p", { class: "note" }, [
-      "\"Only they supply\" means no other vendor has ever shipped this item in the data available - not that no alternate vendor exists in the world. \"Codes assigned to them\" comes from Da Vinci File's own Supplier ID column - codes never ordered still count toward dependency risk, since the vendor is still the designated source for them."
+      "\"Only they supply\" means no other vendor has ever shipped this item in the data available - not that no alternate vendor exists in the world. The % ordered comes from Da Vinci File's own Supplier ID column as the denominator - codes never ordered still count toward dependency risk, since the vendor is still the designated source for them."
     ]));
   }
 
