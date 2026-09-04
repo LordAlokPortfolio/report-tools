@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vendor &amp; Material Analysis - KV Custom Windows and Doors</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.32.2/js/msal-browser.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --border: #dcdcd6; --text: #1c1c1a;
+    --muted: #6b6b64; --accent: #2c5f4f; --accent-light: #e7f0ec;
+    --warn: #8a5a00; --warn-bg: #fdf2df; --bad: #8a2c2c; --bad-bg: #fbeaea;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  .version-badge {
+    position: fixed; top: 10px; right: 14px; font-size: 11px; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 5px;
+    padding: 3px 8px; z-index: 100;
+  }
+  header { padding: 20px 28px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  header p { margin: 0; color: var(--muted); font-size: 13px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 28px 80px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  .panel h2 { margin-top: 0; font-size: 16px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  select, input[type=file], input[type=number] {
+    padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff;
+  }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; flex-wrap: wrap; }
+  .tab-btn {
+    padding: 9px 14px; border: none; background: none; cursor: pointer; font-size: 13px;
+    color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-divider { width: 1px; margin: 6px 6px; background: var(--border); align-self: stretch; }
+  .tab-view { display: none; }
+  .tab-view.active { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .callout { padding: 12px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 14px; }
+  .callout.warn { background: var(--warn-bg); color: var(--warn); }
+  .callout.bad { background: var(--bad-bg); color: var(--bad); }
+  .callout.ok { background: var(--accent-light); color: var(--accent); }
+  .stat { font-weight: 600; }
+  .insufficient { color: var(--muted); font-style: italic; }
+  .change-up { color: var(--bad); font-weight: 600; }
+  .change-down { color: var(--accent); font-weight: 600; }
+  .action-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .action-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .action-card.urgent { border-color: var(--bad); background: var(--bad-bg); }
+  .action-card .card-title { font-weight: 600; margin-bottom: 6px; }
+  .action-card .card-row { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  .action-card .card-order-by { font-weight: 600; margin-top: 6px; }
+  .low-confidence { color: var(--muted); }
+  tr.thin-row td { opacity: 0.65; }
+  .as-of { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  button.primary {
+    padding: 8px 16px; border: none; border-radius: 6px; background: var(--accent); color: #fff;
+    font-size: 13px; cursor: pointer;
+  }
+  button.primary:disabled { background: #b7c4bd; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div class="version-badge">v43 - 2026-09-04 - New Actions tab: vendor-scoped runout cards, sorted soonest-due first, same figures as Runout</div>
+
+<header>
+  <h1>Vendor &amp; Material Analysis</h1>
+  <p>Reads the cleaned PO history file. The tool only states what the data can prove - no invented numbers, no "switch vendors" verdicts. See the About tab for what this tool is and why.</p>
+</header>
+
+<main>
+
+  <section class="panel" id="gatePanel" style="display:none;">
+    <h2>Connect your own data</h2>
+    <p class="note">You're viewing sample data below (fake numbers, for demonstration only). Enter the passphrase to unlock a live connection to the real OneDrive workbook.</p>
+    <div class="row">
+      <div class="field">
+        <label for="passphraseInput">Passphrase</label>
+        <input type="password" id="passphraseInput" placeholder="Passphrase">
+      </div>
+      <div class="field">
+        <button class="primary" id="unlockBtn">Unlock</button>
+      </div>
+    </div>
+    <p class="note" id="gateStatus"></p>
+  </section>
+
+  <section class="panel" id="connectPanel" style="display:none;">
+    <h2>1. Connect to the workbook</h2>
+    <div class="row">
+      <div class="field">
+        <button class="primary" id="signInBtn">Sign in with Microsoft</button>
+      </div>
+      <div class="field">
+        <button class="primary" id="refreshBtn" disabled>Refresh data</button>
+      </div>
+    </div>
+    <p class="note" id="loadStatus">Sign in, then Refresh re-reads whatever is currently saved in the workbook at its fixed OneDrive path - nothing is uploaded anywhere; the file is read live from OneDrive.</p>
+  </section>
+
+  <section class="panel" id="manualUploadPanel">
+    <h2>Or load files manually (fallback)</h2>
+    <div class="row">
+      <div class="field">
+        <label for="poFile">PO history (cleaned)</label>
+        <input type="file" id="poFile" accept=".xlsx,.xls,.csv">
+      </div>
+      <div class="field">
+        <label for="bomFile">Component list / BOM</label>
+        <input type="file" id="bomFile" accept=".xlsx,.xls,.csv">
+      </div>
+      <div class="field">
+        <label for="ledgerFile">Inventory ledger (tbl_HISTORY)</label>
+        <input type="file" id="ledgerFile" accept=".xlsx,.xls,.csv">
+      </div>
+    </div>
+    <p class="note">Use this only if the OneDrive sign-in above isn't working.</p>
+  </section>
+
+  <section class="panel" id="landingPanel" style="display:none;">
+    <h2>2. Pick a vendor and a timeline</h2>
+    <div class="row">
+      <div class="field">
+        <label for="vendorSelect">Vendor</label>
+        <select id="vendorSelect"></select>
+      </div>
+      <div class="field">
+        <label for="timelineSelect">Timeline</label>
+        <select id="timelineSelect">
+          <option value="90">Last 90 days</option>
+          <option value="180">Last 6 months</option>
+          <option value="365" selected>Last 12 months</option>
+          <option value="0">All time</option>
+        </select>
+      </div>
+    </div>
+    <p class="as-of" id="asOfLine"></p>
+  </section>
+
+  <section id="viewsSection" style="display:none;">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="speed">Speed</button>
+      <button class="tab-btn" data-tab="shortship">Shortfall</button>
+      <button class="tab-btn" data-tab="cadence">Frequency</button>
+      <button class="tab-btn" data-tab="mix">Mix</button>
+      <button class="tab-btn" data-tab="habits">Sensitivity</button>
+      <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
+      <button class="tab-btn" data-tab="actions">Actions</button>
+      <span class="tab-divider"></span>
+      <button class="tab-btn" data-tab="concentration">Concentration</button>
+      <button class="tab-btn" data-tab="runout">Runout</button>
+      <button class="tab-btn" data-tab="about">About</button>
+    </div>
+
+    <div class="tab-view active" id="tab-speed"></div>
+    <div class="tab-view" id="tab-shortship"></div>
+    <div class="tab-view" id="tab-cadence"></div>
+    <div class="tab-view" id="tab-concentration"></div>
+    <div class="tab-view" id="tab-mix"></div>
+    <div class="tab-view" id="tab-habits"></div>
+    <div class="tab-view" id="tab-bottleneck"></div>
+    <div class="tab-view" id="tab-actions"></div>
+    <div class="tab-view" id="tab-runout"></div>
+    <div class="tab-view" id="tab-about"></div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Public/private gate ----------
+  // Doorbell, not a lock -- anyone can read this in the page source. Change this
+  // string to update the passphrase later.
+  const PASSPHRASE = "KVDOORS26";
+
+  // ---------- OneDrive / Graph config ----------
+  // Fill in the exact sheet tab names before use -- these are best guesses from
+  // conversation, not confirmed against the live workbook.
+  const MSAL_CONFIG = {
+    auth: {
+      clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
+      authority: "https://login.microsoftonline.com/972ad3c5-73ca-4f41-89d7-56485631c283",
+      redirectUri: window.location.href.split("?")[0].split("#")[0],
+    },
+    cache: { cacheLocation: "localStorage" },
+  };
+  const GRAPH_SCOPES = ["User.Read", "Files.Read"];
+  const WORKBOOK_FILENAME = "tblINVENTORY_PO.xlsx"; // found by name, not by path -- avoids path/nesting guessing
+  // Matched trimmed + case-insensitive against the live workbook, so exact whitespace doesn't matter.
+  const PO_SHEET_NAME = "PO-INVENTORY-TABLE";
+  const HISTORY_SHEET_NAME = "HISTORY SHEET"; // table tbl_HISTORY lives on this sheet
+  const BOM_SHEET_NAME = "BOTTLENECK";        // still being built per the user -- may not have BOM columns yet
+  const DA_VINCI_SHEET_NAME = "Da Vinci File"; // inventory master -- each code's assigned supplier
+  const SUPPLIER_SHEET_NAME = "SUPPLIER FILE"; // resolves Da Vinci's Supplier ID to the same vendor name the PO table uses
+
+  let msalApp = null;
+  let workbookItemId = null;
+  let graphAccessToken = null;
+
+  // ---------- state ----------
+  let poRows = [];       // array of row objects, keyed by header
+  let bomRows = null;
+  let ledgerRows = null;
+  let daVinciRows = null;
+  let supplierFileRows = null;
+  let poAsOf = null;
+  let ledgerAsOf = null;
+
+  const MIN_HISTORY = 6; // orders; per spec, below this we say "not enough history" instead of guessing
+
+  // ---------- helpers ----------
+  function excelSerialToDate(serial) {
+    return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86400000);
+  }
+  function toDate(v) {
+    if (v instanceof Date) return v;
+    if (typeof v === "number") return excelSerialToDate(v);
+    if (typeof v === "string") {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return null;
+  }
+  function isWeekend(d) {
+    const dow = d.getUTCDay();
+    return dow === 0 || dow === 6;
+  }
+
+  // Ontario statutory holidays, computed per year (not hand-typed dates) so this
+  // doesn't go stale. Standard 9: New Year's, Family Day, Good Friday, Victoria
+  // Day, Canada Day, Labour Day, Thanksgiving, Christmas, Boxing Day. Company-
+  // specific closures beyond these aren't known and aren't included.
+  const ontarioHolidayCache = new Map(); // year -> Set of "YYYY-MM-DD"
+  function nthWeekdayOfMonth(year, month, weekday, n) { // month/weekday 0-based
+    const first = new Date(Date.UTC(year, month, 1));
+    const offset = (weekday - first.getUTCDay() + 7) % 7;
+    return new Date(Date.UTC(year, month, 1 + offset + (n - 1) * 7));
+  }
+  function lastWeekdayOnOrBefore(year, month, day, weekday) {
+    const d = new Date(Date.UTC(year, month, day));
+    const diff = (d.getUTCDay() - weekday + 7) % 7;
+    return new Date(d.getTime() - diff * 86400000);
+  }
+  function goodFriday(year) { // Meeus/Jones/Butcher Gregorian Easter algorithm
+    const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+    const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31) - 1; // 0-based
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    const easterSunday = new Date(Date.UTC(year, month, day));
+    return new Date(easterSunday.getTime() - 2 * 86400000);
+  }
+  function ontarioHolidaysForYear(year) {
+    if (ontarioHolidayCache.has(year)) return ontarioHolidayCache.get(year);
+    const dates = [
+      new Date(Date.UTC(year, 0, 1)),               // New Year's Day
+      nthWeekdayOfMonth(year, 1, 1, 3),              // Family Day: 3rd Monday of Feb
+      goodFriday(year),
+      lastWeekdayOnOrBefore(year, 4, 24, 1),         // Victoria Day: Mon on/before May 24
+      new Date(Date.UTC(year, 6, 1)),                // Canada Day
+      nthWeekdayOfMonth(year, 8, 1, 1),              // Labour Day: 1st Monday of Sept
+      nthWeekdayOfMonth(year, 9, 1, 2),              // Thanksgiving: 2nd Monday of Oct
+      new Date(Date.UTC(year, 11, 25)),              // Christmas Day
+      new Date(Date.UTC(year, 11, 26)),              // Boxing Day
+    ];
+    const set = new Set(dates.map(d => d.toISOString().slice(0, 10)));
+    ontarioHolidayCache.set(year, set);
+    return set;
+  }
+  function isHoliday(d) {
+    return ontarioHolidaysForYear(d.getUTCFullYear()).has(d.toISOString().slice(0, 10));
+  }
+
+  function businessDaysBetween(start, end) {
+    if (!start || !end) return null;
+    let count = 0;
+    const s = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+    const e = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+    for (let d = new Date(s.getTime() + 86400000); d <= e; d = new Date(d.getTime() + 86400000)) {
+      if (!isWeekend(d) && !isHoliday(d)) count++;
+    }
+    return count;
+  }
+  function median(nums) {
+    const arr = nums.slice().sort((a, b) => a - b);
+    const mid = Math.floor(arr.length / 2);
+    return arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
+  }
+  function fmtDate(d) {
+    if (!d) return "-";
+    return d.toISOString().slice(0, 10);
+  }
+  function el(tag, attrs, children) {
+    const e = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(k => {
+      if (k === "class") e.className = attrs[k];
+      else if (k === "html") e.innerHTML = attrs[k];
+      else e.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(c => e.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+    return e;
+  }
+  function notEnoughHistory(n) {
+    return el("p", { class: "insufficient" },
+      [`Not enough history yet (${n} order${n === 1 ? "" : "s"}, minimum ${MIN_HISTORY}). No number is shown rather than guessing from too little data.`]);
+  }
+
+  // ---------- file parsing ----------
+  function readSheetAsRows(file, cb) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const wb = XLSX.read(e.target.result, { type: "binary", cellDates: false });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      cb(rows);
+    };
+    reader.readAsBinaryString(file);
+  }
+
+  document.getElementById("poFile").addEventListener("change", function (e) {
+    const f = e.target.files[0];
+    if (!f) return;
+    readSheetAsRows(f, function (rows) {
+      poRows = rows;
+      poAsOf = new Date();
+      document.getElementById("loadStatus").textContent =
+        `Loaded ${rows.length.toLocaleString()} PO rows from "${f.name}".`;
+      populateLanding();
+    });
+  });
+  document.getElementById("bomFile").addEventListener("change", function (e) {
+    const f = e.target.files[0];
+    if (!f) return;
+    readSheetAsRows(f, function (rows) { bomRows = rows; renderAll(); });
+  });
+  document.getElementById("ledgerFile").addEventListener("change", function (e) {
+    const f = e.target.files[0];
+    if (!f) return;
+    readSheetAsRows(f, function (rows) { ledgerRows = rows; ledgerAsOf = new Date(); itemLabel._map = null; renderAll(); });
+  });
+
+  // ---------- OneDrive / Microsoft Graph ----------
+  // Converts a Graph usedRange response ({values: [[...header],[...row],...]})
+  // into the same "array of row objects keyed by header" shape readSheetAsRows
+  // produces from an uploaded file, so every render* function works unchanged.
+  function usedRangeToRows(valuesGrid) {
+    if (!valuesGrid || valuesGrid.length < 1) return [];
+    const headers = valuesGrid[0].map(h => String(h).trim());
+    return valuesGrid.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i] === "" ? "" : row[i]; });
+      return obj;
+    });
+  }
+
+  // Graph's Excel backend can time out (504/MaxRequestDurationExceeded) opening a
+  // large or currently-open workbook -- often transient. Retry a few times with
+  // backoff before giving up.
+  let workbookSessionId = null;
+  async function graphGet(path, attempt = 1, method = "GET", body = null) {
+    const headers = { Authorization: "Bearer " + graphAccessToken };
+    if (workbookSessionId && path.includes("/workbook/")) headers["workbook-session-id"] = workbookSessionId;
+    if (body) headers["Content-Type"] = "application/json";
+    const res = await fetch("https://graph.microsoft.com/v1.0" + path, {
+      method, headers, body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      const respBody = await res.text();
+      const isTimeout = res.status === 504 || respBody.includes("MaxRequestDurationExceeded");
+      if (isTimeout && attempt < 4) {
+        await new Promise(r => setTimeout(r, attempt * 3000));
+        return graphGet(path, attempt + 1, method, body);
+      }
+      const hint = isTimeout
+        ? " (Microsoft's Excel service timed out opening the workbook -- if it's open in desktop Excel right now, try closing it and retrying.)"
+        : "";
+      throw new Error(`Graph request failed (${res.status}) for ${path}: ${respBody}${hint}`);
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  }
+
+  // Opens the workbook ONCE per refresh and reuses that session for every
+  // subsequent workbook call, instead of Graph cold-opening the whole 42k+ row
+  // workbook fresh on every single request -- that repeated cold-open is the
+  // likely cause of the repeated timeouts.
+  async function ensureWorkbookSession(itemId) {
+    if (workbookSessionId) return workbookSessionId;
+    const result = await graphGet(`/me/drive/items/${itemId}/workbook/createSession`, 1, "POST", { persistChanges: false });
+    workbookSessionId = result.id;
+    return workbookSessionId;
+  }
+
+  async function findWorkbookItemId() {
+    if (workbookItemId) {
+      // itemId stays cached across Refresh clicks in this page load, but the
+      // session is deliberately reset every refresh -- always make sure one exists.
+      await ensureWorkbookSession(workbookItemId);
+      return workbookItemId;
+    }
+    const results = await graphGet(`/me/drive/root/search(q='${encodeURIComponent(WORKBOOK_FILENAME)}')?$select=id,name,file`);
+    const match = results.value.find(i => i.file && i.name === WORKBOOK_FILENAME);
+    if (!match) {
+      const names = results.value.map(i => i.name).join(", ") || "(nothing)";
+      throw new Error(`No exact filename match for "${WORKBOOK_FILENAME}". Search returned: ${names}.`);
+    }
+    workbookItemId = match.id;
+    await ensureWorkbookSession(workbookItemId);
+    return workbookItemId;
+  }
+
+  let worksheetListCache = null;
+
+  function normalizeSheetName(s) {
+    return String(s).trim().toLowerCase();
+  }
+
+  async function findWorksheetId(configuredName) {
+    if (!configuredName) return null;
+    const itemId = await findWorkbookItemId();
+    if (!worksheetListCache) {
+      const data = await graphGet(`/me/drive/items/${itemId}/workbook/worksheets?$select=id,name`);
+      worksheetListCache = data.value;
+    }
+    const target = normalizeSheetName(configuredName);
+    const match = worksheetListCache.find(s => normalizeSheetName(s.name) === target);
+    if (!match) {
+      const names = worksheetListCache.map(s => `"${s.name}"`).join(", ");
+      throw new Error(`No worksheet matching "${configuredName}" (trimmed/case-insensitive). Actual sheets: ${names}.`);
+    }
+    return match.id;
+  }
+
+  const ROW_CHUNK_SIZE = 2000; // mirrors clean-po-data.ts's CHUNK_SIZE
+
+  // A single usedRange(valuesOnly=true) call on a large sheet (e.g. 42k+ rows)
+  // exceeds Graph's response payload limit -- same problem the Office Script hit,
+  // fixed the same way: read in row chunks via explicit range addresses instead
+  // of asking for the whole sheet's values in one response.
+  async function fetchSheetRows(sheetName) {
+    if (!sheetName) return null;
+    const itemId = await findWorkbookItemId();
+    const sheetId = await findWorksheetId(sheetName);
+    const base = `/me/drive/items/${itemId}/workbook/worksheets('${sheetId}')`;
+
+    // Metadata only (address/rowCount/columnCount) -- no cell values, so this
+    // request stays small even on a huge sheet.
+    const meta = await graphGet(`${base}/usedRange(valuesOnly=true)?$select=address,rowCount,columnCount`);
+    const addr = meta.address.includes("!") ? meta.address.split("!")[1] : meta.address;
+    const [, endColLetter] = addr.split(":");
+    const lastCol = endColLetter.match(/[A-Z]+/)[0];
+    const totalRows = meta.rowCount;
+
+    const allRows = [];
+    for (let start = 1; start <= totalRows; start += ROW_CHUNK_SIZE) {
+      const end = Math.min(start + ROW_CHUNK_SIZE - 1, totalRows);
+      const rangeAddr = `A${start}:${lastCol}${end}`;
+      const chunk = await graphGet(`${base}/range(address='${rangeAddr}')?$select=values`);
+      allRows.push(...chunk.values);
+    }
+    return usedRangeToRows(allRows);
+  }
+
+  // ---------- Sample/demo data (shown publicly, no passphrase) ----------
+  // Deterministic (seeded), fake vendor/item names and numbers -- fine to publish
+  // publicly per the spec's "public tool, private data" rule. Exercises all seven
+  // views: several vendors with different typical lead times, some short-shipped
+  // orders, some open orders, a couple of custom-order ($0, non-numeric ID) rows,
+  // and ledger movement history for Runout.
+  function seededRandom(seed) {
+    let s = seed;
+    return function () {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      return s / 0x7fffffff;
+    };
+  }
+  function generateSampleData() {
+    const rand = seededRandom(42);
+    const vendors = [
+      { id: "V1", name: "Acme Glass Co", leadDays: 5 },
+      { id: "V2", name: "Northern Aluminum Supply", leadDays: 10 },
+      { id: "V3", name: "Riverside Hardware Ltd", leadDays: 20 },
+      { id: "V4", name: "Sample Vendor Group", leadDays: 35 },
+    ];
+    const itemNames = [
+      "Frame Channel 2in", "Glass Panel Clear", "Hinge Assembly", "Weatherstrip Roll",
+      "Sill Track Alum", "Lock Mechanism", "Screen Mesh Panel", "Corner Bracket",
+      "Spacer Bar", "Gasket Seal Kit", "Handle Set Chrome", "Sash Balance",
+    ];
+    const items = itemNames.map((name, i) => ({
+      id: String(1001 + i), name, vendor: vendors[i % vendors.length],
+    }));
+
+    const today = new Date();
+    const daysAgo = n => new Date(today.getTime() - n * 86400000);
+    const poRows = [];
+    const ledgerRows = [];
+    let poCounter = 1000;
+
+    items.forEach(item => {
+      const orderCount = 8 + Math.floor(rand() * 10);
+      let onHand = 50 + Math.floor(rand() * 100);
+      ledgerRows.push({ ID: item.id, "INVENTORY NAME": item.name, DATE: daysAgo(580), QTY: onHand, TYPE: "Count" });
+      let cursor = 580;
+      for (let i = 0; i < orderCount; i++) {
+        cursor -= Math.floor(20 + rand() * 40);
+        if (cursor < 3) cursor = 3;
+        const poDate = daysAgo(cursor);
+        const isRecent = cursor < 20;
+        const leadNoise = Math.floor((rand() - 0.5) * item.vendor.leadDays * 0.4);
+        const leadDays = Math.max(1, item.vendor.leadDays + leadNoise);
+        const qty = 10 + Math.floor(rand() * 90);
+        const shortShip = rand() < 0.12;
+        const qtyReceived = shortShip ? Math.max(1, qty - Math.floor(qty * (0.1 + rand() * 0.3))) : qty;
+        const closed = !isRecent || rand() > 0.3;
+        poCounter++;
+        poRows.push({
+          "PO No": "SAMPLE-" + poCounter,
+          "Supplier ID": item.vendor.name,
+          "PO Date": poDate,
+          "ITEM NO": item.id,
+          "Quantity": qty,
+          "ID": item.id,
+          "PO DateReceived": closed ? daysAgo(cursor - leadDays) : "NULL",
+          "PO DateRequired": daysAgo(cursor - item.vendor.leadDays),
+          "PO DateRevised": "",
+          "QtyReceived": closed ? qtyReceived : 0,
+          "POLineClosed": closed ? -1 : 0,
+          "UnitCost": Math.round((5 + rand() * 40) * 100) / 100,
+          "Category": "SAMPLE",
+        });
+        if (closed) {
+          onHand += qty;
+          ledgerRows.push({ ID: item.id, "INVENTORY NAME": item.name, DATE: daysAgo(cursor - leadDays), QTY: qty, TYPE: "Receivings" });
+        }
+        const usage = Math.floor(5 + rand() * 15);
+        onHand = Math.max(0, onHand - usage);
+        ledgerRows.push({ ID: item.id, "INVENTORY NAME": item.name, DATE: daysAgo(Math.max(1, cursor - 5)), QTY: usage, TYPE: "Transfers" });
+      }
+      // A couple of custom-order rows per item's vendor, to demonstrate the
+      // stock-vs-custom-order filter working on sample data too.
+      if (rand() < 0.5) {
+        poCounter++;
+        poRows.push({
+          "PO No": "SAMPLE-" + poCounter,
+          "Supplier ID": item.vendor.name,
+          "PO Date": daysAgo(Math.floor(rand() * 300)),
+          "ITEM NO": "CUSTOM",
+          "Quantity": 1,
+          "ID": `Custom order of: ${item.vendor.name}`,
+          "PO DateReceived": daysAgo(Math.floor(rand() * 250)),
+          "PO DateRequired": "",
+          "PO DateRevised": "",
+          "QtyReceived": 1,
+          "POLineClosed": -1,
+          "UnitCost": 0,
+          "Category": "SAMPLE",
+        });
+      }
+    });
+
+    const daVinciRows = items.map(item => ({
+      ID: item.id, "INVENTORY ID": item.id, "INVENTORY NAME": item.name, "SUPPLIER ID": item.vendor.id,
+    }));
+    const supplierFileRows = vendors.map(v => ({ "SUPPLIER ID": v.id, "SUPPLIER NAME": v.name }));
+
+    return { poRows, ledgerRows, daVinciRows, supplierFileRows };
+  }
+
+  function loadSampleData() {
+    const sample = generateSampleData();
+    poRows = sample.poRows;
+    ledgerRows = sample.ledgerRows;
+    daVinciRows = sample.daVinciRows;
+    supplierFileRows = sample.supplierFileRows;
+    bomRows = null;
+    poAsOf = new Date();
+    ledgerAsOf = new Date();
+    itemLabel._map = null;
+    document.getElementById("loadStatus").textContent = "Viewing sample data (fake numbers) - enter the passphrase above to connect your real OneDrive workbook.";
+    populateLanding();
+  }
+
+  const UNLOCK_KEY = "vendorAnalysisUnlocked";
+  function isUnlocked() {
+    try { return localStorage.getItem(UNLOCK_KEY) === "true"; } catch (e) { return false; }
+  }
+  function showUnlockedUI() {
+    document.getElementById("gatePanel").style.display = "none";
+    document.getElementById("connectPanel").style.display = "block";
+    trySilentSignIn();
+  }
+
+  // MSAL's own token cache already persists in localStorage, but a full page
+  // reload previously threw that away and forced a fresh interactive sign-in
+  // every time. Try to reuse the cached session silently (no popup) first;
+  // fall back to the manual Sign in button if that fails.
+  async function trySilentSignIn() {
+    try {
+      msalApp = new msal.PublicClientApplication(MSAL_CONFIG);
+      await msalApp.initialize();
+      const accounts = msalApp.getAllAccounts();
+      if (accounts.length === 0) return;
+      const tokenResult = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      graphAccessToken = tokenResult.accessToken;
+      document.getElementById("loadStatus").textContent = "Signed in automatically (remembered from before).";
+      document.getElementById("refreshBtn").disabled = false;
+      refreshFromOneDrive();
+    } catch (err) {
+      // No cached session, or it's fully expired -- fall back to the manual
+      // Sign in button. Not an error worth showing; this was just a convenience attempt.
+    }
+  }
+  function showLockedUI() {
+    document.getElementById("gatePanel").style.display = "block";
+    document.getElementById("connectPanel").style.display = "none";
+    loadSampleData();
+  }
+  document.getElementById("unlockBtn").addEventListener("click", function () {
+    const entered = document.getElementById("passphraseInput").value.trim().toLowerCase();
+    if (entered === PASSPHRASE.trim().toLowerCase()) {
+      try { localStorage.setItem(UNLOCK_KEY, "true"); } catch (e) {}
+      document.getElementById("gateStatus").textContent = "";
+      showUnlockedUI();
+    } else {
+      document.getElementById("gateStatus").textContent = "That passphrase isn't right - still viewing sample data.";
+    }
+  });
+  if (isUnlocked()) { showUnlockedUI(); } else { showLockedUI(); }
+
+  async function refreshFromOneDrive() {
+    if (!graphAccessToken) return;
+    document.getElementById("loadStatus").textContent = "Reading live data from OneDrive…";
+    worksheetListCache = null; // pick up any sheet renames since the last refresh
+    itemLabel._map = null; // rebuild the ID -> name lookup from fresh ledger data
+    workbookSessionId = null; // start a fresh session each refresh, don't reuse a possibly-expired one
+    try {
+      poRows = (await fetchSheetRows(PO_SHEET_NAME)) || [];
+      poAsOf = new Date();
+      ledgerRows = await fetchSheetRows(HISTORY_SHEET_NAME);
+      if (ledgerRows) ledgerAsOf = new Date();
+      bomRows = await fetchSheetRows(BOM_SHEET_NAME);
+      daVinciRows = await fetchSheetRows(DA_VINCI_SHEET_NAME);
+      supplierFileRows = await fetchSheetRows(SUPPLIER_SHEET_NAME);
+      document.getElementById("loadStatus").textContent =
+        `Loaded ${poRows.length.toLocaleString()} PO rows live from OneDrive as of ${fmtDate(poAsOf)}.`;
+      populateLanding();
+    } catch (err) {
+      document.getElementById("loadStatus").textContent = "Could not read from OneDrive: " + err.message;
+    }
+  }
+
+  document.getElementById("signInBtn").addEventListener("click", async function () {
+    try {
+      msalApp = new msal.PublicClientApplication(MSAL_CONFIG);
+      await msalApp.initialize();
+      const loginResult = await msalApp.loginPopup({ scopes: GRAPH_SCOPES });
+      const tokenResult = await msalApp.acquireTokenSilent({
+        scopes: GRAPH_SCOPES, account: loginResult.account,
+      }).catch(() => msalApp.acquireTokenPopup({ scopes: GRAPH_SCOPES, account: loginResult.account }));
+      graphAccessToken = tokenResult.accessToken;
+      document.getElementById("loadStatus").textContent = "Signed in.";
+      document.getElementById("refreshBtn").disabled = false;
+      refreshFromOneDrive();
+    } catch (err) {
+      document.getElementById("loadStatus").textContent = "Sign-in failed: " + err.message;
+    }
+  });
+
+  document.getElementById("refreshBtn").addEventListener("click", refreshFromOneDrive);
+
+  // ---------- landing ----------
+  function populateLanding() {
+    const vendors = Array.from(new Set(poRows.map(r => String(r["Supplier ID"] || "").trim()).filter(Boolean))).sort();
+    const sel = document.getElementById("vendorSelect");
+    sel.innerHTML = "";
+    vendors.forEach(v => sel.appendChild(el("option", { value: v }, [v])));
+    document.getElementById("landingPanel").style.display = "block";
+    document.getElementById("viewsSection").style.display = "block";
+    document.getElementById("asOfLine").textContent =
+      `Purchase orders as of ${fmtDate(poAsOf)}.` + (ledgerAsOf ? ` Inventory ledger as of ${fmtDate(ledgerAsOf)}.` : "");
+    sel.addEventListener("change", renderAll);
+    document.getElementById("timelineSelect").addEventListener("change", renderAll);
+    renderAll();
+  }
+
+  // ---------- tabs ----------
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-view").forEach(v => v.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // ---------- data access ----------
+  function filteredRows() {
+    const vendor = document.getElementById("vendorSelect").value;
+    const days = parseInt(document.getElementById("timelineSelect").value, 10);
+    const cutoff = days > 0 ? new Date(Date.now() - days * 86400000) : null;
+    return poRows.filter(r => {
+      if (String(r["Supplier ID"] || "").trim() !== vendor) return false;
+      if (cutoff) {
+        const d = toDate(r["PO Date"]);
+        if (!d || d < cutoff) return false;
+      }
+      return true;
+    });
+  }
+  function isClosed(r) { return r["POLineClosed"] === -1 || r["POLineClosed"] === "-1"; }
+  function isOpen(r) { return r["POLineClosed"] === 0 || r["POLineClosed"] === "0"; }
+  // Stock items have a real numeric ID (resolved from the Da Vinci File lookup during
+  // cleaning). Custom orders carry a text ID like "Custom order of: <supplier>" and are
+  // sent with placeholder $0 pricing -- that pricing isn't real and must not feed cost math.
+  function isStockItem(r) {
+    const idVal = r["ID"];
+    if (typeof idVal === "number") return true;
+    if (typeof idVal === "string") {
+      const t = idVal.trim();
+      return t !== "" && /^[0-9.]+$/.test(t);
+    }
+    return false;
+  }
+  // ID alone isn't readable -- PO-INVENTORY-TABLE's own "Name" column (user-added,
+  // column U) is the preferred source, since it's the user's own readable naming.
+  // Da Vinci File / ledgerRows (tbl_HISTORY) fill in any ID that column doesn't cover.
+  function itemLabel(id) {
+    if (!poRows.length && !ledgerRows && !daVinciRows) return String(id);
+    if (!itemLabel._map) {
+      itemLabel._map = new Map();
+      poRows.forEach(r => {
+        const rid = String(r["ID"] || "").trim();
+        const name = String(r["Name"] || "").trim();
+        if (rid && name && !itemLabel._map.has(rid)) itemLabel._map.set(rid, name);
+      });
+      (daVinciRows || []).forEach(r => {
+        const rid = String(r["ID"] || "").trim();
+        const name = String(r["INVENTORY NAME"] || "").trim();
+        if (rid && name && !itemLabel._map.has(rid)) itemLabel._map.set(rid, name);
+      });
+      (ledgerRows || []).forEach(r => {
+        const rid = String(r["ID"] || "").trim();
+        const name = String(r["INVENTORY NAME"] || "").trim();
+        if (rid && name && !itemLabel._map.has(rid)) itemLabel._map.set(rid, name);
+      });
+    }
+    const name = itemLabel._map.get(String(id));
+    return name ? `${id} - ${name}` : String(id);
+  }
+
+  // ---------- View 1: Speed ----------
+  function renderSpeed() {
+    const container = document.getElementById("tab-speed");
+    container.innerHTML = "";
+    const rows = filteredRows().filter(isClosed);
+    const orders = [];
+    rows.forEach(r => {
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (bd !== null) orders.push({ poNo: r["PO No"], date: d1, received: d2, leadTime: bd });
+    });
+    container.appendChild(el("h2", null, ["Speed - how fast this vendor actually is"]));
+    if (orders.length < MIN_HISTORY) {
+      container.appendChild(notEnoughHistory(orders.length));
+      return;
+    }
+    orders.sort((a, b) => a.date - b.date);
+    const leadTimes = orders.map(o => o.leadTime);
+    const overallMed = Math.ceil(median(leadTimes));
+    const min = Math.min(...leadTimes), max = Math.max(...leadTimes);
+
+    // A vendor's lead time isn't necessarily stable over a multi-year history --
+    // if it shifted (e.g. 10 days -> 35 days), a long-window median blends the old
+    // and new regimes into a number that describes neither. So: the RECENT figure
+    // (last up to 3 orders) is the headline; the full-timeline median is shown as
+    // context, with a shift called out explicitly when the two diverge.
+    const recentN = Math.min(3, orders.length);
+    const recentOrders = orders.slice(-recentN);
+    const recentMed = Math.ceil(median(recentOrders.map(o => o.leadTime)));
+    const shifted = Math.abs(recentMed - overallMed) >= 3 || Math.abs(recentMed - overallMed) / overallMed >= 0.3;
+
+    const expectDate = fmtDate(new Date(Date.now() + recentMed * 86400000));
+    const headline = shifted
+      ? `Right now this vendor is taking about ${recentMed} business days - that's a real change from the ${overallMed}-day pace across this timeline. Order today, expect it around ${expectDate}, and plan around the new pace, not the old one.`
+      : `This vendor is taking about ${recentMed} business days lately, in line with their ${overallMed}-day pace across this timeline. Order today, expect it around ${expectDate}.`;
+    container.appendChild(el("p", { class: "stat" }, [headline]));
+    container.appendChild(el("p", { class: "note" }, [
+      `Based on the ${recentN} most recent order${recentN === 1 ? "" : "s"} (current pace) vs. all ${orders.length} closed orders in this timeline (${min}-${max} bd range, ${overallMed} bd median).`
+    ]));
+
+    container.appendChild(el("h2", null, ["Order-by-order detail"]));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["PO No", "PO Date", "PO DateReceived", "Lead time (business days)", "Vs. recent"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    orders.slice().reverse().forEach(o => { // most recent first -- table reads top-to-bottom as newest-to-oldest
+      const diff = o.leadTime - recentMed;
+      const diffText = diff === 0 ? "on recent" : (diff > 0 ? `+${diff} slower` : `${diff} faster`);
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [String(o.poNo)]),
+        el("td", null, [fmtDate(o.date)]),
+        el("td", null, [fmtDate(o.received)]),
+        el("td", null, [String(o.leadTime)]),
+        el("td", null, [diffText]),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  // ---------- View 2: Short-shipping ----------
+  function renderShortShip() {
+    const container = document.getElementById("tab-shortship");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Short-shipping - did you get what you ordered?"]));
+    const rows = filteredRows().filter(isClosed).filter(isStockItem)
+      .filter(r => typeof r["Quantity"] === "number" && typeof r["QtyReceived"] === "number");
+    const byItem = new Map();
+    rows.forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      if (!item) return;
+      if (!byItem.has(item)) byItem.set(item, []);
+      byItem.get(item).push(r);
+    });
+    const entries = [];
+    byItem.forEach((itemRows, item) => {
+      if (itemRows.length < 2) return;
+      const ordered = itemRows.reduce((s, r) => s + r["Quantity"], 0);
+      const received = itemRows.reduce((s, r) => s + r["QtyReceived"], 0);
+      const shortOrders = itemRows.filter(r => r["QtyReceived"] < r["Quantity"]).length;
+      if (shortOrders === 0) return; // never short-shipped -- nothing to report for this item
+      entries.push({ item, count: itemRows.length, ordered, received, shortOrders, shortfall: ordered - received });
+    });
+
+    if (entries.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        "No item from this vendor was ever short-shipped (received less than ordered) in this timeline."
+      ]));
+      return;
+    }
+
+    entries.sort((a, b) => (b.shortOrders / b.count) - (a.shortOrders / a.count));
+    container.appendChild(el("p", { class: "stat" }, [
+      `${entries.length} item${entries.length === 1 ? "" : "s"} from this vendor have been short-shipped at least once:`
+    ]));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Short-shipped orders", "Total ordered", "Total received", "Shortfall"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    entries.forEach(e => {
+      const rowClass = e.count < 4 ? "thin-row" : "";
+      tbody.appendChild(el("tr", { class: rowClass }, [
+        el("td", null, [itemLabel(e.item)]),
+        el("td", { class: e.count < 4 ? "low-confidence" : "" }, [String(e.count)]),
+        el("td", { class: "change-up" }, [`${e.shortOrders} of ${e.count} (${((e.shortOrders / e.count) * 100).toFixed(0)}%)`]),
+        el("td", null, [String(e.ordered)]),
+        el("td", null, [String(e.received)]),
+        el("td", null, [String(e.shortfall)]),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["Rows with only 2-3 orders are dimmed - thin evidence. This counts what was ordered vs. what arrived; it doesn't say why."]));
+  }
+
+  // ---------- View 3: Reorder Cadence ----------
+  function renderCadence() {
+    const container = document.getElementById("tab-cadence");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Frequency - is this item being ordered more often than it used to be?"]));
+    const rows = filteredRows().filter(isStockItem);
+    const byItem = new Map();
+    rows.forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      const d = toDate(r["PO Date"]);
+      const qty = typeof r["Quantity"] === "number" ? r["Quantity"] : null;
+      if (!item || !d) return;
+      if (!byItem.has(item)) byItem.set(item, []);
+      byItem.get(item).push({ date: d, qty });
+    });
+    const entries = [];
+    byItem.forEach((orders, item) => {
+      if (orders.length < 5) return; // need at least 4 gaps to compare recent vs overall meaningfully
+      orders.sort((a, b) => a.date - b.date);
+      const dates = orders.map(o => o.date);
+      const gaps = [];
+      for (let i = 1; i < dates.length; i++) gaps.push((dates[i] - dates[i - 1]) / 86400000);
+      const overallAvg = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+      const recentGaps = gaps.slice(-2);
+      const recentAvg = recentGaps.reduce((s, g) => s + g, 0) / recentGaps.length;
+      const tightened = recentAvg <= overallAvg * 0.7; // recent gap is meaningfully shorter
+      if (!tightened) return;
+      const lastDate = dates[dates.length - 1];
+      const maxQty = orders.reduce((m, o) => (o.qty !== null && o.qty > m ? o.qty : m), 0);
+      entries.push({ item, count: orders.length, overallAvg, recentAvg, lastDate, maxQty });
+    });
+
+    if (entries.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        "No item from this vendor shows a meaningfully shorter gap between recent orders vs. its own history in this timeline."
+      ]));
+      return;
+    }
+
+    // Most-ordered item first (highest total order count); ties broken by most recent order.
+    entries.sort((a, b) => (b.count - a.count) || (b.lastDate - a.lastDate));
+    container.appendChild(el("p", { class: "stat" }, [
+      `${entries.length} item${entries.length === 1 ? "" : "s"} are now being ordered noticeably more often than their own history:`
+    ]));
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Usual gap between orders", "Recent gap", "Last ordered", "Largest order qty"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    entries.forEach(e => {
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [itemLabel(e.item)]),
+        el("td", null, [String(e.count)]),
+        el("td", null, [`${e.overallAvg.toFixed(0)} days`]),
+        el("td", { class: "change-up" }, [`${e.recentAvg.toFixed(0)} days`]),
+        el("td", null, [fmtDate(e.lastDate)]),
+        el("td", null, [String(e.maxQty)]),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["This says the ordering rhythm changed, not why - could be rising usage, could be a planning change. Worth asking, not assuming."]));
+  }
+
+  // ---------- View 4: Vendor Concentration ----------
+  function renderConcentration() {
+    const container = document.getElementById("tab-concentration");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Vendor Concentration - which vendors are a single point of failure?"]));
+    container.appendChild(el("p", { class: "note" }, [
+      "Whole-building view, ignores the vendor/timeline picked above. Custom-order rows are excluded (they're vendor-specific by definition, not comparable stock items)."
+    ]));
+    container.appendChild(el("p", { class: "as-of" }, [`Purchase orders as of ${fmtDate(poAsOf)}.`]));
+
+    // Da Vinci File's own SUPPLIER ID column assigns every code to a vendor, whether
+    // or not it's ever actually been ordered -- that's the real catalog size to
+    // measure against, not just "codes we've ordered" (which undercounts dependency:
+    // 55 codes ordered out of 77 assigned still means all 77 depend on that vendor).
+    let assignedByVendor = null;
+    if (daVinciRows && supplierFileRows) {
+      const nameBySupplierId = new Map();
+      supplierFileRows.forEach(r => {
+        const id = String(r["SUPPLIER ID"] || "").trim();
+        const name = String(r["SUPPLIER NAME"] || "").trim();
+        if (id && name) nameBySupplierId.set(id, name);
+      });
+      assignedByVendor = new Map();
+      daVinciRows.forEach(r => {
+        const item = String(r["ID"] || "").trim();
+        const supplierId = String(r["SUPPLIER ID"] || "").trim();
+        if (!item || !supplierId) return;
+        const vendor = nameBySupplierId.get(supplierId) || supplierId;
+        if (!assignedByVendor.has(vendor)) assignedByVendor.set(vendor, new Set());
+        assignedByVendor.get(vendor).add(item);
+      });
+    }
+
+    const suppliersByItem = new Map();
+    const orderCountByVendorItem = new Map(); // "vendor||item" -> count
+    poRows.filter(isStockItem).forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      const vendor = String(r["Supplier ID"] || "").trim();
+      if (!item || !vendor) return;
+      if (!suppliersByItem.has(item)) suppliersByItem.set(item, new Set());
+      suppliersByItem.get(item).add(vendor);
+      const key = vendor + "||" + item;
+      orderCountByVendorItem.set(key, (orderCountByVendorItem.get(key) || 0) + 1);
+    });
+
+    const singleSourceItemsByVendor = new Map();
+    const totalItemsByVendor = new Map();
+    poRows.filter(isStockItem).forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      const vendor = String(r["Supplier ID"] || "").trim();
+      if (!item || !vendor) return;
+      if (!totalItemsByVendor.has(vendor)) totalItemsByVendor.set(vendor, new Set());
+      totalItemsByVendor.get(vendor).add(item);
+      if (suppliersByItem.get(item).size === 1) {
+        if (!singleSourceItemsByVendor.has(vendor)) singleSourceItemsByVendor.set(vendor, new Set());
+        singleSourceItemsByVendor.get(vendor).add(item);
+      }
+    });
+
+    const entries = [];
+    totalItemsByVendor.forEach((items, vendor) => {
+      const singleSource = singleSourceItemsByVendor.get(vendor) || new Set();
+      if (singleSource.size === 0) return; // no dependency risk from this vendor
+      let topItem = null, topCount = 0;
+      items.forEach(item => {
+        const count = orderCountByVendorItem.get(vendor + "||" + item) || 0;
+        if (count > topCount) { topCount = count; topItem = item; }
+      });
+      const assigned = assignedByVendor ? assignedByVendor.get(vendor) : null;
+      entries.push({
+        vendor, totalItems: items.size, singleSourceCount: singleSource.size,
+        assignedCount: assigned ? assigned.size : null,
+        topItem, topCount,
+      });
+    });
+
+    if (entries.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, ["No vendor is the sole source for any item in this data."]));
+      return;
+    }
+    if (!assignedByVendor) {
+      container.appendChild(el("div", { class: "callout warn" }, [
+        "Da Vinci File and/or Supplier File didn't load, so \"assigned catalog size\" isn't available this refresh -- showing ordered-item counts only."
+      ]));
+    }
+
+    entries.sort((a, b) => b.singleSourceCount - a.singleSourceCount);
+    container.appendChild(el("p", { class: "stat" }, [
+      `${entries.length} vendor${entries.length === 1 ? " is" : "s are"} the only source for at least one item:`
+    ]));
+    const headers = ["Vendor", "Codes ordered", "Total codes by vendor", "% of assigned catalog ordered", "Most-ordered code"];
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, headers.map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    entries.forEach(e => {
+      const totalText = e.assignedCount === null ? "-" : String(e.assignedCount);
+      const assignedText = e.assignedCount === null || e.assignedCount === 0
+        ? "-" : `${((e.totalItems / e.assignedCount) * 100).toFixed(0)}%`;
+      const topText = e.topItem ? `${itemLabel(e.topItem)} (${e.topCount} orders)` : "-";
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [e.vendor]),
+        el("td", null, [String(e.totalItems)]),
+        el("td", null, [totalText]),
+        el("td", { class: "change-up" }, [assignedText]),
+        el("td", { class: "note" }, [topText]),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, [
+      "\"Only they supply\" means no other vendor has ever shipped this item in the data available - not that no alternate vendor exists in the world. The % ordered comes from Da Vinci File's own Supplier ID column as the denominator - codes never ordered still count toward dependency risk, since the vendor is still the designated source for them."
+    ]));
+  }
+
+  // ---------- Mix: this vendor's own product breakdown, to find their MVP item(s) ----------
+  function renderMix() {
+    const container = document.getElementById("tab-mix");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Mix - what does this vendor's business with us actually look like?"]));
+    container.appendChild(el("p", { class: "note" }, [
+      "Uses the vendor/timeline picked above. Share is each code's number of orders as a fraction of this vendor's total order count -- not quantity or dollars."
+    ]));
+    const rows = filteredRows().filter(isStockItem);
+    const byItem = new Map();
+    let totalOrders = 0;
+    rows.forEach(r => {
+      const item = String(r["ID"] || "").trim();
+      if (!item) return;
+      if (!byItem.has(item)) byItem.set(item, { qty: 0, orders: 0 });
+      const rec = byItem.get(item);
+      if (typeof r["Quantity"] === "number") rec.qty += r["Quantity"];
+      rec.orders += 1;
+      totalOrders += 1;
+    });
+
+    if (byItem.size === 0 || totalOrders === 0) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No stock item orders for this vendor/timeline."]));
+      return;
+    }
+
+    const entries = Array.from(byItem.entries()).map(([item, rec]) => ({
+      item, qty: rec.qty, orders: rec.orders, share: (rec.orders / totalOrders) * 100,
+    }));
+    entries.sort((a, b) => b.orders - a.orders);
+
+    const mvp = entries[0];
+    container.appendChild(el("p", { class: "stat" }, [
+      `MVP item: ${itemLabel(mvp.item)} - ${mvp.share.toFixed(0)}% of every order placed with this vendor (${mvp.orders} of ${totalOrders} orders).`
+    ]));
+
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Item", "Orders", "Total qty ordered", "Share of vendor's order count"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    entries.forEach((e, i) => {
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [itemLabel(e.item)]),
+        el("td", null, [String(e.orders)]),
+        el("td", null, [String(e.qty)]),
+        el("td", { class: i === 0 ? "change-up" : "" }, [`${e.share.toFixed(1)}%`]),
+      ]));
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  // ---------- View 4: Sensitivity ----------
+  function renderHabits() {
+    const container = document.getElementById("tab-habits");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Sensitivity - does a bigger order, or a different time of year, get delivered faster or slower?"]));
+    const rows = filteredRows().filter(isClosed).filter(r => typeof r["Quantity"] === "number");
+    if (rows.length === 0) {
+      container.appendChild(notEnoughHistory(0));
+      return;
+    }
+    const qtys = rows.map(r => r["Quantity"]).sort((a, b) => a - b);
+    const sizeMedian = median(qtys);
+    function quarterOf(d) { return "Q" + (Math.floor(d.getUTCMonth() / 3) + 1); }
+    const buckets = new Map(); // key = quarter|size -> {leadTimes:[]}
+    rows.forEach(r => {
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (!d1 || bd === null) return;
+      const size = r["Quantity"] >= sizeMedian ? "Large" : "Small";
+      const key = quarterOf(d1) + " / " + size;
+      if (!buckets.has(key)) buckets.set(key, { leadTimes: [] });
+      buckets.get(key).leadTimes.push(bd);
+    });
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Quarter / size", "Orders", "Median lead time"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    let any = false;
+    Array.from(buckets.keys()).sort().forEach(key => {
+      const b = buckets.get(key);
+      if (b.leadTimes.length < 3) return; // too thin to mean anything
+      any = true;
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [key]),
+        el("td", null, [String(b.leadTimes.length)]),
+        el("td", null, [Math.ceil(median(b.leadTimes)) + " business days"]),
+      ]));
+    });
+    table.appendChild(tbody);
+    if (!any) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No quarter/size bucket has 3+ orders yet - too thin to mean anything. History starts recently; this fills in over time."]));
+      return;
+    }
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, [`Size split at this vendor's median order quantity (${sizeMedian}) for this timeline. Buckets under 3 orders are hidden rather than shown as noise.`]));
+  }
+
+  // ---------- View 5: Bottleneck ----------
+  function renderBottleneck() {
+    const container = document.getElementById("tab-bottleneck");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Bottleneck - the slowest component sets the build date"]));
+    if (!bomRows) {
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload a component list / BOM file (columns: ParentSKU, ComboID, ComponentSKU, QtyPerUnit) above to use this view."]));
+      return;
+    }
+    // Build median lead time per component (ITEM NO / INVENTORY ID) across ALL vendors/history.
+    const perComponent = new Map();
+    poRows.filter(isClosed).forEach(r => {
+      const item = String(r["ITEM NO"] || r["INVENTORY ID"] || "").trim();
+      if (!item) return;
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (!perComponent.has(item)) perComponent.set(item, { leadTimes: [] });
+      if (bd !== null) perComponent.get(item).leadTimes.push(bd);
+    });
+    const combos = new Map(); // ParentSKU|ComboID -> [{ComponentSKU, QtyPerUnit}]
+    bomRows.forEach(r => {
+      const key = `${r["ParentSKU"]}|${r["ComboID"]}`;
+      if (!combos.has(key)) combos.set(key, { parent: r["ParentSKU"], combo: r["ComboID"], parts: [] });
+      combos.get(key).parts.push({ sku: String(r["ComponentSKU"] || "").trim(), qty: Number(r["QtyPerUnit"]) || 1 });
+    });
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["Parent SKU", "Combo", "Slowest component", "Build-start lead time"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    let any = false;
+    combos.forEach(c => {
+      let worstLead = null, worstPart = null;
+      c.parts.forEach(p => {
+        const rec = perComponent.get(p.sku);
+        if (!rec || rec.leadTimes.length < MIN_HISTORY) return;
+        const med = Math.ceil(median(rec.leadTimes));
+        if (worstLead === null || med > worstLead) { worstLead = med; worstPart = p.sku; }
+      });
+      if (worstLead === null) return;
+      any = true;
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [String(c.parent)]),
+        el("td", null, [String(c.combo)]),
+        el("td", null, [worstPart]),
+        el("td", null, [worstLead + " business days"]),
+      ]));
+    });
+    table.appendChild(tbody);
+    if (!any) {
+      container.appendChild(el("p", { class: "insufficient" }, [`No BOM combo has a component with ${MIN_HISTORY}+ closed orders of history yet.`]));
+      return;
+    }
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["Uses each component's own purchase history across all vendors, not just the vendor/timeline picked above - a build's bottleneck isn't scoped to one vendor."]));
+  }
+
+  // ---------- View 6: Runout ----------
+  // Shared by Runout (whole-building) and Actions (vendor-scoped): computes
+  // the same per-ID on-hand/usage/lead-time/stockout figures once, so both
+  // tabs read the same numbers instead of two independent calculations
+  // drifting apart. Returns null if there's no ledger to read.
+  function computeRunoutRows() {
+    if (!ledgerRows) return null;
+
+    // tbl_HISTORY: ID, INVENTORY NAME, DATE, QTY, TYPE, BATCH_ID, BATCH_TIME, SORT_DATETIME.
+    // TYPE semantics (confirmed): Count = snapshot, resets on-hand to QTY at that DATE.
+    // Receiving(s) = adds QTY. Transfer(s) = subtracts QTY and counts as usage
+    // demand. Rejection = subtracts QTY (defective stock leaving inventory) but
+    // does NOT count as usage demand -- see the on-hand loop below. Receiving/
+    // Transfer matched singular or plural, since the real data uses "RECEIVING"/
+    // "TRANSFER" (singular), not the "Receivings"/"Transfers" originally
+    // described. Any other TYPE is unrecognized -- skipped, not guessed, and
+    // counted so it's visible rather than silent.
+    const bySku = new Map();
+    let unrecognizedTypeCount = 0;
+    const unrecognizedTypes = new Set();
+    ledgerRows.forEach(r => {
+      const sku = String(r["ID"] || "").trim();
+      if (!sku) return;
+      const qty = Number(r["QTY"] || 0);
+      const rawType = String(r["TYPE"] || "").trim().toLowerCase();
+      const type = rawType === "count" ? "count"
+        : (rawType === "receiving" || rawType === "receivings") ? "receivings"
+        : (rawType === "transfer" || rawType === "transfers") ? "transfers"
+        : rawType === "rejection" ? "rejection" // subtracts from on-hand, but NOT counted as usage-rate demand
+        : null;
+      const d = toDate(r["SORT_DATETIME"] || r["DATE"]);
+      if (!bySku.has(sku)) bySku.set(sku, { movements: [] });
+      if (type === null) {
+        unrecognizedTypeCount++;
+        unrecognizedTypes.add(String(r["TYPE"] || "(blank)"));
+        return; // not applied to the running total -- direction unknown
+      }
+      bySku.get(sku).movements.push({ date: d, qty, type });
+    });
+
+    // Median lead time, current vendor, and open POs per SKU, matched via ID
+    // (the PO table's ID column, resolved from Da Vinci File -- same key as tbl_HISTORY.ID).
+    const leadBySku = new Map();
+    const vendorBySku = new Map();
+    poRows.filter(isClosed).forEach(r => {
+      const sku = String(r["ID"] || "").trim();
+      if (!sku) return;
+      const d1 = toDate(r["PO Date"]), d2 = toDate(r["PO DateReceived"]);
+      const bd = businessDaysBetween(d1, d2);
+      if (bd !== null) {
+        if (!leadBySku.has(sku)) leadBySku.set(sku, []);
+        leadBySku.get(sku).push(bd);
+      }
+      vendorBySku.set(sku, r["Supplier ID"]);
+    });
+    // PO DateRequired is not used -- confirmed unreliable (purchaser-entered).
+    // For an open PO with no real PO DateReceived yet, the expected date is
+    // derived from this SKU's own median lead time (from its closed-order
+    // history) applied to that PO's PO Date -- not a guess pulled from a
+    // column known to be wrong.
+    const openBySku = new Map();
+    poRows.filter(isOpen).forEach(r => {
+      const sku = String(r["ID"] || "").trim();
+      if (!sku) return;
+      if (!openBySku.has(sku)) openBySku.set(sku, []);
+      const received = toDate(r["PO DateReceived"]);
+      let expected = received;
+      if (!expected) {
+        const poDate = toDate(r["PO Date"]);
+        const leadTimes = leadBySku.get(sku);
+        if (poDate && leadTimes && leadTimes.length >= MIN_HISTORY) {
+          expected = new Date(poDate.getTime() + Math.ceil(median(leadTimes)) * 86400000);
+        }
+      }
+      openBySku.get(sku).push({ qty: r["Quantity"], date: expected });
+    });
+
+    // Stockout count: how many times an ID's running on-hand actually crossed
+    // from positive to zero-or-below, walked chronologically through this same
+    // ledger. This is a count of real past failures, not a forecast -- it's the
+    // one number that directly answers "never run out" without inventing a
+    // dollar cost or any other figure the data can't support.
+    const stockoutsBySku = new Map();
+    let totalStockoutEvents = 0;
+
+    const rows = [];
+    bySku.forEach((rec, sku) => {
+      const sorted = rec.movements.filter(m => m.date).sort((a, b) => a.date - b.date);
+      if (sorted.length < 2) return;
+
+      // Running on-hand: Count resets to QTY, Receivings adds, Transfers subtracts
+      // and counts as usage demand. Rejection also subtracts (confirmed) but is
+      // NOT counted toward usage-rate demand -- a rejection is defective stock
+      // leaving inventory, not consumption, and folding it into the usage rate
+      // would make Runout predict faster depletion than real demand supports.
+      let onHand = null;
+      let transfersTotal = 0;
+      let firstDate = null, lastDate = null;
+      let stockoutEvents = 0;
+      let wasPositive = false;
+      sorted.forEach(m => {
+        if (m.type === "count") onHand = m.qty;
+        else if (m.type === "receivings") onHand = (onHand || 0) + m.qty;
+        else if (m.type === "transfers") { onHand = (onHand || 0) - m.qty; transfersTotal += m.qty; }
+        else if (m.type === "rejection") onHand = (onHand || 0) - m.qty;
+        if (onHand !== null) {
+          const isPositive = onHand > 0;
+          if (wasPositive && !isPositive) stockoutEvents++; // crossed from stocked to zero/below
+          wasPositive = isPositive;
+        }
+        if (firstDate === null) firstDate = m.date;
+        lastDate = m.date;
+      });
+      if (stockoutEvents > 0) {
+        stockoutsBySku.set(sku, stockoutEvents);
+        totalStockoutEvents += stockoutEvents;
+      }
+      if (onHand === null) return; // never saw a Count to establish a baseline
+
+      const spanDays = (lastDate - firstDate) / 86400000;
+      const weeklyUsage = spanDays > 0 ? (transfersTotal / spanDays) * 7 : 0;
+      if (weeklyUsage <= 0) return; // no observed usage -- can't compute a runout date, don't guess one
+
+      const weeksLeft = onHand / weeklyUsage;
+      const leadTimes = leadBySku.get(sku);
+      const leadDays = leadTimes && leadTimes.length >= MIN_HISTORY ? Math.ceil(median(leadTimes)) : null;
+      const leadWeeks = leadDays !== null ? leadDays / 5 : null; // business days -> weeks worked
+      const open = (openBySku.get(sku) || [])[0];
+      const orderBy = leadWeeks !== null ? weeksLeft - leadWeeks : null;
+      rows.push({
+        sku, vendor: vendorBySku.get(sku), onHand, weeklyUsage, weeksLeft,
+        leadDays, orderBy, open,
+      });
+    });
+
+    return { rows, unrecognizedTypeCount, unrecognizedTypes, stockoutsBySku, totalStockoutEvents };
+  }
+
+  function renderRunout() {
+    const container = document.getElementById("tab-runout");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Runout - what's about to run dry, building-wide"]));
+    if (!ledgerRows) {
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view. This tab ignores the vendor/timeline picked above - it's a whole-building question."]));
+      return;
+    }
+    container.appendChild(el("p", { class: "as-of" }, [`Inventory ledger (tbl_HISTORY) as of ${fmtDate(ledgerAsOf)}. Purchase orders as of ${fmtDate(poAsOf)}.`]));
+
+    const data = computeRunoutRows();
+    if (data.unrecognizedTypeCount > 0) {
+      container.appendChild(el("div", { class: "callout warn" }, [
+        `${data.unrecognizedTypeCount} ledger row(s) have a TYPE this tool doesn't recognize (${Array.from(data.unrecognizedTypes).join(", ")}) and were excluded from on-hand/usage math rather than guessed. Tell me their direction (add/subtract/snapshot) and I'll add them.`
+      ]));
+    }
+
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["ID", "Vendor", "On hand", "Weekly usage", "Weeks left", "Open PO", "Real lead time", "Order by", "Suggested qty"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    data.rows.forEach(r => {
+      tbody.appendChild(el("tr", null, [
+        el("td", null, [r.sku]),
+        el("td", null, [String(r.vendor || "-")]),
+        el("td", null, [String(r.onHand)]),
+        el("td", null, [r.weeklyUsage.toFixed(1)]),
+        el("td", null, [r.weeksLeft.toFixed(1)]),
+        el("td", null, [r.open ? `${r.open.qty} by ${fmtDate(r.open.date)}` : "-"]),
+        el("td", null, [r.leadDays !== null ? r.leadDays + " bd" : "not enough history"]),
+        el("td", null, [r.orderBy === null ? "-" : (r.orderBy <= 0 ? "NOW" : r.orderBy.toFixed(1) + " wk from now")]),
+        el("td", null, ["-"]), // suggested qty needs an approval-limit ceiling the user must supply; not invented here
+      ]));
+    });
+    table.appendChild(tbody);
+    if (data.rows.length === 0) {
+      container.appendChild(el("p", { class: "insufficient" }, ["No ID in the ledger has both a Count baseline and observed Transfers usage yet - can't compute a runout date without both."]));
+      return;
+    }
+    container.appendChild(table);
+    container.appendChild(el("p", { class: "note" }, ["Suggested qty is left blank - splitting into multiple POs needs an approval-limit ceiling only you can supply. This tool won't invent one."]));
+
+    // ---- Stockout count (historical, whole-ledger) ----
+    container.appendChild(el("h3", null, ["How many times has this actually happened"]));
+    if (data.totalStockoutEvents === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        "No ID in this ledger has crossed from having stock to zero-or-below yet, based on the Count/Receiving/Transfer/Rejection history read here."
+      ]));
+    } else {
+      container.appendChild(el("p", { class: "stat" }, [
+        `${data.totalStockoutEvents} stockout event${data.totalStockoutEvents === 1 ? "" : "s"} across ${data.stockoutsBySku.size} ID${data.stockoutsBySku.size === 1 ? "" : "s"}, counted from the ledger - not modeled, not estimated.`
+      ]));
+      const skuTable = el("table", null, [
+        el("thead", null, [el("tr", null, ["ID", "Stockout events"].map(h => el("th", null, [h])))]),
+      ]);
+      const skuTbody = el("tbody");
+      Array.from(data.stockoutsBySku.entries())
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([sku, count]) => {
+          skuTbody.appendChild(el("tr", null, [
+            el("td", null, [itemLabel(sku)]),
+            el("td", null, [String(count)]),
+          ]));
+        });
+      skuTable.appendChild(skuTbody);
+      container.appendChild(skuTable);
+      container.appendChild(el("p", { class: "note" }, [
+        "A stockout event is counted each time this ID's running on-hand crosses from above zero to zero or below, walking the ledger in date order. This is a record of what already happened, not a prediction - track it over time to see whether it's going down."
+      ]));
+    }
+  }
+
+  // ---------- View: Actions (vendor-scoped upcoming runouts) ----------
+  // Same computeRunoutRows() figures Runout uses, filtered to the selected
+  // vendor's own SKUs and shown as cards sorted by urgency. Single-source
+  // data (confirmed: no two suppliers share an ID), so "this vendor's SKUs"
+  // is just a filter on r.vendor -- no separate relationship key needed.
+  function renderActions() {
+    const container = document.getElementById("tab-actions");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Actions - what's coming due for this vendor's SKUs"]));
+    const vendor = document.getElementById("vendorSelect").value;
+    if (!ledgerRows) {
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view."]));
+      return;
+    }
+    const data = computeRunoutRows();
+    const rows = data.rows.filter(r => String(r.vendor || "").trim() === vendor);
+    if (rows.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        "No SKU from this vendor currently has both a Count baseline and observed usage to compute a runout date from."
+      ]));
+      return;
+    }
+    // Soonest order-by first; SKUs with no computable lead time (unknown urgency) sort last.
+    rows.sort((a, b) => {
+      if (a.orderBy === null && b.orderBy === null) return 0;
+      if (a.orderBy === null) return 1;
+      if (b.orderBy === null) return -1;
+      return a.orderBy - b.orderBy;
+    });
+    const cards = el("div", { class: "action-cards" });
+    rows.forEach(r => {
+      const urgent = r.orderBy !== null && r.orderBy <= 0;
+      const orderByText = r.orderBy === null ? "Not enough lead-time history"
+        : r.orderBy <= 0 ? "Order now" : `Order within ${r.orderBy.toFixed(1)} wk`;
+      cards.appendChild(el("div", { class: "action-card" + (urgent ? " urgent" : "") }, [
+        el("div", { class: "card-title" }, [itemLabel(r.sku)]),
+        el("div", { class: "card-row" }, [el("span", null, ["On hand"]), el("span", null, [String(r.onHand)])]),
+        el("div", { class: "card-row" }, [el("span", null, ["Weekly usage"]), el("span", null, [r.weeklyUsage.toFixed(1)])]),
+        el("div", { class: "card-row" }, [el("span", null, ["Weeks left"]), el("span", null, [r.weeksLeft.toFixed(1)])]),
+        el("div", { class: "card-row" }, [el("span", null, ["Lead time"]), el("span", null, [r.leadDays !== null ? r.leadDays + " bd" : "unknown"])]),
+        r.open ? el("div", { class: "card-row" }, [el("span", null, ["Open PO"]), el("span", null, [`${r.open.qty} by ${fmtDate(r.open.date)}`])]) : null,
+        el("div", { class: "card-order-by" }, [orderByText]),
+      ].filter(Boolean)));
+    });
+    container.appendChild(cards);
+    container.appendChild(el("p", { class: "note" }, ["Same figures as Runout, filtered to this vendor's own SKUs and sorted soonest-due first."]));
+  }
+
+  function renderAll() {
+    if (!poRows.length) return;
+    renderSpeed();
+    renderShortShip();
+    renderCadence();
+    renderConcentration();
+    renderMix();
+    renderHabits();
+    renderBottleneck();
+    renderRunout();
+    renderActions();
+  }
+
+  // ---------- About: the human-readable explanation, not gated on any data loading ----------
+  function renderAbout() {
+    const container = document.getElementById("tab-about");
+    container.innerHTML = "";
+    const section = (heading, paragraphs) => {
+      if (heading) container.appendChild(el("h2", null, [heading]));
+      paragraphs.forEach(p => container.appendChild(el("p", null, [p])));
+    };
+
+    section("Speed", [
+      "How long this vendor actually takes right now, not what they quoted once. Weighted toward their most recent orders, because a vendor's pace can genuinely shift and blending that shift into years of older history would hide it instead of catching it."
+    ]);
+
+    section("Shortfall", [
+      "What was ordered vs. what actually arrived, per item, for the vendor selected above. Catches a vendor who quietly ships less than the PO said, order after order - a pattern nobody sees unless someone is counting boxes against the PO."
+    ]);
+
+    section("Frequency", [
+      "Which items are being reordered more often than their own history suggests, ranked by how many times each has been ordered. It doesn't say why the rhythm changed - could be rising usage, could be nobody noticing - it just flags it."
+    ]);
+
+    section("Mix", [
+      "For the vendor selected above: which single item is the biggest share of everything ordered from them, by order count. That's the MVP item - the one worth watching most closely if this vendor ever became unreliable."
+    ]);
+
+    section("Sensitivity", [
+      "Does a bigger order, or a different time of year, get delivered faster or slower by this vendor. About this vendor's behavior toward you specifically, not a comparison between vendors."
+    ]);
+
+    section("Bottleneck", [
+      "For anything built from multiple purchased parts: a build only moves as fast as its slowest component. Pulls the real lead time for each part in a bill of materials and reports the date that actually governs the build."
+    ]);
+
+    section("Concentration", [
+      "Ignores the vendor picked above - this is a whole-building view. Which vendors would hurt the most if they disappeared: how many inventory codes each one is the only source for, and what share of everything assigned to them has actually been ordered."
+    ]);
+
+    section("Runout", [
+      "Also ignores the vendor picked above, since running out of something is a whole-building question, not a per-vendor one. Reads the inventory ledger directly - on hand, usage rate, lead time - and says plainly whether ordering today is soon enough."
+    ]);
+
+    section("The one rule behind all of it", [
+      "The tool only says what the data can prove. Early drafts kept drifting toward inventing things - a dollar figure for what a delay cost, a recommendation to drop a vendor, an explanation for why a price moved. None of that lives in the data, so it would have been made up, and a tool that quietly guesses is worse than one that says \"I don't have enough here to tell you.\" Every number this tool prints traces back to an actual column in the workbook, to arithmetic on those columns, or to something the user typed in themselves."
+    ]);
+
+    section("How it connects to your data", [
+      "Sign in with your Microsoft account, and the tool reads your PO workbook live from OneDrive - nothing is uploaded or copied anywhere else. Because this page is public, anyone who opens the link without the passphrase sees the tool running on a made-up sample dataset instead, with every tab fully working on fake numbers. The passphrase isn't real security - it's a doorbell, not a lock. The actual protection is that your real data is never published; it's only ever read live, while you're signed in."
+    ]);
+
+    section("Why the data needed cleaning first", [
+      "The raw workbook has real problems: custom orders get entered with a placeholder cost of zero because nobody's typed in a real price, the promised-delivery-date column turned out to be unreliable, dates carry time-of-day where only the date matters, and some rows are missing a receipt date entirely. A separate script fixes what can be fixed without guessing and leaves alone what can't be trusted - every rule it applies was worked out and confirmed one at a time, never invented.",
+      "Pricing data turned out to be unreliable enough, in ways that kept surfacing new problems even after being patched, that every dollar-based feature was eventually dropped rather than kept half-trustworthy. What's left only uses columns that have actually held up: dates, quantities, order counts, and inventory movement."
+    ]);
+
+    section("What this tool deliberately does not do", [
+      "It never prints a dollar figure unless a human supplies the cost assumption themselves, with the arithmetic shown openly. It never tells you to switch vendors or renegotiate - it shows the pattern, and the decision stays a human one. It never claims one thing caused another: \"cost and lead time moved together\" is something the data can support, \"cost rose because lead time rose\" is not, and the tool won't blur that line even when the second sentence sounds more useful.",
+      "It also can't send email on its own, can't create an actual purchase order in your purchasing system, and doesn't share data between people's browsers - each session only holds what it just read from OneDrive."
+    ]);
+
+    section("Where this still has open edges", [
+      "Bottleneck needs a real bill-of-materials sheet to be useful, and that's still being built. The business-day math accounts for standard Ontario statutory holidays but not for company-specific closures. And the honest caveat that applies to the whole tool: it's only as good as the workbook it reads. When a new kind of bad data turns up - and pricing already proved it can - the right response is the same one used every time so far: stop, ask what's actually true, and only build the next piece on ground that's been checked."
+    ]);
+  }
+  renderAbout();
+})();
+</script>
+
+</body>
+</html>
