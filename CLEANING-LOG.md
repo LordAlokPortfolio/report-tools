@@ -152,14 +152,16 @@ it rather than continue patching around it.
 
 ---
 
-## Known limitation
+## Known limitation - resolved in the reporting tool, not here
 
-**No company holiday calendar.** "Working days" in the lead-time
-calculation means Monday-Friday only - no Ontario statutory holidays are
-excluded, unlike the business-day math described for the earlier
-PowerShell/Python vendor tools in the spec. This can overstate a computed
-lead time slightly around holidays. Add a holiday list if this needs to be
-exact.
+**No company holiday calendar in `clean-po-data.ts`.** This script's own
+business-day math is currently unused (the supplier median lead-time pass
+was removed - see the "PO DateReceived = NULL" open-order entry above), so
+this no longer affects cleaning. `vendor-analysis.html`'s business-day math
+(Speed, Reorder Cadence, Bottleneck) now excludes the standard 9 Ontario
+statutory holidays (computed per year, not hand-typed dates - see
+`ontarioHolidaysForYear()`). Company-specific closures beyond those 9
+aren't known and aren't included; add them if that gap matters.
 
 ## Process
 

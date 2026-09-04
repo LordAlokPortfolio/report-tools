@@ -124,8 +124,9 @@ same caution should apply to everything not yet stress-tested.
 - Nothing on this branch is linked into `index.html` / the main toolkit yet
   - explicit standing instruction is to keep `main` untouched until the
   whole project is ready.
-- No holiday calendar for business-day math (documented limitation,
-  `CLEANING-LOG.md`).
+- Company-specific holiday closures beyond the standard 9 Ontario
+  statutory holidays aren't in the business-day math (`vendor-analysis.html`,
+  `ontarioHolidaysForYear()`).
 
 ## Version history (vendor-analysis.html)
 

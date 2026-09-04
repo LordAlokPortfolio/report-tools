@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v24 - 2026-09-04 - Item rows now show ID + INVENTORY NAME</div>
+<div class="version-badge">v25 - 2026-09-04 - Business-day math now excludes Ontario holidays</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -198,13 +198,61 @@
     const dow = d.getUTCDay();
     return dow === 0 || dow === 6;
   }
+
+  // Ontario statutory holidays, computed per year (not hand-typed dates) so this
+  // doesn't go stale. Standard 9: New Year's, Family Day, Good Friday, Victoria
+  // Day, Canada Day, Labour Day, Thanksgiving, Christmas, Boxing Day. Company-
+  // specific closures beyond these aren't known and aren't included.
+  const ontarioHolidayCache = new Map(); // year -> Set of "YYYY-MM-DD"
+  function nthWeekdayOfMonth(year, month, weekday, n) { // month/weekday 0-based
+    const first = new Date(Date.UTC(year, month, 1));
+    const offset = (weekday - first.getUTCDay() + 7) % 7;
+    return new Date(Date.UTC(year, month, 1 + offset + (n - 1) * 7));
+  }
+  function lastWeekdayOnOrBefore(year, month, day, weekday) {
+    const d = new Date(Date.UTC(year, month, day));
+    const diff = (d.getUTCDay() - weekday + 7) % 7;
+    return new Date(d.getTime() - diff * 86400000);
+  }
+  function goodFriday(year) { // Meeus/Jones/Butcher Gregorian Easter algorithm
+    const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+    const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const month = Math.floor((h + l - 7 * m + 114) / 31) - 1; // 0-based
+    const day = ((h + l - 7 * m + 114) % 31) + 1;
+    const easterSunday = new Date(Date.UTC(year, month, day));
+    return new Date(easterSunday.getTime() - 2 * 86400000);
+  }
+  function ontarioHolidaysForYear(year) {
+    if (ontarioHolidayCache.has(year)) return ontarioHolidayCache.get(year);
+    const dates = [
+      new Date(Date.UTC(year, 0, 1)),               // New Year's Day
+      nthWeekdayOfMonth(year, 1, 1, 3),              // Family Day: 3rd Monday of Feb
+      goodFriday(year),
+      lastWeekdayOnOrBefore(year, 4, 24, 1),         // Victoria Day: Mon on/before May 24
+      new Date(Date.UTC(year, 6, 1)),                // Canada Day
+      nthWeekdayOfMonth(year, 8, 1, 1),              // Labour Day: 1st Monday of Sept
+      nthWeekdayOfMonth(year, 9, 1, 2),              // Thanksgiving: 2nd Monday of Oct
+      new Date(Date.UTC(year, 11, 25)),              // Christmas Day
+      new Date(Date.UTC(year, 11, 26)),              // Boxing Day
+    ];
+    const set = new Set(dates.map(d => d.toISOString().slice(0, 10)));
+    ontarioHolidayCache.set(year, set);
+    return set;
+  }
+  function isHoliday(d) {
+    return ontarioHolidaysForYear(d.getUTCFullYear()).has(d.toISOString().slice(0, 10));
+  }
+
   function businessDaysBetween(start, end) {
     if (!start || !end) return null;
     let count = 0;
     const s = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
     const e = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
     for (let d = new Date(s.getTime() + 86400000); d <= e; d = new Date(d.getTime() + 86400000)) {
-      if (!isWeekend(d)) count++;
+      if (!isWeekend(d) && !isHoliday(d)) count++;
     }
     return count;
   }
