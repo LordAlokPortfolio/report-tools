@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v22 - 2026-09-04 - Retired Creep/Pattern, added 3 price-free views</div>
+<div class="version-badge">v23 - 2026-09-04 - Short-shipping/Cadence now group by ID, not ITEM NO</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -491,11 +491,11 @@
     const container = document.getElementById("tab-shortship");
     container.innerHTML = "";
     container.appendChild(el("h2", null, ["Short-shipping - did you get what you ordered?"]));
-    const rows = filteredRows().filter(isClosed)
+    const rows = filteredRows().filter(isClosed).filter(isStockItem)
       .filter(r => typeof r["Quantity"] === "number" && typeof r["QtyReceived"] === "number");
     const byItem = new Map();
     rows.forEach(r => {
-      const item = String(r["ITEM NO"] || "").trim();
+      const item = String(r["ID"] || "").trim();
       if (!item) return;
       if (!byItem.has(item)) byItem.set(item, []);
       byItem.get(item).push(r);
@@ -546,10 +546,10 @@
     const container = document.getElementById("tab-cadence");
     container.innerHTML = "";
     container.appendChild(el("h2", null, ["Reorder Cadence - is this item being ordered more often than it used to be?"]));
-    const rows = filteredRows();
+    const rows = filteredRows().filter(isStockItem);
     const byItem = new Map();
     rows.forEach(r => {
-      const item = String(r["ITEM NO"] || "").trim();
+      const item = String(r["ID"] || "").trim();
       const d = toDate(r["PO Date"]);
       if (!item || !d) return;
       if (!byItem.has(item)) byItem.set(item, []);
