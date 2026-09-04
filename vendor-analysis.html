@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<div class="version-badge">v36 - 2026-09-04 - REJECTION handled: subtracts stock, excluded from usage rate</div>
+<div class="version-badge">v37 - 2026-09-04 - Stay signed in across page reloads</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -589,6 +589,28 @@
   function showUnlockedUI() {
     document.getElementById("gatePanel").style.display = "none";
     document.getElementById("connectPanel").style.display = "block";
+    trySilentSignIn();
+  }
+
+  // MSAL's own token cache already persists in localStorage, but a full page
+  // reload previously threw that away and forced a fresh interactive sign-in
+  // every time. Try to reuse the cached session silently (no popup) first;
+  // fall back to the manual Sign in button if that fails.
+  async function trySilentSignIn() {
+    try {
+      msalApp = new msal.PublicClientApplication(MSAL_CONFIG);
+      await msalApp.initialize();
+      const accounts = msalApp.getAllAccounts();
+      if (accounts.length === 0) return;
+      const tokenResult = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      graphAccessToken = tokenResult.accessToken;
+      document.getElementById("loadStatus").textContent = "Signed in automatically (remembered from before).";
+      document.getElementById("refreshBtn").disabled = false;
+      refreshFromOneDrive();
+    } catch (err) {
+      // No cached session, or it's fully expired -- fall back to the manual
+      // Sign in button. Not an error worth showing; this was just a convenience attempt.
+    }
   }
   function showLockedUI() {
     document.getElementById("gatePanel").style.display = "block";
