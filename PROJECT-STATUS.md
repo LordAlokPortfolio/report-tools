@@ -1,7 +1,7 @@
-# Project Status - PO Cleaning & Vendor Analysis (through v39)
+# Project Status - PO Cleaning & Vendor Analysis (through v43)
 
 Snapshot of what this branch (`alok-idea/cleaning-po-inventory-table-and-vendor-analysis`)
-has actually built, as of the vendor-analysis.html "v39" tag. Written so a
+has actually built, as of the vendor-analysis.html "v43" tag. Written so a
 later session (or a later you) can pick this up without re-deriving it.
 Supersedes the file's original "through v20" version - kept as one file,
 not a new one per version, so it doesn't fork into stale copies.
@@ -19,12 +19,12 @@ reporting on it:
    resolves `ID` and `Supplier ID` via lookups against two reference sheets,
    and reorders columns. Every rule is documented in `CLEANING-LOG.md`.
 2. **Reporting** (`vendor-analysis.html`) - a standalone web page, not yet
-   linked into the main toolkit's `index.html`, implementing eight analysis
+   linked into the main toolkit's `index.html`, implementing nine analysis
    tabs plus an About tab against the cleaned data - all of them price-free
    (see "Pricing is unreliable" below for why). The tab bar is split into
    two visually divided groups: vendor-scoped (Speed, Shortfall, Frequency,
-   Mix, Sensitivity, Bottleneck) and whole-inventory (Concentration, Runout),
-   followed by About.
+   Mix, Sensitivity, Bottleneck, Actions) and whole-inventory (Concentration,
+   Runout), followed by About.
 
 ## The workbook (live, in OneDrive)
 
@@ -66,7 +66,7 @@ file-upload fallback panel still exists in case the OneDrive path breaks.
 Nothing is cached beyond the browser session except the workbook's item ID
 (in `localStorage`, not sensitive). Every "Refresh" re-reads live.
 
-## The eight tabs (plus About) - current state
+## The nine tabs (plus About) - current state
 
 Creep and Pattern are **retired**, not just fixed - their core premise was
 price itself ("is price rising," "does cost move with lead time"), so once
@@ -82,6 +82,7 @@ flagged as unreliable.
 | **Mix** | Working | Per selected vendor: MVP item by share of order count (not quantity/volume) - which single code makes up the biggest share of everything ordered from that vendor. |
 | **Sensitivity** (renamed from "Habits" in v40) | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading (v39): "does a bigger order, or a different time of year, get delivered faster or slower?" |
 | **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
+| **Actions** (new, v43) | Working | Vendor-scoped: for the selected vendor, one card per SKU with a computable runout date, sorted soonest-due first. Reuses `computeRunoutRows()`, the same computation Runout uses, filtered to `r.vendor === selected vendor`. Relies on the confirmed fact that no two suppliers share an `ID` - no separate relationship-key lookup needed. |
 | **Concentration** (was "Vendor Concentration") | Working | Whole-building view (ignores vendor/timeline picker, like Runout). Columns: Vendor, Codes ordered, Total codes by vendor, % of assigned catalog ordered (Da Vinci master list), Most-ordered code. Custom-order rows excluded via `isStockItem()`. |
 | **Runout** | Working, price-independent. On-hand and usage rate computed from `tbl_HISTORY` (`Count`/`RECEIVING`/`TRANSFER`/`REJECTION`, singular and plural both matched), lead time from the PO table's closed orders, matched via `ID`. `REJECTION` subtracts on-hand but is excluded from usage-rate demand. |
 | **About** (new) | Working | In-page tab describing the tool; restructured (v39) to lead directly with what each tab does, instruction-manual style, instead of opening with narrative. |
@@ -221,3 +222,9 @@ filename search and then by worksheet-ID matching).
   tracked over time as the "never run out" mandate's actual scorecard.
   Confirmed with the user: every `ID` is single-sourced (no two suppliers
   share an `ID`), so this count needs no per-vendor disambiguation.
+- **v43** - Added an Actions tab: vendor-scoped runout cards. Refactored
+  Runout's per-ID computation out into a shared `computeRunoutRows()`
+  function (on-hand, weekly usage, weeks left, lead time, order-by,
+  stockout count) so Runout (whole-building table) and Actions (cards
+  filtered to the selected vendor, sorted soonest-due first) read the
+  exact same numbers instead of two independent calculations.

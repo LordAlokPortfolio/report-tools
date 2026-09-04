@@ -52,6 +52,12 @@
   .insufficient { color: var(--muted); font-style: italic; }
   .change-up { color: var(--bad); font-weight: 600; }
   .change-down { color: var(--accent); font-weight: 600; }
+  .action-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .action-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .action-card.urgent { border-color: var(--bad); background: var(--bad-bg); }
+  .action-card .card-title { font-weight: 600; margin-bottom: 6px; }
+  .action-card .card-row { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  .action-card .card-order-by { font-weight: 600; margin-top: 6px; }
   .low-confidence { color: var(--muted); }
   tr.thin-row td { opacity: 0.65; }
   .as-of { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
@@ -64,7 +70,7 @@
 </head>
 <body>
 
-<div class="version-badge">v42 - 2026-09-04 - Runout adds a stockout-count KPI: counts real times an ID's on-hand crossed to zero-or-below, from the ledger, no forecasting</div>
+<div class="version-badge">v43 - 2026-09-04 - New Actions tab: vendor-scoped runout cards, sorted soonest-due first, same figures as Runout</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -148,6 +154,7 @@
       <button class="tab-btn" data-tab="mix">Mix</button>
       <button class="tab-btn" data-tab="habits">Sensitivity</button>
       <button class="tab-btn" data-tab="bottleneck">Bottleneck</button>
+      <button class="tab-btn" data-tab="actions">Actions</button>
       <span class="tab-divider"></span>
       <button class="tab-btn" data-tab="concentration">Concentration</button>
       <button class="tab-btn" data-tab="runout">Runout</button>
@@ -161,6 +168,7 @@
     <div class="tab-view" id="tab-mix"></div>
     <div class="tab-view" id="tab-habits"></div>
     <div class="tab-view" id="tab-bottleneck"></div>
+    <div class="tab-view" id="tab-actions"></div>
     <div class="tab-view" id="tab-runout"></div>
     <div class="tab-view" id="tab-about"></div>
   </section>
@@ -1203,15 +1211,12 @@
   }
 
   // ---------- View 6: Runout ----------
-  function renderRunout() {
-    const container = document.getElementById("tab-runout");
-    container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Runout - what's about to run dry, building-wide"]));
-    if (!ledgerRows) {
-      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view. This tab ignores the vendor/timeline picked above - it's a whole-building question."]));
-      return;
-    }
-    container.appendChild(el("p", { class: "as-of" }, [`Inventory ledger (tbl_HISTORY) as of ${fmtDate(ledgerAsOf)}. Purchase orders as of ${fmtDate(poAsOf)}.`]));
+  // Shared by Runout (whole-building) and Actions (vendor-scoped): computes
+  // the same per-ID on-hand/usage/lead-time/stockout figures once, so both
+  // tabs read the same numbers instead of two independent calculations
+  // drifting apart. Returns null if there's no ledger to read.
+  function computeRunoutRows() {
+    if (!ledgerRows) return null;
 
     // tbl_HISTORY: ID, INVENTORY NAME, DATE, QTY, TYPE, BATCH_ID, BATCH_TIME, SORT_DATETIME.
     // TYPE semantics (confirmed): Count = snapshot, resets on-hand to QTY at that DATE.
@@ -1282,12 +1287,6 @@
       openBySku.get(sku).push({ qty: r["Quantity"], date: expected });
     });
 
-    if (unrecognizedTypeCount > 0) {
-      container.appendChild(el("div", { class: "callout warn" }, [
-        `${unrecognizedTypeCount} ledger row(s) have a TYPE this tool doesn't recognize (${Array.from(unrecognizedTypes).join(", ")}) and were excluded from on-hand/usage math rather than guessed. Tell me their direction (add/subtract/snapshot) and I'll add them.`
-      ]));
-    }
-
     // Stockout count: how many times an ID's running on-hand actually crossed
     // from positive to zero-or-below, walked chronologically through this same
     // ledger. This is a count of real past failures, not a forecast -- it's the
@@ -1296,11 +1295,7 @@
     const stockoutsBySku = new Map();
     let totalStockoutEvents = 0;
 
-    const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["ID", "Vendor", "On hand", "Weekly usage", "Weeks left", "Open PO", "Real lead time", "Order by", "Suggested qty"].map(h => el("th", null, [h])))]),
-    ]);
-    const tbody = el("tbody");
-    let any = false;
+    const rows = [];
     bySku.forEach((rec, sku) => {
       const sorted = rec.movements.filter(m => m.date).sort((a, b) => a.date - b.date);
       if (sorted.length < 2) return;
@@ -1343,22 +1338,52 @@
       const leadDays = leadTimes && leadTimes.length >= MIN_HISTORY ? Math.ceil(median(leadTimes)) : null;
       const leadWeeks = leadDays !== null ? leadDays / 5 : null; // business days -> weeks worked
       const open = (openBySku.get(sku) || [])[0];
-      any = true;
       const orderBy = leadWeeks !== null ? weeksLeft - leadWeeks : null;
+      rows.push({
+        sku, vendor: vendorBySku.get(sku), onHand, weeklyUsage, weeksLeft,
+        leadDays, orderBy, open,
+      });
+    });
+
+    return { rows, unrecognizedTypeCount, unrecognizedTypes, stockoutsBySku, totalStockoutEvents };
+  }
+
+  function renderRunout() {
+    const container = document.getElementById("tab-runout");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Runout - what's about to run dry, building-wide"]));
+    if (!ledgerRows) {
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view. This tab ignores the vendor/timeline picked above - it's a whole-building question."]));
+      return;
+    }
+    container.appendChild(el("p", { class: "as-of" }, [`Inventory ledger (tbl_HISTORY) as of ${fmtDate(ledgerAsOf)}. Purchase orders as of ${fmtDate(poAsOf)}.`]));
+
+    const data = computeRunoutRows();
+    if (data.unrecognizedTypeCount > 0) {
+      container.appendChild(el("div", { class: "callout warn" }, [
+        `${data.unrecognizedTypeCount} ledger row(s) have a TYPE this tool doesn't recognize (${Array.from(data.unrecognizedTypes).join(", ")}) and were excluded from on-hand/usage math rather than guessed. Tell me their direction (add/subtract/snapshot) and I'll add them.`
+      ]));
+    }
+
+    const table = el("table", null, [
+      el("thead", null, [el("tr", null, ["ID", "Vendor", "On hand", "Weekly usage", "Weeks left", "Open PO", "Real lead time", "Order by", "Suggested qty"].map(h => el("th", null, [h])))]),
+    ]);
+    const tbody = el("tbody");
+    data.rows.forEach(r => {
       tbody.appendChild(el("tr", null, [
-        el("td", null, [sku]),
-        el("td", null, [String(vendorBySku.get(sku) || "-")]),
-        el("td", null, [String(onHand)]),
-        el("td", null, [weeklyUsage.toFixed(1)]),
-        el("td", null, [weeksLeft.toFixed(1)]),
-        el("td", null, [open ? `${open.qty} by ${fmtDate(open.date)}` : "-"]),
-        el("td", null, [leadDays !== null ? leadDays + " bd" : "not enough history"]),
-        el("td", null, [orderBy === null ? "-" : (orderBy <= 0 ? "NOW" : orderBy.toFixed(1) + " wk from now")]),
+        el("td", null, [r.sku]),
+        el("td", null, [String(r.vendor || "-")]),
+        el("td", null, [String(r.onHand)]),
+        el("td", null, [r.weeklyUsage.toFixed(1)]),
+        el("td", null, [r.weeksLeft.toFixed(1)]),
+        el("td", null, [r.open ? `${r.open.qty} by ${fmtDate(r.open.date)}` : "-"]),
+        el("td", null, [r.leadDays !== null ? r.leadDays + " bd" : "not enough history"]),
+        el("td", null, [r.orderBy === null ? "-" : (r.orderBy <= 0 ? "NOW" : r.orderBy.toFixed(1) + " wk from now")]),
         el("td", null, ["-"]), // suggested qty needs an approval-limit ceiling the user must supply; not invented here
       ]));
     });
     table.appendChild(tbody);
-    if (!any) {
+    if (data.rows.length === 0) {
       container.appendChild(el("p", { class: "insufficient" }, ["No ID in the ledger has both a Count baseline and observed Transfers usage yet - can't compute a runout date without both."]));
       return;
     }
@@ -1367,19 +1392,19 @@
 
     // ---- Stockout count (historical, whole-ledger) ----
     container.appendChild(el("h3", null, ["How many times has this actually happened"]));
-    if (totalStockoutEvents === 0) {
+    if (data.totalStockoutEvents === 0) {
       container.appendChild(el("div", { class: "callout ok" }, [
         "No ID in this ledger has crossed from having stock to zero-or-below yet, based on the Count/Receiving/Transfer/Rejection history read here."
       ]));
     } else {
       container.appendChild(el("p", { class: "stat" }, [
-        `${totalStockoutEvents} stockout event${totalStockoutEvents === 1 ? "" : "s"} across ${stockoutsBySku.size} ID${stockoutsBySku.size === 1 ? "" : "s"}, counted from the ledger - not modeled, not estimated.`
+        `${data.totalStockoutEvents} stockout event${data.totalStockoutEvents === 1 ? "" : "s"} across ${data.stockoutsBySku.size} ID${data.stockoutsBySku.size === 1 ? "" : "s"}, counted from the ledger - not modeled, not estimated.`
       ]));
       const skuTable = el("table", null, [
         el("thead", null, [el("tr", null, ["ID", "Stockout events"].map(h => el("th", null, [h])))]),
       ]);
       const skuTbody = el("tbody");
-      Array.from(stockoutsBySku.entries())
+      Array.from(data.stockoutsBySku.entries())
         .sort((a, b) => b[1] - a[1])
         .forEach(([sku, count]) => {
           skuTbody.appendChild(el("tr", null, [
@@ -1395,6 +1420,54 @@
     }
   }
 
+  // ---------- View: Actions (vendor-scoped upcoming runouts) ----------
+  // Same computeRunoutRows() figures Runout uses, filtered to the selected
+  // vendor's own SKUs and shown as cards sorted by urgency. Single-source
+  // data (confirmed: no two suppliers share an ID), so "this vendor's SKUs"
+  // is just a filter on r.vendor -- no separate relationship key needed.
+  function renderActions() {
+    const container = document.getElementById("tab-actions");
+    container.innerHTML = "";
+    container.appendChild(el("h2", null, ["Actions - what's coming due for this vendor's SKUs"]));
+    const vendor = document.getElementById("vendorSelect").value;
+    if (!ledgerRows) {
+      container.appendChild(el("div", { class: "callout warn" }, ["Upload an inventory ledger file above to use this view."]));
+      return;
+    }
+    const data = computeRunoutRows();
+    const rows = data.rows.filter(r => String(r.vendor || "").trim() === vendor);
+    if (rows.length === 0) {
+      container.appendChild(el("div", { class: "callout ok" }, [
+        "No SKU from this vendor currently has both a Count baseline and observed usage to compute a runout date from."
+      ]));
+      return;
+    }
+    // Soonest order-by first; SKUs with no computable lead time (unknown urgency) sort last.
+    rows.sort((a, b) => {
+      if (a.orderBy === null && b.orderBy === null) return 0;
+      if (a.orderBy === null) return 1;
+      if (b.orderBy === null) return -1;
+      return a.orderBy - b.orderBy;
+    });
+    const cards = el("div", { class: "action-cards" });
+    rows.forEach(r => {
+      const urgent = r.orderBy !== null && r.orderBy <= 0;
+      const orderByText = r.orderBy === null ? "Not enough lead-time history"
+        : r.orderBy <= 0 ? "Order now" : `Order within ${r.orderBy.toFixed(1)} wk`;
+      cards.appendChild(el("div", { class: "action-card" + (urgent ? " urgent" : "") }, [
+        el("div", { class: "card-title" }, [itemLabel(r.sku)]),
+        el("div", { class: "card-row" }, [el("span", null, ["On hand"]), el("span", null, [String(r.onHand)])]),
+        el("div", { class: "card-row" }, [el("span", null, ["Weekly usage"]), el("span", null, [r.weeklyUsage.toFixed(1)])]),
+        el("div", { class: "card-row" }, [el("span", null, ["Weeks left"]), el("span", null, [r.weeksLeft.toFixed(1)])]),
+        el("div", { class: "card-row" }, [el("span", null, ["Lead time"]), el("span", null, [r.leadDays !== null ? r.leadDays + " bd" : "unknown"])]),
+        r.open ? el("div", { class: "card-row" }, [el("span", null, ["Open PO"]), el("span", null, [`${r.open.qty} by ${fmtDate(r.open.date)}`])]) : null,
+        el("div", { class: "card-order-by" }, [orderByText]),
+      ].filter(Boolean)));
+    });
+    container.appendChild(cards);
+    container.appendChild(el("p", { class: "note" }, ["Same figures as Runout, filtered to this vendor's own SKUs and sorted soonest-due first."]));
+  }
+
   function renderAll() {
     if (!poRows.length) return;
     renderSpeed();
@@ -1405,6 +1478,7 @@
     renderHabits();
     renderBottleneck();
     renderRunout();
+    renderActions();
   }
 
   // ---------- About: the human-readable explanation, not gated on any data loading ----------

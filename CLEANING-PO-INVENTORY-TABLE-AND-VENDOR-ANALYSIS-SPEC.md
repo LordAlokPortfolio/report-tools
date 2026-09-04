@@ -34,6 +34,12 @@ build only moves as fast as its slowest component. Pulls the real lead
 time for each part in a bill of materials and reports the date that
 actually governs the build.
 
+**Actions** — for the vendor selected, one card per SKU that vendor
+supplies with enough history to compute a runout date, sorted soonest-
+due first. Same on-hand, usage, and lead-time figures Runout computes
+for the whole building, just filtered down to this vendor's own SKUs
+and shown as something to act on today rather than a table to scan.
+
 **Concentration** — ignores the vendor selected; a whole-building
 view. Which vendors would hurt the most if they disappeared: how many
 inventory codes each one is the only source for, and what share of
