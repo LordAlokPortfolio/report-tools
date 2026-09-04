@@ -149,15 +149,13 @@
     cache: { cacheLocation: "localStorage" },
   };
   const GRAPH_SCOPES = ["User.Read", "Files.Read"];
-  // Path relative to OneDrive root, from "C:\Users\akulkarni\OneDrive - KV Custom
-  // Windows & Doors\WAREHOUSE AUDITS 2026\tblINVENTORY_PO.xlsx" -- everything after
-  // the "OneDrive - KV Custom Windows & Doors\" part.
-  const WORKBOOK_PATH = "WAREHOUSE AUDITS 2026/tblINVENTORY_PO.xlsx";
+  const WORKBOOK_FILENAME = "tblINVENTORY_PO.xlsx"; // found by name, not by path -- avoids path/nesting guessing
   const PO_SHEET_NAME = "PO-INVENTORY-TABLE";
   const HISTORY_SHEET_NAME = "HISTORY SHEET"; // table tbl_HISTORY lives on this sheet
   const BOM_SHEET_NAME = "BOTTLENECK";        // still being built per the user -- may not have BOM columns yet
 
   let msalApp = null;
+  let workbookItemId = null;
   let graphAccessToken = null;
 
   // ---------- state ----------
@@ -295,9 +293,22 @@
     return res.json();
   }
 
+  async function findWorkbookItemId() {
+    if (workbookItemId) return workbookItemId;
+    const results = await graphGet(`/me/drive/root/search(q='${encodeURIComponent(WORKBOOK_FILENAME)}')?$select=id,name,file`);
+    const match = results.value.find(i => i.file && i.name === WORKBOOK_FILENAME);
+    if (!match) {
+      const names = results.value.map(i => i.name).join(", ") || "(nothing)";
+      throw new Error(`No exact filename match for "${WORKBOOK_FILENAME}". Search returned: ${names}.`);
+    }
+    workbookItemId = match.id;
+    return workbookItemId;
+  }
+
   async function fetchSheetRows(sheetName) {
     if (!sheetName) return null;
-    const path = `/me/drive/root:/${encodeURI(WORKBOOK_PATH)}:` +
+    const itemId = await findWorkbookItemId();
+    const path = `/me/drive/items/${itemId}` +
       `/workbook/worksheets('${encodeURIComponent(sheetName)}')/usedRange(valuesOnly=true)`;
     const data = await graphGet(path);
     return usedRangeToRows(data.values);
@@ -316,17 +327,9 @@
         `Loaded ${poRows.length.toLocaleString()} PO rows live from OneDrive as of ${fmtDate(poAsOf)}.`;
       populateLanding();
     } catch (err) {
-      let diag = "";
-      try {
-        const folder = await graphGet("/me/drive/root:/WAREHOUSE AUDITS 2026:/children?$select=name,folder,file");
-        diag = " Items actually inside \"WAREHOUSE AUDITS 2026\": " +
-          folder.value.map(i => i.name + (i.folder ? "/" : "")).join(", ") + ".";
-      } catch (diagErr) {
-        diag = " (Could not list \"WAREHOUSE AUDITS 2026\" to help diagnose: " + diagErr.message + ")";
-      }
       document.getElementById("loadStatus").textContent =
         "Could not read from OneDrive: " + err.message +
-        " — check WORKBOOK_PATH and the sheet name constants match the live workbook exactly." + diag;
+        " — check WORKBOOK_FILENAME and the sheet name constants match the live workbook exactly.";
     }
   }
 
