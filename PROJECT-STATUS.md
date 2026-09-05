@@ -279,3 +279,10 @@ filename search and then by worksheet-ID matching).
   explicit note rather than silently guessed at. Any table or card list
   over 10 rows is truncated in the body with a link to its full version
   in an Appendix at the end of the report.
+- **v51** - Fixed a real bug: the export did nothing at all. `#printReport`
+  was placed inside the same wrapping section as every tab, so the print
+  CSS's "hide everything except `#printReport`" rule was hiding that whole
+  section - `#printReport` included, since it was a descendant of the
+  thing being hidden, not a sibling of it. Moved `#printReport` to be a
+  direct child of `<body>` alongside that section, matching what the CSS
+  selector actually needs.

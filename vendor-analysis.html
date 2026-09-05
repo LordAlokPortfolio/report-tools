@@ -89,7 +89,7 @@
 </head>
 <body>
 
-<div class="version-badge">v50 - 2026-09-04 - Added "Export report (PDF)": paginated, vendor-scoped report via browser print. Category 2 tabs filtered to the selected vendor; tables over 10 rows truncated with a linked Appendix holding the full detail</div>
+<div class="version-badge">v51 - 2026-09-04 - Fixed the PDF export doing nothing: #printReport was nested inside the main content section, so the print CSS's "hide everything except #printReport" rule was hiding that whole section (and printReport along with it). Moved it to be a direct sibling instead</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -196,9 +196,9 @@
     <div class="tab-view" id="tab-about"></div>
   </section>
 
-  <div id="printReport"></div>
-
 </main>
+
+<div id="printReport"></div>
 
 <script>
 (function () {
