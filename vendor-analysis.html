@@ -63,6 +63,20 @@
     border-radius: 50%; font-size: 11px; font-weight: normal;
     color: var(--muted); cursor: help; text-align: center;
   }
+  #printReport { display: none; }
+  #printReport .report-page { padding: 24px 0; }
+  #printReport .report-page + .report-page { border-top: 1px solid var(--border); page-break-before: always; }
+  #printReport .report-page h1 { font-size: 20px; margin: 0 0 4px; }
+  #printReport .report-page h2 { font-size: 16px; margin: 0 0 6px; }
+  #printReport .truncated-note { font-size: 12px; font-style: italic; color: var(--muted); margin-top: 6px; }
+  #printReport .appendix-anchor { font-size: 12px; color: var(--muted); }
+  @media print {
+    body > *:not(#printReport) { display: none !important; }
+    #printReport { display: block !important; }
+    .report-page { page-break-inside: avoid; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
   .low-confidence { color: var(--muted); }
   tr.thin-row td { opacity: 0.65; }
   .as-of { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
@@ -75,7 +89,7 @@
 </head>
 <body>
 
-<div class="version-badge">v49 - 2026-09-04 - Tab named "Backbone" (was Mix, briefly Staple): which item from this vendor is a real recurring dependency, by units/week</div>
+<div class="version-badge">v50 - 2026-09-04 - Added "Export report (PDF)": paginated, vendor-scoped report via browser print. Category 2 tabs filtered to the selected vendor; tables over 10 rows truncated with a linked Appendix holding the full detail</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -147,6 +161,10 @@
           <option value="0">All time</option>
         </select>
       </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button class="primary" id="exportReportBtn">Export report (PDF)</button>
+      </div>
     </div>
     <p class="as-of" id="asOfLine"></p>
   </section>
@@ -177,6 +195,8 @@
     <div class="tab-view" id="tab-runout"></div>
     <div class="tab-view" id="tab-about"></div>
   </section>
+
+  <div id="printReport"></div>
 
 </main>
 
@@ -1576,6 +1596,141 @@
       "Bottleneck needs a real bill-of-materials sheet to be useful, and that's still being built. The business-day math accounts for standard Ontario statutory holidays but not for company-specific closures. And the honest caveat that applies to the whole tool: it's only as good as the workbook it reads. When a new kind of bad data turns up - and pricing already proved it can - the right response is the same one used every time so far: stop, ask what's actually true, and only build the next piece on ground that's been checked."
     ]);
   }
+
+  // ---------- Export report: printable, vendor-scoped, truncated with an appendix ----------
+  // Builds a paginated report from whatever's already rendered in each tab's
+  // DOM -- no recomputation, no risk of the export drifting from what the
+  // screen shows. Category 1 tabs are already vendor-scoped as rendered.
+  // Category 2 tabs (Bottleneck, Concentration, Runout) are whole-inventory
+  // in the live tool, so their tables get filtered here to this vendor's own
+  // rows before anything else happens to them. Every table/card list over
+  // ROW_LIMIT rows is truncated in the body with a note pointing at its full
+  // version in the Appendix at the end -- nothing is silently cut and lost.
+  const REPORT_ROW_LIMIT = 10;
+  const CAT1_TAB_IDS = ["speed", "shortship", "cadence", "mix", "habits", "actions"];
+  const CAT2_TAB_IDS = ["bottleneck", "concentration", "runout"];
+  const REPORT_TAB_TITLES = {
+    speed: "Speed", shortship: "Shortfall", cadence: "Frequency", mix: "Backbone",
+    habits: "Sensitivity", actions: "Actions", bottleneck: "Bottleneck",
+    concentration: "Concentration", runout: "Runout",
+  };
+  // Index of the "Vendor" column in that tab's own table, used to filter
+  // category-2 tables down to the selected vendor. Bottleneck has no vendor
+  // column in its output at all (a BOM combo isn't tied to one vendor), so
+  // it's deliberately absent here -- flagged with a note instead of guessed.
+  const REPORT_VENDOR_COL = { concentration: 0, runout: 1 };
+
+  function filterTableToVendor(root, colIdx, vendor) {
+    root.querySelectorAll("table").forEach(table => {
+      const tbody = table.querySelector("tbody");
+      if (!tbody) return;
+      Array.from(tbody.querySelectorAll("tr")).forEach(tr => {
+        const cell = tr.children[colIdx];
+        const text = cell ? cell.textContent.trim() : "";
+        if (text !== vendor) tr.remove();
+      });
+    });
+  }
+
+  function truncateReportSection(root) {
+    let truncated = false;
+    root.querySelectorAll("table").forEach(table => {
+      const tbody = table.querySelector("tbody");
+      if (!tbody) return;
+      const rows = Array.from(tbody.querySelectorAll("tr"));
+      if (rows.length > REPORT_ROW_LIMIT) {
+        truncated = true;
+        rows.slice(REPORT_ROW_LIMIT).forEach(r => r.remove());
+      }
+    });
+    const cardsWrap = root.querySelector(".action-cards");
+    if (cardsWrap) {
+      const cards = Array.from(cardsWrap.children);
+      if (cards.length > REPORT_ROW_LIMIT) {
+        truncated = true;
+        cards.slice(REPORT_ROW_LIMIT).forEach(c => c.remove());
+      }
+    }
+    return truncated;
+  }
+
+  function buildPrintReport() {
+    const vendor = document.getElementById("vendorSelect").value;
+    const timelineText = document.getElementById("timelineSelect").selectedOptions[0].textContent;
+    const container = document.getElementById("printReport");
+    container.innerHTML = "";
+    const appendixSections = [];
+
+    container.appendChild(el("div", { class: "report-page" }, [
+      el("h1", null, [`Vendor Report - ${vendor}`]),
+      el("p", null, [`Timeline: ${timelineText}. Generated ${fmtDate(new Date())}.`]),
+      el("p", { class: "note" }, [
+        "Category 1 sections are already scoped to this vendor. Category 2 sections (Bottleneck, Concentration, Runout) are whole-inventory views in the live tool -- filtered here to this vendor's own rows only. Any table or card list longer than 10 is shown truncated, with the full version in the Appendix at the end."
+      ]),
+    ]));
+
+    function appendReportSection(tabId, isCat2) {
+      const source = document.getElementById("tab-" + tabId);
+      if (!source || !source.innerHTML.trim()) return;
+      const clone = source.cloneNode(true);
+      clone.querySelectorAll(".info-icon").forEach(n => n.remove());
+
+      if (isCat2) {
+        const colIdx = REPORT_VENDOR_COL[tabId];
+        if (colIdx !== undefined) {
+          filterTableToVendor(clone, colIdx, vendor);
+        } else {
+          clone.insertBefore(
+            el("p", { class: "note" }, [`This view has no per-vendor column to filter by -- shown whole-inventory, unfiltered.`]),
+            clone.firstChild
+          );
+        }
+      }
+
+      const truncated = truncateReportSection(clone);
+      if (truncated) {
+        const full = source.cloneNode(true);
+        full.querySelectorAll(".info-icon").forEach(n => n.remove());
+        if (isCat2 && REPORT_VENDOR_COL[tabId] !== undefined) {
+          filterTableToVendor(full, REPORT_VENDOR_COL[tabId], vendor);
+        }
+        const anchorId = "appendix-" + tabId;
+        clone.appendChild(el("p", { class: "truncated-note" }, [
+          `Showing first ${REPORT_ROW_LIMIT} rows. Full detail: `,
+          el("a", { href: "#" + anchorId, class: "appendix-anchor" }, ["see Appendix"]),
+          ".",
+        ]));
+        appendixSections.push({ id: anchorId, title: REPORT_TAB_TITLES[tabId], node: full });
+      }
+
+      container.appendChild(el("div", { class: "report-page" }, [
+        el("h2", null, [REPORT_TAB_TITLES[tabId]]),
+        clone,
+      ]));
+    }
+
+    CAT1_TAB_IDS.forEach(id => appendReportSection(id, false));
+    CAT2_TAB_IDS.forEach(id => appendReportSection(id, true));
+
+    if (appendixSections.length > 0) {
+      container.appendChild(el("div", { class: "report-page" }, [el("h1", null, ["Appendix - full order detail"])]));
+      appendixSections.forEach(sec => {
+        const page = el("div", { class: "report-page" }, [
+          el("h2", null, [sec.title + " - full detail"]),
+          sec.node,
+        ]);
+        page.id = sec.id;
+        container.appendChild(page);
+      });
+    }
+  }
+
+  document.getElementById("exportReportBtn").addEventListener("click", function () {
+    if (!document.getElementById("vendorSelect").value) return;
+    buildPrintReport();
+    window.print();
+  });
+
   renderAbout();
 })();
 </script>

@@ -269,3 +269,13 @@ filename search and then by worksheet-ID matching).
 - **v49** - Tab named "Backbone" (was Mix, briefly "Staple" as a
   placeholder) - final name for the rate-based recurring-demand view
   introduced in v48.
+- **v50** - Added "Export report (PDF)": builds a paginated report from
+  each tab's already-rendered DOM (no recomputation) and calls the
+  browser's own print dialog - no library, no upload. Category 1 tabs
+  come across already vendor-scoped; Category 2 tabs (Concentration,
+  Runout) get their tables filtered to the selected vendor's own rows
+  first. Bottleneck has no per-vendor column to filter by (a BOM combo
+  isn't tied to one vendor), so it's shown whole-inventory with an
+  explicit note rather than silently guessed at. Any table or card list
+  over 10 rows is truncated in the body with a link to its full version
+  in an Appendix at the end of the report.

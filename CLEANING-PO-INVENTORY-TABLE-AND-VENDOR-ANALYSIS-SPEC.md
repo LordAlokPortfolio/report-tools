@@ -55,6 +55,23 @@ something is a whole-building question, not a per-vendor one. Reads
 the inventory ledger directly — on hand, usage rate, lead time — and
 says plainly whether ordering today is soon enough.
 
+## Exporting a report
+
+"Export report (PDF)" turns whatever's on screen for the selected
+vendor into a paginated report, using the browser's own print-to-PDF
+(no library, no upload — it's the same thing as pressing Ctrl+P).
+Category 1 tabs come across as already scoped to that vendor; Category
+2 tabs (Concentration, Runout) are whole-inventory in the live tool,
+so the export filters their tables down to that vendor's own rows
+before anything else happens. Bottleneck has no per-vendor column in
+its own output — a BOM combo isn't tied to one vendor — so it's shown
+whole-inventory with a note explaining why, not silently guessed at.
+
+Every table or card list longer than 10 rows is shown truncated in the
+body, with a link to its full version in an Appendix at the end of the
+report — nothing is cut and lost, it's just not printed twice at full
+length in the main body.
+
 ## What problem this solves
 
 Every purchasing decision at KV depends on knowing things that live
