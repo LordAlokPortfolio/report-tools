@@ -23,7 +23,7 @@ reporting on it:
    tabs plus an About tab against the cleaned data - all of them price-free
    (see "Pricing is unreliable" below for why). The tab bar is split into
    two visually divided groups: vendor-scoped (Speed, Shortfall, Frequency,
-   Mix, Sensitivity, Actions) and whole-inventory (Bottleneck, Concentration,
+   Staple, Sensitivity, Actions) and whole-inventory (Bottleneck, Concentration,
    Runout), followed by About. Bottleneck moved to the whole-inventory group
    in v44 - its computation was already whole-building (ignores the vendor
    picker), it was just visually misplaced.
@@ -81,7 +81,7 @@ flagged as unreliable.
 | **Speed** | Working | Headline is the median of the vendor's last 3 closed orders ("current pace"), not a multi-year blended median - a vendor's lead time can genuinely shift (e.g. 10 days -> 35 days) and a long-window median hides that. Full-timeline median shown as context, with an explicit callout when the two diverge. Per-PO table, newest first. |
 | **Shortfall** (replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
 | **Frequency** (replaces Pattern's slot, was "Reorder Cadence") | Working | Gap between consecutive `PO Date`s for the same item, restricted to stock items (`isStockItem()`). Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. Sorted by total order count descending (most-ordered item first), not by recency. |
-| **Mix** | Working | Per selected vendor: MVP score is a 50/50 blend of share of order count and share of received quantity (`QtyReceived`) - fixed in v46 after pure order-count share let a code ordered often in tiny amounts outrank one ordered less often but in real volume. Table (v47) shows just Item / Orders / Qty received / MVP score, sorted highest first, with an (i) tooltip on the formula. |
+| **Staple** (renamed from Mix in v48, name still being decided) | Working | Per selected vendor: score is units received per week (a rate, not a total), computed from each item's own first-to-last order span, gated on `MIN_HISTORY` (6) orders spread over more than one day. Replaces the v46/v47 share-based MVP score, which couldn't tell a real recurring need apart from a single bulk order - a screw ordered constantly scored the same as a one-time million-unit purchase, since both are just "big totals." |
 | **Sensitivity** (renamed from "Habits" in v40) | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading (v39): "does a bigger order, or a different time of year, get delivered faster or slower?" |
 | **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
 | **Actions** (new, v43) | Working | Vendor-scoped: for the selected vendor, one card per SKU with a computable runout date, sorted soonest-due first. Reuses `computeRunoutRows()`, the same computation Runout uses, filtered to `r.vendor === selected vendor`. Relies on the confirmed fact that no two suppliers share an `ID` - no separate relationship-key lookup needed. |
@@ -255,3 +255,14 @@ filename search and then by worksheet-ID matching).
   (dropped the two share-percentage columns), sorted highest score first,
   and added a small (i) tooltip on the MVP score header showing the
   formula in plain terms.
+- **v48** - Reworked Mix into Staple (placeholder name - not yet finalized):
+  the share-based MVP score (order-count share + qty-received share) could
+  not tell a real recurring need apart from a single bulk order - a screw
+  ordered constantly and a one-time million-unit purchase of anything else
+  scored the same, since both are just "big totals." Score is now units
+  received per week, computed from each item's own first-to-last order
+  span (the same rate concept Runout already uses), gated on `MIN_HISTORY`
+  (6) orders spread over more than one day - an item with less history
+  than that has no repeated pattern to measure a rate from, and none is
+  guessed. Table columns unchanged in shape (Item / Orders / Qty received /
+  rate), tooltip updated to the new formula.

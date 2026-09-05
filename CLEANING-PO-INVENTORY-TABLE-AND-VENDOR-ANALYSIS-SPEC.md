@@ -20,12 +20,15 @@ boxes against the PO.
 own history suggests, ranked by how many times each has been ordered.
 Doesn't say why the rhythm changed; just flags it.
 
-**Mix** — for the vendor selected, which single item is the biggest
-deal in the relationship, blending how often it's ordered with how
-much has actually been received (50/50, so a code ordered constantly
-in small amounts can't outrank one ordered less often but in real
-volume, and vice versa). That's the MVP item — the one worth watching
-most closely if that vendor ever became unreliable.
+**Staple** (placeholder name, still being decided) — for the vendor
+selected, which item has real recurring demand: units received per
+week, measured across that item's own order history, not a total. A
+total can't tell a genuine ongoing need apart from a single bulk
+purchase — a million units bought once and a million units bought
+steadily over two years look identical if you only sum them. Requires
+at least a handful of orders spread over more than one day before it
+will compute a rate at all; otherwise there's no repeated pattern to
+measure a rate from, and none is guessed.
 
 **Sensitivity** — does a bigger order, or a different time of year, get
 delivered faster or slower by this vendor. About this vendor's

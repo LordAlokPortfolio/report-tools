@@ -75,7 +75,7 @@
 </head>
 <body>
 
-<div class="version-badge">v47 - 2026-09-04 - Mix table trimmed to Item/Orders/Qty received/MVP score, sorted highest score first, with an (i) tooltip on the MVP score column showing the formula</div>
+<div class="version-badge">v48 - 2026-09-04 - Mix reworked into Staple (placeholder name): score is now units/week (a rate, gated on MIN_HISTORY orders spread over more than one day), not a share of totals -- a single bulk order can no longer fake recurring demand</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -156,7 +156,7 @@
       <button class="tab-btn active" data-tab="speed">Speed</button>
       <button class="tab-btn" data-tab="shortship">Shortfall</button>
       <button class="tab-btn" data-tab="cadence">Frequency</button>
-      <button class="tab-btn" data-tab="mix">Mix</button>
+      <button class="tab-btn" data-tab="mix">Staple</button>
       <button class="tab-btn" data-tab="habits">Sensitivity</button>
       <button class="tab-btn" data-tab="actions">Actions</button>
       <span class="tab-divider"></span>
@@ -1060,67 +1060,74 @@
     ]));
   }
 
-  // ---------- Mix: this vendor's own product breakdown, to find their MVP item(s) ----------
+  // ---------- Staple (placeholder name -- see chat): which item from this
+  // vendor is a recurring, always-need-it dependency, not just a big order ----------
+  // A pure total-quantity or total-orders share can't tell a real recurring
+  // need apart from a single bulk purchase -- a million-unit one-time buy
+  // and a million units bought steadily over two years look identical if
+  // you only sum totals. The fix is a RATE (units per week, the same way
+  // Runout measures usage), which only exists if there's enough repeated
+  // history to measure a rate from -- one order has no rate, it's a point.
+  // Gated the same way the rest of this tool gates thin history: MIN_HISTORY.
   function renderMix() {
     const container = document.getElementById("tab-mix");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Mix - what does this vendor's business with us actually look like?"]));
-    // MVP = ordered often AND in real volume, not just often. A code ordered
-    // 19 times for 2 units each shouldn't outrank one ordered 8 times for 100
-    // units each -- pure order-count share was doing exactly that. Blended
-    // 50/50 with share of received quantity (QtyReceived -- what actually
-    // arrived, not just what was typed on the PO) so neither frequency alone
-    // nor one huge one-off order can dominate on its own.
-    const FREQ_WEIGHT = 0.5, QTY_WEIGHT = 0.5;
+    container.appendChild(el("h2", null, ["Staple - what does this vendor supply that you can't run out of?"]));
     container.appendChild(el("p", { class: "note" }, [
-      `Uses the vendor/timeline picked above. MVP score blends two shares: ${(FREQ_WEIGHT * 100).toFixed(0)}% this code's share of the vendor's order count, ${(QTY_WEIGHT * 100).toFixed(0)}% its share of the vendor's total received quantity (QtyReceived). Neither number alone tells the real story -- ordered often but in tiny amounts, or huge but a one-off, both undersell or oversell what this code actually means to the relationship.`
+      `Uses the vendor/timeline picked above. Score is units received per week, measured across this item's own order history for this vendor -- not a total, so one large one-time order can't fake a recurring need. Requires ${MIN_HISTORY}+ orders to compute a rate at all; fewer than that and there's no repeated pattern to measure.`
     ]));
     const rows = filteredRows().filter(isStockItem);
     const byItem = new Map();
-    let totalOrders = 0;
-    let totalQty = 0;
     rows.forEach(r => {
       const item = String(r["ID"] || "").trim();
       if (!item) return;
-      if (!byItem.has(item)) byItem.set(item, { qty: 0, orders: 0 });
-      const rec = byItem.get(item);
+      const d = toDate(r["PO Date"]);
       const received = typeof r["QtyReceived"] === "number" ? r["QtyReceived"] : 0;
+      if (!byItem.has(item)) byItem.set(item, { qty: 0, orders: 0, firstDate: null, lastDate: null });
+      const rec = byItem.get(item);
       rec.qty += received;
       rec.orders += 1;
-      totalOrders += 1;
-      totalQty += received;
+      if (d) {
+        if (!rec.firstDate || d < rec.firstDate) rec.firstDate = d;
+        if (!rec.lastDate || d > rec.lastDate) rec.lastDate = d;
+      }
     });
 
-    if (byItem.size === 0 || totalOrders === 0) {
+    if (byItem.size === 0) {
       container.appendChild(el("p", { class: "insufficient" }, ["No stock item orders for this vendor/timeline."]));
       return;
     }
 
-    const entries = Array.from(byItem.entries()).map(([item, rec]) => {
-      const orderShare = rec.orders / totalOrders;
-      const qtyShare = totalQty > 0 ? rec.qty / totalQty : 0;
-      return {
-        item, qty: rec.qty, orders: rec.orders,
-        orderShare: orderShare * 100, qtyShare: qtyShare * 100,
-        score: (FREQ_WEIGHT * orderShare + QTY_WEIGHT * qtyShare) * 100,
-      };
+    const entries = [];
+    let thinHistoryCount = 0;
+    byItem.forEach((rec, item) => {
+      if (rec.orders < MIN_HISTORY) { thinHistoryCount++; return; }
+      const spanDays = rec.firstDate && rec.lastDate ? (rec.lastDate - rec.firstDate) / 86400000 : 0;
+      if (spanDays <= 0) { thinHistoryCount++; return; } // all orders on the same day -- no span to measure a rate from
+      const perWeek = (rec.qty / spanDays) * 7;
+      entries.push({ item, qty: rec.qty, orders: rec.orders, perWeek });
     });
-    entries.sort((a, b) => b.score - a.score);
 
-    const mvp = entries[0];
+    if (entries.length === 0) {
+      container.appendChild(el("p", { class: "insufficient" }, [`No item from this vendor has ${MIN_HISTORY}+ orders spread over more than one day yet -- not enough repeated history to measure a recurring rate.`]));
+      return;
+    }
+    entries.sort((a, b) => b.perWeek - a.perWeek);
+
+    const top = entries[0];
     container.appendChild(el("p", { class: "stat" }, [
-      `MVP item: ${itemLabel(mvp.item)} - ${mvp.orders} of ${totalOrders} orders (${mvp.orderShare.toFixed(0)}%), ${mvp.qty} of ${totalQty} units received (${mvp.qtyShare.toFixed(0)}%).`
+      `Staple item: ${itemLabel(top.item)} - ${top.perWeek.toFixed(1)} units/week, from ${top.orders} orders totaling ${top.qty} units.`
     ]));
 
-    const mvpScoreHeader = el("th", null, [
-      "MVP score ",
+    const rateHeader = el("th", null, [
+      "Units / week ",
       el("span", {
         class: "info-icon",
-        title: "MVP score = 50% x (orders / total orders) + 50% x (qty received / total qty received)",
+        title: "Units per week = total qty received for this item / number of days between its first and last order with this vendor, x 7",
       }, ["ⓘ"]), // circled small "i"
     ]);
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, [el("th", null, ["Item"]), el("th", null, ["Orders"]), el("th", null, ["Qty received"]), mvpScoreHeader])]),
+      el("thead", null, [el("tr", null, [el("th", null, ["Item"]), el("th", null, ["Orders"]), el("th", null, ["Qty received"]), rateHeader])]),
     ]);
     const tbody = el("tbody");
     entries.forEach((e, i) => {
@@ -1128,15 +1135,13 @@
         el("td", null, [itemLabel(e.item)]),
         el("td", null, [String(e.orders)]),
         el("td", null, [String(e.qty)]),
-        el("td", { class: i === 0 ? "change-up" : "" }, [e.score.toFixed(1)]),
+        el("td", { class: i === 0 ? "change-up" : "" }, [e.perWeek.toFixed(1)]),
       ]));
     });
     table.appendChild(tbody);
     container.appendChild(table);
-    if (totalQty === 0) {
-      container.appendChild(el("div", { class: "callout warn" }, [
-        "No QtyReceived data for this vendor/timeline -- every order here is still open. MVP score is currently order-count share only until something closes."
-      ]));
+    if (thinHistoryCount > 0) {
+      container.appendChild(el("p", { class: "note" }, [`${thinHistoryCount} item(s) from this vendor have too little order history to compute a rate and are left off this table rather than guessed.`]));
     }
   }
 
@@ -1540,7 +1545,7 @@
     section("Speed", ["How long this vendor actually takes right now, weighted toward their most recent orders."]);
     section("Shortfall", ["What was ordered vs. what actually arrived, per item, for this vendor."]);
     section("Frequency", ["Which items are being reordered more often than their own history suggests."]);
-    section("Mix", ["Which single item is the biggest deal with this vendor by both how often and how much - the MVP item."]);
+    section("Staple", ["Which item from this vendor has real recurring demand - measured as a weekly rate, not a total, so a one-time bulk order can't fake it."]);
     section("Sensitivity", ["Does a bigger order, or a different time of year, get delivered faster or slower by this vendor."]);
     section("Actions", ["One card per SKU this vendor supplies that's coming due for reorder, soonest first."]);
 
