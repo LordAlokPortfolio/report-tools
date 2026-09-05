@@ -81,7 +81,7 @@ flagged as unreliable.
 | **Speed** | Working | Headline is the median of the vendor's last 3 closed orders ("current pace"), not a multi-year blended median - a vendor's lead time can genuinely shift (e.g. 10 days -> 35 days) and a long-window median hides that. Full-timeline median shown as context, with an explicit callout when the two diverge. Per-PO table, newest first. |
 | **Shortfall** (replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
 | **Frequency** (replaces Pattern's slot, was "Reorder Cadence") | Working | Gap between consecutive `PO Date`s for the same item, restricted to stock items (`isStockItem()`). Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. Sorted by total order count descending (most-ordered item first), not by recency. |
-| **Mix** | Working | Per selected vendor: MVP score is a 50/50 blend of share of order count and share of received quantity (`QtyReceived`) - fixed in v46 after pure order-count share let a code ordered often in tiny amounts outrank one ordered less often but in real volume. |
+| **Mix** | Working | Per selected vendor: MVP score is a 50/50 blend of share of order count and share of received quantity (`QtyReceived`) - fixed in v46 after pure order-count share let a code ordered often in tiny amounts outrank one ordered less often but in real volume. Table (v47) shows just Item / Orders / Qty received / MVP score, sorted highest first, with an (i) tooltip on the formula. |
 | **Sensitivity** (renamed from "Habits" in v40) | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading (v39): "does a bigger order, or a different time of year, get delivered faster or slower?" |
 | **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
 | **Actions** (new, v43) | Working | Vendor-scoped: for the selected vendor, one card per SKU with a computable runout date, sorted soonest-due first. Reuses `computeRunoutRows()`, the same computation Runout uses, filtered to `r.vendor === selected vendor`. Relies on the confirmed fact that no two suppliers share an `ID` - no separate relationship-key lookup needed. |
@@ -251,3 +251,7 @@ filename search and then by worksheet-ID matching).
   ordered `Quantity`, since that's what actually arrived). Table now shows
   both shares plus the blended score, not just one number pretending to be
   the whole picture.
+- **v47** - Trimmed Mix's table to Item / Orders / Qty received / MVP score
+  (dropped the two share-percentage columns), sorted highest score first,
+  and added a small (i) tooltip on the MVP score header showing the
+  formula in plain terms.

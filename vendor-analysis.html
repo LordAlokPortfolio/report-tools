@@ -58,6 +58,11 @@
   .action-card .card-title { font-weight: 600; margin-bottom: 6px; }
   .action-card .card-row { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
   .action-card .card-order-by { font-weight: 600; margin-top: 6px; }
+  .info-icon {
+    display: inline-block; width: 14px; height: 14px; line-height: 14px;
+    border-radius: 50%; font-size: 11px; font-weight: normal;
+    color: var(--muted); cursor: help; text-align: center;
+  }
   .low-confidence { color: var(--muted); }
   tr.thin-row td { opacity: 0.65; }
   .as-of { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
@@ -70,7 +75,7 @@
 </head>
 <body>
 
-<div class="version-badge">v46 - 2026-09-04 - Fixed Mix's MVP ranking: was pure order-count share, letting a code ordered often in tiny amounts outrank one ordered less often but in real volume. Now a 50/50 blend of order-count share and received-quantity share</div>
+<div class="version-badge">v47 - 2026-09-04 - Mix table trimmed to Item/Orders/Qty received/MVP score, sorted highest score first, with an (i) tooltip on the MVP score column showing the formula</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -1107,17 +1112,22 @@
       `MVP item: ${itemLabel(mvp.item)} - ${mvp.orders} of ${totalOrders} orders (${mvp.orderShare.toFixed(0)}%), ${mvp.qty} of ${totalQty} units received (${mvp.qtyShare.toFixed(0)}%).`
     ]));
 
+    const mvpScoreHeader = el("th", null, [
+      "MVP score ",
+      el("span", {
+        class: "info-icon",
+        title: "MVP score = 50% x (orders / total orders) + 50% x (qty received / total qty received)",
+      }, ["ⓘ"]), // circled small "i"
+    ]);
     const table = el("table", null, [
-      el("thead", null, [el("tr", null, ["Item", "Orders", "Share of order count", "Qty received", "Share of qty received", "MVP score"].map(h => el("th", null, [h])))]),
+      el("thead", null, [el("tr", null, [el("th", null, ["Item"]), el("th", null, ["Orders"]), el("th", null, ["Qty received"]), mvpScoreHeader])]),
     ]);
     const tbody = el("tbody");
     entries.forEach((e, i) => {
       tbody.appendChild(el("tr", null, [
         el("td", null, [itemLabel(e.item)]),
         el("td", null, [String(e.orders)]),
-        el("td", null, [`${e.orderShare.toFixed(1)}%`]),
         el("td", null, [String(e.qty)]),
-        el("td", null, [`${e.qtyShare.toFixed(1)}%`]),
         el("td", { class: i === 0 ? "change-up" : "" }, [e.score.toFixed(1)]),
       ]));
     });
