@@ -20,8 +20,8 @@ boxes against the PO.
 own history suggests, ranked by how many times each has been ordered.
 Doesn't say why the rhythm changed; just flags it.
 
-**Staple** (placeholder name, still being decided) — for the vendor
-selected, which item has real recurring demand: units received per
+**Backbone** — for the vendor selected, which item has real recurring
+demand: units received per
 week, measured across that item's own order history, not a total. A
 total can't tell a genuine ongoing need apart from a single bulk
 purchase — a million units bought once and a million units bought

@@ -23,7 +23,7 @@ reporting on it:
    tabs plus an About tab against the cleaned data - all of them price-free
    (see "Pricing is unreliable" below for why). The tab bar is split into
    two visually divided groups: vendor-scoped (Speed, Shortfall, Frequency,
-   Staple, Sensitivity, Actions) and whole-inventory (Bottleneck, Concentration,
+   Backbone, Sensitivity, Actions) and whole-inventory (Bottleneck, Concentration,
    Runout), followed by About. Bottleneck moved to the whole-inventory group
    in v44 - its computation was already whole-building (ignores the vendor
    picker), it was just visually misplaced.
@@ -81,7 +81,7 @@ flagged as unreliable.
 | **Speed** | Working | Headline is the median of the vendor's last 3 closed orders ("current pace"), not a multi-year blended median - a vendor's lead time can genuinely shift (e.g. 10 days -> 35 days) and a long-window median hides that. Full-timeline median shown as context, with an explicit callout when the two diverge. Per-PO table, newest first. |
 | **Shortfall** (replaces Creep's slot) | Working | `Quantity` ordered vs `QtyReceived` actually received, per item, for the selected vendor/timeline. Which items has this vendor delivered less of than was ordered. |
 | **Frequency** (replaces Pattern's slot, was "Reorder Cadence") | Working | Gap between consecutive `PO Date`s for the same item, restricted to stock items (`isStockItem()`). Flags items now being ordered noticeably more often than their own history - says the rhythm changed, not why. Sorted by total order count descending (most-ordered item first), not by recency. |
-| **Staple** (renamed from Mix in v48, name still being decided) | Working | Per selected vendor: score is units received per week (a rate, not a total), computed from each item's own first-to-last order span, gated on `MIN_HISTORY` (6) orders spread over more than one day. Replaces the v46/v47 share-based MVP score, which couldn't tell a real recurring need apart from a single bulk order - a screw ordered constantly scored the same as a one-time million-unit purchase, since both are just "big totals." |
+| **Backbone** (renamed from Mix in v48-v49, briefly "Staple" in between) | Working | Per selected vendor: score is units received per week (a rate, not a total), computed from each item's own first-to-last order span, gated on `MIN_HISTORY` (6) orders spread over more than one day. Replaces the v46/v47 share-based MVP score, which couldn't tell a real recurring need apart from a single bulk order - a screw ordered constantly scored the same as a one-time million-unit purchase, since both are just "big totals." |
 | **Sensitivity** (renamed from "Habits" in v40) | Working, cost column dropped | Buckets orders by quarter x order-size, reporting median lead time only. Heading (v39): "does a bigger order, or a different time of year, get delivered faster or slower?" |
 | **Bottleneck** | Needs the `BOTTLENECK` sheet populated with real BOM columns - not yet usable. Cost-to-build column dropped; reports lead-time-only bottleneck. |
 | **Actions** (new, v43) | Working | Vendor-scoped: for the selected vendor, one card per SKU with a computable runout date, sorted soonest-due first. Reuses `computeRunoutRows()`, the same computation Runout uses, filtered to `r.vendor === selected vendor`. Relies on the confirmed fact that no two suppliers share an `ID` - no separate relationship-key lookup needed. |
@@ -266,3 +266,6 @@ filename search and then by worksheet-ID matching).
   than that has no repeated pattern to measure a rate from, and none is
   guessed. Table columns unchanged in shape (Item / Orders / Qty received /
   rate), tooltip updated to the new formula.
+- **v49** - Tab named "Backbone" (was Mix, briefly "Staple" as a
+  placeholder) - final name for the rate-based recurring-demand view
+  introduced in v48.

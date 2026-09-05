@@ -75,7 +75,7 @@
 </head>
 <body>
 
-<div class="version-badge">v48 - 2026-09-04 - Mix reworked into Staple (placeholder name): score is now units/week (a rate, gated on MIN_HISTORY orders spread over more than one day), not a share of totals -- a single bulk order can no longer fake recurring demand</div>
+<div class="version-badge">v49 - 2026-09-04 - Tab named "Backbone" (was Mix, briefly Staple): which item from this vendor is a real recurring dependency, by units/week</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -156,7 +156,7 @@
       <button class="tab-btn active" data-tab="speed">Speed</button>
       <button class="tab-btn" data-tab="shortship">Shortfall</button>
       <button class="tab-btn" data-tab="cadence">Frequency</button>
-      <button class="tab-btn" data-tab="mix">Staple</button>
+      <button class="tab-btn" data-tab="mix">Backbone</button>
       <button class="tab-btn" data-tab="habits">Sensitivity</button>
       <button class="tab-btn" data-tab="actions">Actions</button>
       <span class="tab-divider"></span>
@@ -1060,8 +1060,8 @@
     ]));
   }
 
-  // ---------- Staple (placeholder name -- see chat): which item from this
-  // vendor is a recurring, always-need-it dependency, not just a big order ----------
+  // ---------- Backbone: which item from this vendor is a recurring,
+  // always-need-it dependency, not just a big order ----------
   // A pure total-quantity or total-orders share can't tell a real recurring
   // need apart from a single bulk purchase -- a million-unit one-time buy
   // and a million units bought steadily over two years look identical if
@@ -1072,7 +1072,7 @@
   function renderMix() {
     const container = document.getElementById("tab-mix");
     container.innerHTML = "";
-    container.appendChild(el("h2", null, ["Staple - what does this vendor supply that you can't run out of?"]));
+    container.appendChild(el("h2", null, ["Backbone - what does this vendor supply that you can't run out of?"]));
     container.appendChild(el("p", { class: "note" }, [
       `Uses the vendor/timeline picked above. Score is units received per week, measured across this item's own order history for this vendor -- not a total, so one large one-time order can't fake a recurring need. Requires ${MIN_HISTORY}+ orders to compute a rate at all; fewer than that and there's no repeated pattern to measure.`
     ]));
@@ -1116,7 +1116,7 @@
 
     const top = entries[0];
     container.appendChild(el("p", { class: "stat" }, [
-      `Staple item: ${itemLabel(top.item)} - ${top.perWeek.toFixed(1)} units/week, from ${top.orders} orders totaling ${top.qty} units.`
+      `Backbone item: ${itemLabel(top.item)} - ${top.perWeek.toFixed(1)} units/week, from ${top.orders} orders totaling ${top.qty} units.`
     ]));
 
     const rateHeader = el("th", null, [
@@ -1545,7 +1545,7 @@
     section("Speed", ["How long this vendor actually takes right now, weighted toward their most recent orders."]);
     section("Shortfall", ["What was ordered vs. what actually arrived, per item, for this vendor."]);
     section("Frequency", ["Which items are being reordered more often than their own history suggests."]);
-    section("Staple", ["Which item from this vendor has real recurring demand - measured as a weekly rate, not a total, so a one-time bulk order can't fake it."]);
+    section("Backbone", ["Which item from this vendor has real recurring demand - measured as a weekly rate, not a total, so a one-time bulk order can't fake it."]);
     section("Sensitivity", ["Does a bigger order, or a different time of year, get delivered faster or slower by this vendor."]);
     section("Actions", ["One card per SKU this vendor supplies that's coming due for reorder, soonest first."]);
 
