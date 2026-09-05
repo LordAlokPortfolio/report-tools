@@ -1,7 +1,9 @@
-# Project Status - PO Cleaning & Vendor Analysis (through v43)
+# Project Status - PO Cleaning & Vendor Analysis (through v52)
 
-Snapshot of what this branch (`alok-idea/cleaning-po-inventory-table-and-vendor-analysis`)
-has actually built, as of the vendor-analysis.html "v43" tag. Written so a
+Snapshot of what this project has actually built, as of the
+vendor-analysis.html "v52" tag. Originally developed on
+`alok-idea/cleaning-po-inventory-table-and-vendor-analysis`, merged into
+`main` and now developed there directly. Written so a
 later session (or a later you) can pick this up without re-deriving it.
 Supersedes the file's original "through v20" version - kept as one file,
 not a new one per version, so it doesn't fork into stale copies.
@@ -134,12 +136,21 @@ same caution should apply to everything not yet stress-tested.
 ## Not yet done
 
 - Bottleneck needs real BOM data.
-- Nothing on this branch is linked into `index.html` / the main toolkit yet
-  - explicit standing instruction is to keep `main` untouched until the
-  whole project is ready.
 - Company-specific holiday closures beyond the standard 9 Ontario
   statutory holidays aren't in the business-day math (`vendor-analysis.html`,
   `ontarioHolidaysForYear()`).
+- GitHub Pages' source setting may still need to be manually pointed at
+  `main` (this repo's own settings, not something fixable from here).
+
+## Merged into main
+
+Already done, not pending: `vendor-analysis.html`, `scripts/clean-po-data.ts`,
+and this project's docs are merged into `main` alongside the toolkit's other
+four tools (all preserved, none deleted in the merge). `index.html` has a
+5th card, "Vendor & Material Analysis," linking to `vendor-analysis.html` -
+its description notes this tool reads live from OneDrive, unlike the other
+four fully-local tools, since the page's own "100% LOCAL" badge doesn't
+literally hold for this one.
 
 ## Version history (vendor-analysis.html)
 
