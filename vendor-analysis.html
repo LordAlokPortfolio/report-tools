@@ -89,7 +89,7 @@
 </head>
 <body>
 
-<div class="version-badge">v51 - 2026-09-04 - Fixed the PDF export doing nothing: #printReport was nested inside the main content section, so the print CSS's "hide everything except #printReport" rule was hiding that whole section (and printReport along with it). Moved it to be a direct sibling instead</div>
+<div class="version-badge">v52 - 2026-09-04 - Fixed PDF export showing only Speed: cloned tabs kept their "tab-view" class, which is display:none unless "active" - stripped it from every cloned section</div>
 
 <header>
   <h1>Vendor &amp; Material Analysis</h1>
@@ -1673,6 +1673,7 @@
       const source = document.getElementById("tab-" + tabId);
       if (!source || !source.innerHTML.trim()) return;
       const clone = source.cloneNode(true);
+      clone.className = ""; // strip "tab-view"/"active" -- those classes control on-screen tab visibility (display:none for inactive tabs) and would hide every cloned tab except Speed here too
       clone.querySelectorAll(".info-icon").forEach(n => n.remove());
 
       if (isCat2) {
@@ -1690,6 +1691,7 @@
       const truncated = truncateReportSection(clone);
       if (truncated) {
         const full = source.cloneNode(true);
+        full.className = ""; // same fix as above -- strip tab-view/active
         full.querySelectorAll(".info-icon").forEach(n => n.remove());
         if (isCat2 && REPORT_VENDOR_COL[tabId] !== undefined) {
           filterTableToVendor(full, REPORT_VENDOR_COL[tabId], vendor);

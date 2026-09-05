@@ -286,3 +286,12 @@ filename search and then by worksheet-ID matching).
   thing being hidden, not a sibling of it. Moved `#printReport` to be a
   direct child of `<body>` alongside that section, matching what the CSS
   selector actually needs.
+- **v52** - Fixed a second export bug: only Speed showed any content in
+  the PDF, every other tab was blank. Cause: cloning a tab's DOM
+  (`cloneNode`) copies its classes too, and every tab carries the
+  `tab-view` class, which is `display:none` unless also `active` -
+  Speed was the only tab active by default, so it was the only clone
+  that stayed visible. Fixed by clearing the cloned root's class before
+  inserting it into the report. Verified with a headless-browser test
+  (Playwright, print media emulated) that all 9 tab sections plus the
+  appendix now render real text/tables, not just Speed.
