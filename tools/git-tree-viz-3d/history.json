@@ -1,0 +1,890 @@
+[
+  {
+    "hash": "81fc3f15328bd5a019eb9ba7dfc327aecd41fedb",
+    "parents": [
+      "aa5a4544929ee7293d3ba36968b05f6ce958f8e5"
+    ],
+    "refs": [
+      "origin/main",
+      "origin/claude/git-tree-viz-3d-54nmkf",
+      "claude/git-tree-viz-3d-54nmkf"
+    ],
+    "timestamp": 1788636271,
+    "author": "Claude",
+    "message": "Fix stale header and status claims in PROJECT-STATUS.md"
+  },
+  {
+    "hash": "aa5a4544929ee7293d3ba36968b05f6ce958f8e5",
+    "parents": [
+      "a1b2f31e06cb0af94f7f81ea87cc52a976eb5d5f"
+    ],
+    "refs": [],
+    "timestamp": 1788615438,
+    "author": "github-actions[bot]",
+    "message": "chore: source check 2026-09-05 - see reviewNeeded flags"
+  },
+  {
+    "hash": "a1b2f31e06cb0af94f7f81ea87cc52a976eb5d5f",
+    "parents": [
+      "85d0afacceadf6e271fa6e219708b7f1b7f3eb5d"
+    ],
+    "refs": [],
+    "timestamp": 1788574404,
+    "author": "Claude",
+    "message": "Fix PDF export showing only Speed"
+  },
+  {
+    "hash": "85d0afacceadf6e271fa6e219708b7f1b7f3eb5d",
+    "parents": [
+      "57c655b41ebe6827b52c2e6c444ba88735b05707"
+    ],
+    "refs": [],
+    "timestamp": 1788573745,
+    "author": "Claude",
+    "message": "Fix PDF export doing nothing"
+  },
+  {
+    "hash": "57c655b41ebe6827b52c2e6c444ba88735b05707",
+    "parents": [
+      "260b3ab2a9bac78a08e3fc506725685643acc292"
+    ],
+    "refs": [],
+    "timestamp": 1788569325,
+    "author": "Claude",
+    "message": "Add vendor-scoped PDF export with truncated tables and an appendix"
+  },
+  {
+    "hash": "260b3ab2a9bac78a08e3fc506725685643acc292",
+    "parents": [
+      "435377182bb104024e40c4a6f230e87ef8cafb89"
+    ],
+    "refs": [],
+    "timestamp": 1788568726,
+    "author": "Claude",
+    "message": "Finalize tab name: Backbone (was Mix, briefly Staple)"
+  },
+  {
+    "hash": "435377182bb104024e40c4a6f230e87ef8cafb89",
+    "parents": [
+      "b20fc6df21f394322d8b1e83fd082fa63224d832"
+    ],
+    "refs": [],
+    "timestamp": 1788568603,
+    "author": "Claude",
+    "message": "Rework Mix into Staple: rate-based recurring-demand score"
+  },
+  {
+    "hash": "b20fc6df21f394322d8b1e83fd082fa63224d832",
+    "parents": [
+      "d7a7ca7d7a409848609abfae8095a7bb4f7618a4"
+    ],
+    "refs": [],
+    "timestamp": 1788567549,
+    "author": "Claude",
+    "message": "Simplify Mix table, add MVP formula tooltip"
+  },
+  {
+    "hash": "d7a7ca7d7a409848609abfae8095a7bb4f7618a4",
+    "parents": [
+      "651f04aa35e54f62a5a8ae3640ce85fa2a91268c"
+    ],
+    "refs": [],
+    "timestamp": 1788566007,
+    "author": "Claude",
+    "message": "Fix Mix's MVP ranking to blend frequency and received quantity"
+  },
+  {
+    "hash": "651f04aa35e54f62a5a8ae3640ce85fa2a91268c",
+    "parents": [
+      "c57742446aa7a5b9cac96e7bd910bb36d60371ab"
+    ],
+    "refs": [],
+    "timestamp": 1788562832,
+    "author": "Claude",
+    "message": "About tab: one-sentence tab summaries, grouped by category"
+  },
+  {
+    "hash": "c57742446aa7a5b9cac96e7bd910bb36d60371ab",
+    "parents": [
+      "025b47829d35b140c4f7ce1a602474a4e2f9e333"
+    ],
+    "refs": [],
+    "timestamp": 1788559722,
+    "author": "Claude",
+    "message": "Fix Actions' empty-vendor bug, move Bottleneck to whole-inventory group"
+  },
+  {
+    "hash": "025b47829d35b140c4f7ce1a602474a4e2f9e333",
+    "parents": [
+      "74f39968dc711501df731f522684ddaec0914907",
+      "427e155e1ea3f1a34faabe62d523d9cf106f4f5c"
+    ],
+    "refs": [],
+    "timestamp": 1788559459,
+    "author": "Claude",
+    "message": "Merge PO cleaning & vendor analysis into main, add toolkit card"
+  },
+  {
+    "hash": "427e155e1ea3f1a34faabe62d523d9cf106f4f5c",
+    "parents": [
+      "e4294f48cb17747b79d3a026c352fb146d6db0ad"
+    ],
+    "refs": [],
+    "timestamp": 1788559262,
+    "author": "Claude",
+    "message": "Add vendor-scoped Actions tab (runout cards)"
+  },
+  {
+    "hash": "e4294f48cb17747b79d3a026c352fb146d6db0ad",
+    "parents": [
+      "0e411cb7d7fc4cafead5c0155cc508acb396c61d"
+    ],
+    "refs": [],
+    "timestamp": 1788558812,
+    "author": "Claude",
+    "message": "Add stockout-count KPI to Runout"
+  },
+  {
+    "hash": "0e411cb7d7fc4cafead5c0155cc508acb396c61d",
+    "parents": [
+      "38a8f7aa6aa686fe73296bd9b469997473a013f1"
+    ],
+    "refs": [],
+    "timestamp": 1788558527,
+    "author": "Claude",
+    "message": "Prefer PO-INVENTORY-TABLE's own Name column for item labels"
+  },
+  {
+    "hash": "38a8f7aa6aa686fe73296bd9b469997473a013f1",
+    "parents": [
+      "cd642f323a001dac9d2f78f2e384cc924c860349"
+    ],
+    "refs": [],
+    "timestamp": 1788557148,
+    "author": "Claude",
+    "message": "Rename Habits tab to Sensitivity"
+  },
+  {
+    "hash": "cd642f323a001dac9d2f78f2e384cc924c860349",
+    "parents": [
+      "7d2ebd2042e3941b906b0687c4d01fb0518266e6"
+    ],
+    "refs": [],
+    "timestamp": 1788556706,
+    "author": "Claude",
+    "message": "Rename Habits tab to Sensitivity"
+  },
+  {
+    "hash": "7d2ebd2042e3941b906b0687c4d01fb0518266e6",
+    "parents": [
+      "5679536d8f1d434318f6bf7dc008cdb16ef57eae"
+    ],
+    "refs": [],
+    "timestamp": 1788556082,
+    "author": "Claude",
+    "message": "Update PROJECT-STATUS.md through v39"
+  },
+  {
+    "hash": "5679536d8f1d434318f6bf7dc008cdb16ef57eae",
+    "parents": [
+      "f606d545d01503a9acb94c22515ff9ce41335c72"
+    ],
+    "refs": [],
+    "timestamp": 1788555966,
+    "author": "Claude",
+    "message": "Group tabs, fix Frequency sort, rewrite Habits heading, restructure About"
+  },
+  {
+    "hash": "f606d545d01503a9acb94c22515ff9ce41335c72",
+    "parents": [
+      "d3fe3401686661aafbb2c93c619dc90442bd8b99"
+    ],
+    "refs": [],
+    "timestamp": 1788554695,
+    "author": "Claude",
+    "message": "Rewrite spec in plain human prose; add an About tab so it's actually readable"
+  },
+  {
+    "hash": "d3fe3401686661aafbb2c93c619dc90442bd8b99",
+    "parents": [
+      "61b2671ef46d3b304c81684ac9c901d8d308a0b6"
+    ],
+    "refs": [],
+    "timestamp": 1788554406,
+    "author": "Claude",
+    "message": "Reuse MSAL's cached session on page load instead of forcing re-sign-in"
+  },
+  {
+    "hash": "61b2671ef46d3b304c81684ac9c901d8d308a0b6",
+    "parents": [
+      "cc61556f359f36cef11e1a5f8b550c5cd8c20918"
+    ],
+    "refs": [],
+    "timestamp": 1788554301,
+    "author": "Claude",
+    "message": "Handle REJECTION ledger type: subtracts on-hand, excluded from usage rate"
+  },
+  {
+    "hash": "cc61556f359f36cef11e1a5f8b550c5cd8c20918",
+    "parents": [
+      "5f8866f114461a6e6dc293e0af806739ad466434"
+    ],
+    "refs": [],
+    "timestamp": 1788554149,
+    "author": "Claude",
+    "message": "Add Mix tab (per-vendor MVP by order frequency); rotate passphrase"
+  },
+  {
+    "hash": "5f8866f114461a6e6dc293e0af806739ad466434",
+    "parents": [
+      "557977cf2b48719e8bd47f6ab5a1b71587be3569"
+    ],
+    "refs": [],
+    "timestamp": 1788553902,
+    "author": "Claude",
+    "message": "Fix Runout: TYPE values are singular (RECEIVING/TRANSFER), not plural"
+  },
+  {
+    "hash": "557977cf2b48719e8bd47f6ab5a1b71587be3569",
+    "parents": [
+      "00fc1825b68e20e8045026fd56d3287defcfdfdc"
+    ],
+    "refs": [],
+    "timestamp": 1788551620,
+    "author": "Claude",
+    "message": "Add passphrase gate before merging to main -- sample data public by default"
+  },
+  {
+    "hash": "00fc1825b68e20e8045026fd56d3287defcfdfdc",
+    "parents": [
+      "29d684210147acff91df65b28cd333e488639e29"
+    ],
+    "refs": [],
+    "timestamp": 1788550777,
+    "author": "Claude",
+    "message": "Concentration: replace \"Only they supply\" with total assigned catalog count"
+  },
+  {
+    "hash": "29d684210147acff91df65b28cd333e488639e29",
+    "parents": [
+      "73a1f27f1704d847091139af657f60cf615ba6d9"
+    ],
+    "refs": [],
+    "timestamp": 1788550533,
+    "author": "Claude",
+    "message": "Rename Cadence to Frequency, sort by recency+qty; Concentration shows %"
+  },
+  {
+    "hash": "73a1f27f1704d847091139af657f60cf615ba6d9",
+    "parents": [
+      "314cb3c75a17a20e53ba487b6b1e845e4853fedf"
+    ],
+    "refs": [],
+    "timestamp": 1788550141,
+    "author": "Claude",
+    "message": "Concentration: show assigned-catalog denominator and top-ordered code"
+  },
+  {
+    "hash": "314cb3c75a17a20e53ba487b6b1e845e4853fedf",
+    "parents": [
+      "779dab4f34fdb52c9763f28b57dbf94f55aea967"
+    ],
+    "refs": [],
+    "timestamp": 1788549887,
+    "author": "Claude",
+    "message": "Shorten tab labels to one word each, matching Speed/Habits/Bottleneck/Runout"
+  },
+  {
+    "hash": "779dab4f34fdb52c9763f28b57dbf94f55aea967",
+    "parents": [
+      "28e68e3a343f638236e386ed57e257f93e3ceeba"
+    ],
+    "refs": [],
+    "timestamp": 1788549547,
+    "author": "Claude",
+    "message": "Read sheets in row chunks via Graph -- fixes ResponsePayloadSizeLimitExceeded"
+  },
+  {
+    "hash": "28e68e3a343f638236e386ed57e257f93e3ceeba",
+    "parents": [
+      "60139022952d2314e82c52a06fbbadc524e44d58"
+    ],
+    "refs": [],
+    "timestamp": 1788548847,
+    "author": "Claude",
+    "message": "Reuse one Excel workbook session instead of re-opening on every call"
+  },
+  {
+    "hash": "60139022952d2314e82c52a06fbbadc524e44d58",
+    "parents": [
+      "90c2a4aca2a3d10d73329a9f1fd0275641285cb9"
+    ],
+    "refs": [],
+    "timestamp": 1788548652,
+    "author": "Claude",
+    "message": "Retry Graph API timeouts automatically"
+  },
+  {
+    "hash": "90c2a4aca2a3d10d73329a9f1fd0275641285cb9",
+    "parents": [
+      "6616c11e054ea16593ce9998008797962bd9e3c1"
+    ],
+    "refs": [],
+    "timestamp": 1788548047,
+    "author": "Claude",
+    "message": "Exclude Ontario statutory holidays from business-day math"
+  },
+  {
+    "hash": "6616c11e054ea16593ce9998008797962bd9e3c1",
+    "parents": [
+      "5e499d8dae8a29bb21b86fed3a450593d33c73a8"
+    ],
+    "refs": [],
+    "timestamp": 1788542299,
+    "author": "Claude",
+    "message": "Fix a real bug: stop guessing PO DateReceived for open orders"
+  },
+  {
+    "hash": "5e499d8dae8a29bb21b86fed3a450593d33c73a8",
+    "parents": [
+      "1367ee15eff18c4b8cbf34b7e1f56b4524dd3e28"
+    ],
+    "refs": [],
+    "timestamp": 1788541579,
+    "author": "Claude",
+    "message": "Show ID + INVENTORY NAME instead of a bare ID in item rows"
+  },
+  {
+    "hash": "1367ee15eff18c4b8cbf34b7e1f56b4524dd3e28",
+    "parents": [
+      "12f30bf15a8c01addfefe8ce70f09b4befde239b"
+    ],
+    "refs": [],
+    "timestamp": 1788541503,
+    "author": "Claude",
+    "message": "Short-shipping and Reorder Cadence: group by ID, not ITEM NO"
+  },
+  {
+    "hash": "12f30bf15a8c01addfefe8ce70f09b4befde239b",
+    "parents": [
+      "6bd3780af0f5155287919cc9a852a9138523544b"
+    ],
+    "refs": [],
+    "timestamp": 1788540532,
+    "author": "Claude",
+    "message": "Retire Creep and Pattern; add Short-shipping, Reorder Cadence, Vendor Concentration"
+  },
+  {
+    "hash": "6bd3780af0f5155287919cc9a852a9138523544b",
+    "parents": [
+      "f5c1f0a092bf0cf1f48361ac6004eccbee9f47cb"
+    ],
+    "refs": [],
+    "timestamp": 1788539914,
+    "author": "Claude",
+    "message": "Restore the narrow PO DateRequired fallback for closed-order NULL fill"
+  },
+  {
+    "hash": "f5c1f0a092bf0cf1f48361ac6004eccbee9f47cb",
+    "parents": [
+      "385bb9d7a1c9c4eb93d5f9a28f00c587f9ec19cc"
+    ],
+    "refs": [],
+    "timestamp": 1788539653,
+    "author": "Claude",
+    "message": "Stop using PO DateRequired -- confirmed unreliable by the purchaser"
+  },
+  {
+    "hash": "385bb9d7a1c9c4eb93d5f9a28f00c587f9ec19cc",
+    "parents": [
+      "9d6b7ca4ece5757e6523672f557048f1afcc3dfd"
+    ],
+    "refs": [],
+    "timestamp": 1788538586,
+    "author": "Claude",
+    "message": "Add PROJECT-STATUS-V20.md documenting where this branch stands"
+  },
+  {
+    "hash": "9d6b7ca4ece5757e6523672f557048f1afcc3dfd",
+    "parents": [
+      "abca5d9696df41922bc26630024e96a59cbd0d41"
+    ],
+    "refs": [],
+    "timestamp": 1788538255,
+    "author": "Claude",
+    "message": "Add temporary ID-column diagnostic to Creep"
+  },
+  {
+    "hash": "abca5d9696df41922bc26630024e96a59cbd0d41",
+    "parents": [
+      "91cbb92ea541cde5f9108173621adc44671afe53"
+    ],
+    "refs": [],
+    "timestamp": 1788537752,
+    "author": "Claude",
+    "message": "Exclude custom-order placeholder pricing from all cost calculations"
+  },
+  {
+    "hash": "91cbb92ea541cde5f9108173621adc44671afe53",
+    "parents": [
+      "60f6f8f8c14342c503903b4ffa629753fd0da395"
+    ],
+    "refs": [],
+    "timestamp": 1788537289,
+    "author": "Claude",
+    "message": "Fix Creep's zero-cost bug and collapse it to only show items that increased"
+  },
+  {
+    "hash": "60f6f8f8c14342c503903b4ffa629753fd0da395",
+    "parents": [
+      "d4d25ce655fc693b58fee2a7d0cc2a74472bb14f"
+    ],
+    "refs": [],
+    "timestamp": 1788537171,
+    "author": "Claude",
+    "message": "Collapse Pattern's repeated \"no consistent tendency\" rows into a count"
+  },
+  {
+    "hash": "d4d25ce655fc693b58fee2a7d0cc2a74472bb14f",
+    "parents": [
+      "86caa0f0721a650017b1fd549d7b3042db46fd0c"
+    ],
+    "refs": [],
+    "timestamp": 1788537083,
+    "author": "Claude",
+    "message": "Sort Speed's per-PO table newest-first"
+  },
+  {
+    "hash": "86caa0f0721a650017b1fd549d7b3042db46fd0c",
+    "parents": [
+      "9ed3d31496ad8c0b16d909d26d4dddcb0948656c"
+    ],
+    "refs": [],
+    "timestamp": 1788536853,
+    "author": "Claude",
+    "message": "Simplify Speed and Creep to plain, shareable sentences"
+  },
+  {
+    "hash": "9ed3d31496ad8c0b16d909d26d4dddcb0948656c",
+    "parents": [
+      "52f325d83f5fc2a483d0357231a700bf370f98b7"
+    ],
+    "refs": [],
+    "timestamp": 1788536756,
+    "author": "Claude",
+    "message": "Rework Pattern from a correlation number into an actionable signal"
+  },
+  {
+    "hash": "52f325d83f5fc2a483d0357231a700bf370f98b7",
+    "parents": [
+      "236e1d7afc417aed42944a668aec8ccd27104577"
+    ],
+    "refs": [],
+    "timestamp": 1788536275,
+    "author": "Claude",
+    "message": "Add a version badge in the top-right corner"
+  },
+  {
+    "hash": "236e1d7afc417aed42944a668aec8ccd27104577",
+    "parents": [
+      "e28c8ce82e5e5f30972aedd9420586a820588a4e"
+    ],
+    "refs": [],
+    "timestamp": 1788536186,
+    "author": "Claude",
+    "message": "Speed: lead headline with recent lead time, not a blended long-run median Creep: explicit \"no increase\" wording, and what an increase correlates with"
+  },
+  {
+    "hash": "e28c8ce82e5e5f30972aedd9420586a820588a4e",
+    "parents": [],
+    "refs": [
+      "grafted"
+    ],
+    "timestamp": 1788535724,
+    "author": "Claude",
+    "message": "Make Creep readable at a glance: sorted by size, color-coded, low-confidence rows dimmed"
+  },
+  {
+    "hash": "74f39968dc711501df731f522684ddaec0914907",
+    "parents": [
+      "eecd5f9035bdd48cd6fce2f06b7f79e84916992c"
+    ],
+    "refs": [
+      "HEAD -> alok-idea/tree-3D",
+      "main"
+    ],
+    "timestamp": 1788532744,
+    "author": "github-actions[bot]",
+    "message": "chore: source check 2026-09-04 - see reviewNeeded flags"
+  },
+  {
+    "hash": "eecd5f9035bdd48cd6fce2f06b7f79e84916992c",
+    "parents": [
+      "a40827baaa7002bab2750a1be958cb1ff27d587a"
+    ],
+    "refs": [],
+    "timestamp": 1788526958,
+    "author": "LordAlokPortfolio",
+    "message": "Change project title in README"
+  },
+  {
+    "hash": "a40827baaa7002bab2750a1be958cb1ff27d587a",
+    "parents": [
+      "7b34bab70870629dd3a686aed6c8d38ee20d31d4"
+    ],
+    "refs": [],
+    "timestamp": 1788487397,
+    "author": "Claude",
+    "message": "Add design notes for the material and vendor tool"
+  },
+  {
+    "hash": "7b34bab70870629dd3a686aed6c8d38ee20d31d4",
+    "parents": [
+      "60c3d8ae42758c34750f0ac2aba214fb53d19947"
+    ],
+    "refs": [],
+    "timestamp": 1788448660,
+    "author": "Claude",
+    "message": "Verify all flagged sources, update rates, fix hash false-positives"
+  },
+  {
+    "hash": "60c3d8ae42758c34750f0ac2aba214fb53d19947",
+    "parents": [
+      "013e182cde7602f29e9a3fa034fc42f84e3bf4ee"
+    ],
+    "refs": [],
+    "timestamp": 1788448234,
+    "author": "Claude",
+    "message": "Add CBSA Customs Notices index to source-watch, run first check"
+  },
+  {
+    "hash": "013e182cde7602f29e9a3fa034fc42f84e3bf4ee",
+    "parents": [
+      "d965cdde51cac0d844e247bd5d1bc9ff9a2fbe23"
+    ],
+    "refs": [],
+    "timestamp": 1788447675,
+    "author": "github-actions[bot]",
+    "message": "chore: source check 2026-09-03 - see reviewNeeded flags"
+  },
+  {
+    "hash": "d965cdde51cac0d844e247bd5d1bc9ff9a2fbe23",
+    "parents": [
+      "0bd0e6f88c950f2d2bd12f0613be4bc495e0b505"
+    ],
+    "refs": [],
+    "timestamp": 1788447656,
+    "author": "Claude",
+    "message": "Fix daily workflow failure: checkout branch no longer exists"
+  },
+  {
+    "hash": "0bd0e6f88c950f2d2bd12f0613be4bc495e0b505",
+    "parents": [
+      "6d0ad12e63d1c84bc1fb5c4b9b91a76e874858a7"
+    ],
+    "refs": [],
+    "timestamp": 1787766164,
+    "author": "Claude",
+    "message": "Fix PDF export bleeding past margins - buttons were being captured"
+  },
+  {
+    "hash": "6d0ad12e63d1c84bc1fb5c4b9b91a76e874858a7",
+    "parents": [
+      "647c8e6f4449e86a7d3e67807d47ae85a3f34db0"
+    ],
+    "refs": [],
+    "timestamp": 1787765658,
+    "author": "Claude",
+    "message": "Fix empty-string localStorage override masking real defaults"
+  },
+  {
+    "hash": "647c8e6f4449e86a7d3e67807d47ae85a3f34db0",
+    "parents": [
+      "5b8d5194789292757b3b1e7d19cf77d8e61f7ca3"
+    ],
+    "refs": [],
+    "timestamp": 1787765494,
+    "author": "Alok Kulkarni",
+    "message": "Add MTF party emails"
+  },
+  {
+    "hash": "5b8d5194789292757b3b1e7d19cf77d8e61f7ca3",
+    "parents": [
+      "1da0a7ea630a0150ec7583e900fd530f75cef5dc"
+    ],
+    "refs": [],
+    "timestamp": 1787765393,
+    "author": "Claude",
+    "message": "Make mtf-email.json public, and add fromLocation default"
+  },
+  {
+    "hash": "1da0a7ea630a0150ec7583e900fd530f75cef5dc",
+    "parents": [
+      "70677ad1becdd3a39b726a17fabb0ee5de112cfa"
+    ],
+    "refs": [],
+    "timestamp": 1787765312,
+    "author": "Claude",
+    "message": "Remember manually-typed FROM/TO fields per browser"
+  },
+  {
+    "hash": "70677ad1becdd3a39b726a17fabb0ee5de112cfa",
+    "parents": [
+      "8085ba10c27a82000225521e4bce1be2800bcf41"
+    ],
+    "refs": [],
+    "timestamp": 1787765085,
+    "author": "Alok Kulkarni",
+    "message": "Correct receiving company name and contact spelling"
+  },
+  {
+    "hash": "8085ba10c27a82000225521e4bce1be2800bcf41",
+    "parents": [
+      "a714da2fd43f4bc3737de3c6a149e922180b6780"
+    ],
+    "refs": [],
+    "timestamp": 1787764652,
+    "author": "Claude",
+    "message": "Add MTF-only shared defaults, separate from the NCR files"
+  },
+  {
+    "hash": "a714da2fd43f4bc3737de3c6a149e922180b6780",
+    "parents": [
+      "f05d172d4f7be57e721a599f98db80bfef0b3954"
+    ],
+    "refs": [],
+    "timestamp": 1787764303,
+    "author": "Claude",
+    "message": "Rebuild Material Transfer Form to match the reference spreadsheet layout"
+  },
+  {
+    "hash": "f05d172d4f7be57e721a599f98db80bfef0b3954",
+    "parents": [
+      "99808fe9454e9a392eb26a2c09dff06828d67128"
+    ],
+    "refs": [],
+    "timestamp": 1787750660,
+    "author": "Alok Kulkarni",
+    "message": "Add real company info and logo"
+  },
+  {
+    "hash": "99808fe9454e9a392eb26a2c09dff06828d67128",
+    "parents": [
+      "b2f1f231953048be9a5261e7d40643dc0753b41a"
+    ],
+    "refs": [],
+    "timestamp": 1787750344,
+    "author": "Claude",
+    "message": "Only gitignore the purchaser email, keep the rest public"
+  },
+  {
+    "hash": "b2f1f231953048be9a5261e7d40643dc0753b41a",
+    "parents": [
+      "3c7e7225dbd5e7be9793ca292ab2f83472dbd52f"
+    ],
+    "refs": [],
+    "timestamp": 1787750203,
+    "author": "Claude",
+    "message": "Keep real company contact info out of the public repo"
+  },
+  {
+    "hash": "3c7e7225dbd5e7be9793ca292ab2f83472dbd52f",
+    "parents": [
+      "858bc6cdff67f0cc2d198d43e6333a342ae1dfda"
+    ],
+    "refs": [],
+    "timestamp": 1787749342,
+    "author": "Claude",
+    "message": "Load shared company defaults from the repo instead of per-machine entry"
+  },
+  {
+    "hash": "858bc6cdff67f0cc2d198d43e6333a342ae1dfda",
+    "parents": [
+      "d819c9311f5a679428fdbb4395ade67c333937ad"
+    ],
+    "refs": [],
+    "timestamp": 1787748379,
+    "author": "Claude",
+    "message": "Make NCR number badge inline-editable"
+  },
+  {
+    "hash": "d819c9311f5a679428fdbb4395ade67c333937ad",
+    "parents": [
+      "f85e751e40ab69093db706e8678f75ef861d11a1"
+    ],
+    "refs": [],
+    "timestamp": 1787747945,
+    "author": "Claude",
+    "message": "Add CLAUDE.md with behavioral guidelines"
+  },
+  {
+    "hash": "f85e751e40ab69093db706e8678f75ef861d11a1",
+    "parents": [
+      "d93274a31bec0b1e31dd990a7269ccee1ff405a4"
+    ],
+    "refs": [],
+    "timestamp": 1787747899,
+    "author": "Claude",
+    "message": "Remove em dashes from tariff dashboard, data, and workflow"
+  },
+  {
+    "hash": "d93274a31bec0b1e31dd990a7269ccee1ff405a4",
+    "parents": [
+      "f197bb44b3fbf7b2f4d633a7a177d501b7c2ab5a"
+    ],
+    "refs": [],
+    "timestamp": 1787702004,
+    "author": "Claude",
+    "message": "Add Materials Tariff Dashboard card to toolkit index"
+  },
+  {
+    "hash": "f197bb44b3fbf7b2f4d633a7a177d501b7c2ab5a",
+    "parents": [
+      "29e79492540aae11ddee714f41edb51dbe777580"
+    ],
+    "refs": [],
+    "timestamp": 1787701804,
+    "author": "Claude",
+    "message": "Add tariff dashboard with external JSON data and review badge"
+  },
+  {
+    "hash": "29e79492540aae11ddee714f41edb51dbe777580",
+    "parents": [
+      "2197f3f02d4526dadea2c2d720f713d317609930"
+    ],
+    "refs": [],
+    "timestamp": 1787698813,
+    "author": "Claude",
+    "message": "Add tariff source-watch config, check script, and daily workflow"
+  },
+  {
+    "hash": "2197f3f02d4526dadea2c2d720f713d317609930",
+    "parents": [
+      "6332dbe31c82f5e7ca9e04eb348a94fc99266a49"
+    ],
+    "refs": [],
+    "timestamp": 1787659847,
+    "author": "LordAlokPortfolio",
+    "message": "Fix html2canvas configuration for scrolling"
+  },
+  {
+    "hash": "6332dbe31c82f5e7ca9e04eb348a94fc99266a49",
+    "parents": [
+      "fe910736a4a304047ce7825dfcabbf8ca0f552d7"
+    ],
+    "refs": [],
+    "timestamp": 1784034831,
+    "author": "Claude",
+    "message": "Simplify version tag, drop internal build jargon"
+  },
+  {
+    "hash": "fe910736a4a304047ce7825dfcabbf8ca0f552d7",
+    "parents": [
+      "5e233c317b204eaa8137735364fe272b67e42c9e"
+    ],
+    "refs": [],
+    "timestamp": 1784034788,
+    "author": "Claude",
+    "message": "Personalize version tag with author name"
+  },
+  {
+    "hash": "5e233c317b204eaa8137735364fe272b67e42c9e",
+    "parents": [
+      "7f0dde7e5b74a6fa4e0686e77424094b9c1d9a38"
+    ],
+    "refs": [],
+    "timestamp": 1784034748,
+    "author": "Claude",
+    "message": "Move Paint Summary to separate worksheet in consolidated Excel export"
+  },
+  {
+    "hash": "7f0dde7e5b74a6fa4e0686e77424094b9c1d9a38",
+    "parents": [
+      "a227c2c54b6fe462b9398adfd5caab60ea3fa9ce"
+    ],
+    "refs": [],
+    "timestamp": 1784034197,
+    "author": "Claude",
+    "message": "Review fixes: consolidated detail-record count, validation regex, dead code"
+  },
+  {
+    "hash": "a227c2c54b6fe462b9398adfd5caab60ea3fa9ce",
+    "parents": [
+      "fe1fc70ad74e7ac058a584a6a55b5fbcc5678344"
+    ],
+    "refs": [],
+    "timestamp": 1784033944,
+    "author": "Claude",
+    "message": "Fix Excel styling by switching to xlsx-js-style; formatted summary section"
+  },
+  {
+    "hash": "fe1fc70ad74e7ac058a584a6a55b5fbcc5678344",
+    "parents": [
+      "b8b456cdd28d07abe4c760cd08de63ae2f8aa89d"
+    ],
+    "refs": [],
+    "timestamp": 1784033611,
+    "author": "Claude",
+    "message": "Add version information to HTML header"
+  },
+  {
+    "hash": "b8b456cdd28d07abe4c760cd08de63ae2f8aa89d",
+    "parents": [
+      "39eeca1ebf6a43855955dda963aa1533988e0ba4"
+    ],
+    "refs": [],
+    "timestamp": 1784033537,
+    "author": "Claude",
+    "message": "Fix manual export button to use professional formatting"
+  },
+  {
+    "hash": "39eeca1ebf6a43855955dda963aa1533988e0ba4",
+    "parents": [
+      "ff729bfb33daf8065d675abca02e117254a555a8"
+    ],
+    "refs": [],
+    "timestamp": 1784033333,
+    "author": "Claude",
+    "message": "Add professional formatting to Excel export for Plant Manager"
+  },
+  {
+    "hash": "ff729bfb33daf8065d675abca02e117254a555a8",
+    "parents": [
+      "edb3070f73e35fbba18444469beeb7505c8f68fa"
+    ],
+    "refs": [],
+    "timestamp": 1784032186,
+    "author": "Claude",
+    "message": "Support brand names beyond -KV in colour lines"
+  },
+  {
+    "hash": "edb3070f73e35fbba18444469beeb7505c8f68fa",
+    "parents": [
+      "3dac19e6cf668c3b29b99f5ebb90aa5d49fa3782"
+    ],
+    "refs": [],
+    "timestamp": 1783962105,
+    "author": "Claude",
+    "message": "Add borders to summary table in Excel export"
+  },
+  {
+    "hash": "3dac19e6cf668c3b29b99f5ebb90aa5d49fa3782",
+    "parents": [
+      "436a68cbd90927f3534c9369b125b56dd890c5f3"
+    ],
+    "refs": [],
+    "timestamp": 1783961927,
+    "author": "Claude",
+    "message": "Fix Gallons calculation: use entriesWithDisplay instead of entries"
+  },
+  {
+    "hash": "436a68cbd90927f3534c9369b125b56dd890c5f3",
+    "parents": [],
+    "refs": [
+      "grafted"
+    ],
+    "timestamp": 1783961688,
+    "author": "Claude",
+    "message": "Fix BothSides calculation: only double gallons, not linear feet"
+  }
+]
