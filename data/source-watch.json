@@ -10,38 +10,38 @@
     {
       "key": "cbsa_customs_notices",
       "url": "https://www.cbsa-asfc.gc.ca/publications/cn-ad/menu-eng.html",
-      "lastHash": "812fc275ec3c7e66e61a3b973c0b2992aede84825839fc360b48885954df701b",
-      "lastChecked": "2026-10-07T17:36:53.350Z"
+      "lastHash": "823d7b5527e76bba26015ce2795692f8105e5e0ca55aaf245305526dc65789f4",
+      "lastChecked": "2026-10-08T17:39:53.860Z"
     },
     {
       "key": "canada_list",
       "url": "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/canadas-response-us-tariffs/complete-list-us-products-subject-to-counter-tariffs.html",
       "lastHash": "e095be3b4db38ad864ea837bfdba39b3e7c167fb9b95a1ec182c2d446730fc4f",
-      "lastChecked": "2026-10-07T17:36:53.350Z"
+      "lastChecked": "2026-10-08T17:39:53.860Z"
     },
     {
       "key": "canada_announcement",
       "url": "https://www.canada.ca/en/department-finance/news/2026/08/canada-announces-targeted-countermeasures-and-substantive-support-for-workers-and-businesses-in-response-to-us-tariffs.html",
       "lastHash": "b4e768327f04c7766bf7522543206feee364df765b345adcd5e7ab45184f1944",
-      "lastChecked": "2026-10-07T17:36:53.350Z"
+      "lastChecked": "2026-10-08T17:39:53.860Z"
     },
     {
       "key": "us_motor_vehicles",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-motor-vehicles/",
-      "lastHash": "15ec61b5d6e7c7298b121ea002567164923111f58cf43ffc8088ab5818321ae5",
-      "lastChecked": "2026-10-07T17:36:53.350Z"
+      "lastHash": "d9de0009863497b175d1100921d15a4c460d05dda28b839e649787a66fd6a298",
+      "lastChecked": "2026-10-08T17:39:53.860Z"
     },
     {
       "key": "us_alcohol",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-alcoholic-beverages/",
-      "lastHash": "31e86b86a3444a75599b104e81bec48f0be5dca1c49c0de323b6c7d8f832a9fb",
-      "lastChecked": "2026-10-07T17:36:53.350Z"
+      "lastHash": "5ff526d3fd8b8c9489153ab9844b5e537fdcceb7f6ce62f763a9bd1efc64e0df",
+      "lastChecked": "2026-10-08T17:39:53.860Z"
     },
     {
       "key": "us_dairy",
       "url": "https://www.whitehouse.gov/presidential-actions/2026/07/imposing-additional-duties-to-offset-canadian-discrimination-against-the-commerce-of-the-united-states-with-respect-to-dairy/",
-      "lastHash": "dfd84ce08ebc47b15d6030fc5322dbd5e4187c4f210f5c98b77abc525d4782e2",
-      "lastChecked": "2026-10-07T17:36:53.350Z"
+      "lastHash": "373505e9ad48ac15db85f78a02251b46b8134152d1a529a23f9a20ae29e40255",
+      "lastChecked": "2026-10-08T17:39:53.860Z"
     }
   ]
 }
