@@ -875,6 +875,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: login.account })
         .catch(() => msalApp.acquireTokenPopup({ scopes: GRAPH_SCOPES, account: login.account }));
       token = tr.accessToken;
+      $("signIn").style.display = "none";
       $("refresh").style.display = "";
       startLive();
     } catch (e) { $("status").textContent = "Sign-in failed: " + e.message; }
@@ -897,6 +898,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       if (!accounts.length) return;
       const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
       token = tr.accessToken;
+      $("signIn").style.display = "none";
       $("refresh").style.display = "";
       startLive();
     } catch (e) { /* not signed in: stay on demo data */ }
