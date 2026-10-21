@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Thursday Report</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Thursday">
+<meta name="theme-color" content="#1d2733">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:0;color:#1d2733;background:#f5f6f8;font-size:15px}
+header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.badge{font-size:12px;padding:3px 9px;border-radius:10px;font-weight:700}
+.badge.demo{background:#f0b429;color:#3b2a00}.badge.live{background:#2e9e5b;color:#fff}
+#auth{padding:10px 16px;background:#fff;border-bottom:1px solid #dde3ea;font-size:13px;color:#4a5a6a}
+#auth button{font-size:15px;padding:9px 14px;border:1px solid #1d2733;background:#1d2733;color:#fff;border-radius:8px;margin:6px 8px 0 0}
+#auth button#refresh{background:#fff;color:#1d2733}
+#controls{background:#f5f6f8;padding:10px 12px 8px;border-bottom:1px solid #dde3ea}
+select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;border-radius:8px;background:#fff;width:100%;margin-bottom:8px}
+.seg{display:flex;margin-bottom:8px}
+.seg button{flex:1;font-size:14px;padding:10px 4px;border:1px solid #9aa7b5;background:#fff;margin-left:-1px}
+.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button.on{background:#1d2733;color:#fff;border-color:#1d2733}
+#rangeChips{display:flex;overflow-x:auto;gap:6px;margin-bottom:8px;padding-bottom:2px}
+#rangeChips button{flex:0 0 auto;font-size:14px;padding:8px 12px;border:1px solid #9aa7b5;background:#fff;border-radius:16px;white-space:nowrap}
+#rangeChips button.on{background:#1d2733;color:#fff;border-color:#1d2733}
+#redWrap{display:inline-flex;align-items:center;gap:8px;font-weight:700;color:#c0392b;border:1px solid #9aa7b5;background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:14px}
+#redWrap input{width:20px;height:20px;margin:0}
+#usageRow{display:flex;gap:8px}
+#info{color:#5b6b7c;font-size:12px;padding:8px 14px}
+#list{padding:0 12px 28px}
+.card{background:#fff;border:1px solid #dde3ea;border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.card.bad{background:#ffecec;border-color:#f3c4c4}
+.top{display:flex;align-items:baseline;gap:8px}
+.top b{font-size:17px}.part{color:#5b6b7c;font-size:13px;flex:1}
+.flag{font-size:20px;font-weight:700}.flag.tot{font-size:14px}
+.desc{margin:2px 0 6px}
+.kv{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:#5b6b7c;margin-bottom:6px}.kv b{color:#1d2733;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:#eef2f6;border-radius:8px;padding:4px 8px;font-size:15px;font-weight:600}
+.chip i{display:block;font-style:normal;font-size:11px;font-weight:400;color:#5b6b7c}
+.big{font-size:15px;color:#5b6b7c}.big b{font-size:24px;color:#1d2733;margin-left:6px}
+.uline{display:flex;gap:10px;align-items:baseline;padding:4px 6px;border-radius:6px;font-size:15px}
+.uline.neg{background:#fff6d6}.ulab{flex:0 0 120px;font-size:12px;color:#5b6b7c}
+.muted{color:#7a8a99;font-size:13px}.empty{padding:30px 10px;color:#5b6b7c;text-align:center}
+.po{margin-top:12px}.po summary{font-weight:700;padding:10px;background:#fff;border:1px solid #dde3ea;border-radius:10px}
+.pocard{background:#fff;border:1px solid #dde3ea;border-radius:10px;padding:8px 12px;margin-top:6px;font-size:14px}
+</style></head><body>
+<header><span>Thursday Report</span><span id="src" class="badge demo">DEMO</span></header>
+<div id="auth">
+  <div id="status">Showing demo data (fake numbers). Sign in with your work Microsoft account to see your real workbook.</div>
+  <button id="signIn">Sign in with Microsoft</button><button id="refresh" style="display:none">Refresh</button>
+</div>
+<div id="controls">
+  <select id="cat"></select>
+  <div class="seg" id="viewTabs">
+    <button data-v="back" style="display:none">&larr; Back</button>
+    <button data-v="count" class="on">Counts</button>
+    <button data-v="receiving">Receivings</button>
+    <button data-v="transfer">Transfers</button>
+    <button data-v="usage">Usage</button>
+  </div>
+  <div id="rangeRow">
+    <div id="rangeChips">
+      <button data-v="latest" class="on">Latest Cycle Count</button><button data-v="28d">Last 4 weeks</button>
+      <button data-v="60d">60 days</button><button data-v="90d">90 days</button><button data-v="all">All data</button>
+    </div>
+    <label id="redWrap"><input type="checkbox" id="onlyRed">ONLY RED FLAGS</label>
+  </div>
+  <div id="usageRow" style="display:none"></div>
+  <input type="search" id="search" placeholder="Search ID, part code or description">
+</div>
+<div id="info"></div>
+<div id="list"><div class="empty">Pick a category.</div></div>
+<script>
+(function () {
+  "use strict";
+  // =====================================================================
+  // CONFIG (same Microsoft app and read-only permission as the Vendor Analysis page)
+  // =====================================================================
+  const MSAL_CONFIG = {
+    auth: {
+      clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
+      authority: "https://login.microsoftonline.com/972ad3c5-73ca-4f41-89d7-56485631c283",
+      redirectUri: window.location.href.split("?")[0].split("#")[0],
+    },
+    cache: { cacheLocation: "localStorage" },
+  };
+  const GRAPH_SCOPES = ["User.Read", "Files.Read"];   // READ ONLY. This page can never change your workbook.
+  const WORKBOOK_FILENAME = "MASTER EXCEL SHEET.xlsx";
+  const REQUIRED_TABLES = ["tbl_MASTER", "tbl_HISTORY", "tbl_HISTORY_March_2026", "tbl_OPEN_ORDERS", "tbl_UOM_CONVERSION"];
+  const LAYOUT_TABLES = { "PATIO VISION": "Tbl_MG_PATIO_VISION", "LTC PAINT": "Tbl_MG_PAINT" };
+  const ROW_CHUNK = 2000;
+
+    // =====================================================================
+  // COMPUTE (JavaScript port of thursday_core.py + the per-category logic of
+  // thursday_report_build.py). Same math as the computer report, checked by
+  // comparing both outputs on the same data. Nothing in this block touches the
+  // network or writes anything.
+  // =====================================================================
+  const MON3 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const MON_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const RANGE_DAYS = [["latest", null, 1], ["28d", 28, null], ["60d", 60, null], ["90d", 90, null], ["all", null, null]];
+  const pad2 = n => String(n).padStart(2, "0");
+  const isNum = v => typeof v === "number" && isFinite(v);
+
+  function ymd(y, m, d) {
+    const t = new Date(Date.UTC(y, m - 1, d));
+    if (t.getUTCFullYear() !== y || t.getUTCMonth() !== m - 1 || t.getUTCDate() !== d) return "";
+    return String(y).padStart(4, "0") + "-" + pad2(m) + "-" + pad2(d);
+  }
+  function getDateKey(raw) {
+    if (raw === null || raw === undefined || raw === "") return "";
+    if (isNum(raw)) {
+      const days = Math.floor(raw + 0.5);
+      const t = new Date(Date.UTC(1899, 11, 30) + days * 86400000);
+      return ymd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+    }
+    const s = String(raw).trim();
+    let m;
+    if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) return ymd(+m[1], +m[2], +m[3]);
+    if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s))) return ymd(+m[3], +m[1], +m[2]);
+    if ((m = /^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/.exec(s))) {
+      const name = m[1].toLowerCase();
+      let mi = MON_FULL.findIndex(x => x.toLowerCase() === name);
+      if (mi < 0) mi = MON3.findIndex(x => x.toLowerCase() === name);
+      return mi < 0 ? "" : ymd(+m[3], mi + 1, +m[2]);
+    }
+    if ((m = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}$/.exec(s))) return ymd(+m[1], +m[2], +m[3]);
+    return "";
+  }
+  function labelFromKey(k) { return k ? MON3[+k.slice(5, 7) - 1] + " " + k.slice(8, 10) : ""; }
+  function sortableBatch(raw) {
+    if (isNum(raw)) return raw;
+    if (raw === null || raw === undefined) return 0;
+    const n = Number(String(raw).trim());
+    return isFinite(n) && String(raw).trim() !== "" ? n : 0;
+  }
+  function num(raw, def) {
+    if (isNum(raw)) return raw;
+    if (raw === null || raw === undefined) return def;
+    const s = String(raw).trim();
+    if (s === "") return def;
+    const n = Number(s);
+    return isFinite(n) ? n : def;
+  }
+  const str = v => (v === null || v === undefined ? "" : String(v)).trim();
+  function pyRound(x) { // round to whole number, ties to even (matches Python)
+    const f = Math.floor(x), d = x - f;
+    if (d < 0.5) return f;
+    if (d > 0.5) return f + 1;
+    return f % 2 === 0 ? f : f + 1;
+  }
+  const round2 = x => Number(x.toFixed(2));
+  const round1 = x => Number(x.toFixed(1));
+  const fmtNum = x => String(x);
+
+  function colIndex(headers, name) { return headers.indexOf(name); }
+
+  // ---- tables -> context (built once per load) ----
+  function buildContext(tables, now) {
+    const T = n => tables[n];
+    const M = T("tbl_MASTER"), H = T("tbl_HISTORY"), HM = T("tbl_HISTORY_March_2026");
+    if (!M) throw new Error("tbl_MASTER was not found in the workbook.");
+    if (!H) throw new Error("tbl_HISTORY was not found in the workbook.");
+    const mc = {};
+    for (const h of ["ID", "DESCRIPTION", "CATEGORY", "MINIMUM"]) {
+      mc[h] = colIndex(M.headers, h);
+      if (mc[h] < 0) throw new Error("tbl_MASTER is missing column " + h + ".");
+    }
+    const supplierCol = colIndex(M.headers, "SUPPLIER");
+    const leadCol = colIndex(M.headers, "LEAD TIME (DAYS)");
+    const invCol = colIndex(M.headers, "INVENTORY ID");
+    const hc = {};
+    for (const h of ["ID", "DATE", "QTY", "TYPE", "BATCH_TIME"]) {
+      hc[h] = colIndex(H.headers, h);
+      if (hc[h] < 0) throw new Error("tbl_HISTORY is missing column " + h + ".");
+    }
+    const descById = new Map(), itemInfo = new Map(), idToCat = new Map(), catItems = new Map(), masterByCat = new Map();
+    for (const row of M.rows) {
+      const id = str(row[mc.ID]);
+      const cat = str(row[mc.CATEGORY]);
+      if (id) {
+        itemInfo.set(id, {
+          supplier: supplierCol >= 0 && row[supplierCol] !== null && row[supplierCol] !== undefined ? str(row[supplierCol]) : "",
+          lead_time: leadCol >= 0 ? row[leadCol] : "",
+          inventory_id: invCol >= 0 && row[invCol] !== null && row[invCol] !== undefined ? str(row[invCol]) : "",
+        });
+        idToCat.set(id, str(row[mc.CATEGORY]));
+        descById.set(id, str(row[mc.DESCRIPTION]));
+      }
+      if (cat) {
+        if (!masterByCat.has(cat.toUpperCase())) masterByCat.set(cat.toUpperCase(), []);
+      }
+    }
+    // category list: same rule as the computer report (any non-empty CATEGORY, trimmed, sorted)
+    const catSet = new Set();
+    for (const row of M.rows) if (row[mc.CATEGORY]) catSet.add(str(row[mc.CATEGORY]));
+    const categories = Array.from(catSet).sort();
+    // master rows per category (original order), id list per category
+    const masterRowsByCat = new Map();
+    for (const row of M.rows) {
+      const cat = str(row[mc.CATEGORY]).toUpperCase();
+      if (!masterRowsByCat.has(cat)) masterRowsByCat.set(cat, []);
+      masterRowsByCat.get(cat).push(row);
+    }
+    // history: March table first, then the current one; parse each row ONCE
+    const hist = [];
+    const pushRows = (tbl) => {
+      if (!tbl) return;
+      const c = {};
+      for (const h of ["ID", "DATE", "QTY", "TYPE", "BATCH_TIME"]) c[h] = colIndex(tbl.headers, h);
+      if (Object.values(c).some(v => v < 0)) return;
+      for (const r of tbl.rows) {
+        hist.push({
+          id: str(r[c.ID]), type: str(r[c.TYPE]).toUpperCase(),
+          dk: getDateKey(r[c.DATE]), qraw: r[c.QTY], qty: num(r[c.QTY], 0),
+          sort: sortableBatch(r[c.BATCH_TIME]),
+        });
+      }
+    };
+    pushRows(HM); pushRows(H);
+    hist.forEach((r, i) => { r.idx = i; });
+    // group by category (keeps order); movement rows kept per category too
+    const histByCat = new Map();
+    for (const r of hist) {
+      if (!r.id) continue;
+      const cat = (idToCat.get(r.id) || "").toUpperCase();
+      if (!histByCat.has(cat)) histByCat.set(cat, []);
+      histByCat.get(cat).push(r);
+    }
+    const ctx = {
+      now, categories, mc, descById, itemInfo, idToCat, masterRowsByCat, histByCat, hist,
+      openSplit: readOpenOrdersSplit(T("tbl_OPEN_ORDERS")),
+      factors: readFactors(T("tbl_UOM_CONVERSION")),
+      poByCat: buildPoLists(T("tbl_OPEN_ORDERS"), idToCat),
+      layouts: {}, usageIndex: null, usageMonthList: null, cache: new Map(),
+    };
+    for (const [cat, tname] of Object.entries(LAYOUT_TABLES)) {
+      if (tables[tname]) { try { ctx.layouts[cat] = readOrderLayout(tables[tname]); } catch (e) { /* different shape: normal layout */ } }
+    }
+    return ctx;
+  }
+
+  function readOpenOrdersSplit(tbl) {
+    const out = new Map();
+    if (!tbl) return out;
+    const hs = tbl.headers.map(h => String(h).trim().toUpperCase().replace(/ /g, "_"));
+    const idc = hs.indexOf("ID"), qc = hs.indexOf("OPEN_QTY"), sc = hs.indexOf("STATUS");
+    if (idc < 0 || qc < 0 || sc < 0) return out;
+    const grouped = new Map();
+    for (const row of tbl.rows) {
+      const id = str(row[idc]);
+      if (!id || str(row[sc]).toUpperCase() !== "OPEN") continue;
+      const q = num(row[qc], 0);
+      if (q <= 0) continue;
+      if (!grouped.has(id)) grouped.set(id, []);
+      grouped.get(id).push(q);
+    }
+    for (const [id, qs] of grouped) out.set(id, { total: qs.reduce((a, b) => a + b, 0), quantities: qs });
+    return out;
+  }
+  function readFactors(tbl) {
+    const out = new Map();
+    if (!tbl) return out;
+    const hs = tbl.headers.map(h => String(h).trim().toUpperCase());
+    const idc = hs.indexOf("ID"), fc = hs.indexOf("RECEIVING_TO_COUNT");
+    if (idc < 0 || fc < 0) return out;
+    for (const row of tbl.rows) {
+      const id = str(row[idc]);
+      if (!id) continue;
+      let f = num(row[fc], 1);
+      if (f <= 0) f = 1;
+      out.set(id, f);
+    }
+    return out;
+  }
+  function openOrderInfo(id, ctx) {
+    const d = ctx.openSplit.get(id) || { total: 0, quantities: [] };
+    const f = ctx.factors.get(id) || 1;
+    const cq = d.quantities.map(q => pyRound((q / f) * 100) / 100);
+    const ct = pyRound((d.total / f) * 100) / 100;
+    let disp;
+    if (!cq.length) disp = "0";
+    else if (cq.length === 1) disp = fmtNum(cq[0]) + " = " + fmtNum(ct);
+    else disp = cq.map(fmtNum).join(" | ") + " = " + fmtNum(ct);
+    return [disp, ct];
+  }
+  function buildPoLists(tbl, idToCat) {
+    const out = new Map();
+    if (!tbl) return out;
+    const hs = tbl.headers.map(h => String(h).trim().toUpperCase().replace(/ /g, "_"));
+    const ix = n => hs.indexOf(n);
+    const [idc, poc, dc, oc, rc, opc, dtc, sc, vc] = ["ID","PO_NUMBER","DESCRIPTION","ORDERED_QTY","RECEIVED_QTY","OPEN_QTY","DATE_RAISED","STATUS","VENDOR"].map(ix);
+    if ([idc, poc, dc, oc, rc, opc, dtc, sc, vc].some(v => v < 0)) return out;
+    for (const row of tbl.rows) {
+      const id = str(row[idc]);
+      if (!id || str(row[sc]).toUpperCase() !== "OPEN") continue;
+      const cat = idToCat.get(id) || "";
+      if (!out.has(cat)) out.set(cat, []);
+      out.get(cat).push({
+        po: row[poc], id, description: row[dc], ordered: row[oc], received: row[rc], open: row[opc],
+        date_raised: labelFromKey(getDateKey(row[dtc])) || String(row[dtc] === null || row[dtc] === undefined || row[dtc] === 0 || row[dtc] === false ? "" : row[dtc]),
+        vendor: row[vc],
+      });
+    }
+    return out;
+  }
+  function roundDim(x) { return isNum(x) ? String(round2(x)) : x; }
+  function readOrderLayout(tbl) {
+    const hs = tbl.headers.map(h => String(h).trim().toUpperCase());
+    const idc = hs.indexOf("ID"), ic = hs.indexOf("INCHES"), fc = hs.indexOf("FEET");
+    if (idc < 0 || ic < 0 || fc < 0) throw new Error("layout table has a different shape");
+    const qc = hs.indexOf("QTY");
+    const bc = hs.indexOf("BUGGYS") >= 0 ? hs.indexOf("BUGGYS") : hs.indexOf("BUGGY");
+    const gc = hs.indexOf("BAGS"), sc = hs.indexOf("SKIDS");
+    const has = (row, c) => c >= 0 && row[c] !== null && row[c] !== undefined && row[c] !== "";
+    const out = [];
+    for (const row of tbl.rows) {
+      const id = str(row[idc]);
+      if (!id) continue;
+      let type = "";
+      if (has(row, bc)) type = "BUGGY"; else if (has(row, gc)) type = "BAGS"; else if (has(row, sc)) type = "SKIDS";
+      out.push({ id, inches: roundDim(row[ic]), feet: roundDim(row[fc]), qty: qc >= 0 ? row[qc] : "", type });
+    }
+    return out;
+  }
+
+  function cutoffKey(now, days) {
+    const c = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+    return String(c.getFullYear()).padStart(4, "0") + "-" + pad2(c.getMonth() + 1) + "-" + pad2(c.getDate());
+  }
+  function filterRange(rows, days, now) {
+    if (days === null) return rows;
+    const ck = cutoffKey(now, days);
+    return rows.filter(r => r.dk && r.dk >= ck);
+  }
+
+  function buildHistoryMap(rows, isLtc) {
+    const dayMap = new Map();
+    for (const r of rows) {
+      if (!r.id || !r.type || !r.dk) continue;
+      if (!dayMap.has(r.id)) dayMap.set(r.id, new Map());
+      const dm = dayMap.get(r.id);
+      if (!dm.has(r.dk)) dm.set(r.dk, { has: false, cq: 0, cs: 0, adj: 0 });
+      const b = dm.get(r.dk);
+      if (r.type === "COUNT") {
+        if (!b.has || r.sort > b.cs) { b.has = true; b.cq = r.qty; b.cs = r.sort; }
+      } else if (!isLtc) {
+        if (r.type === "RECEIVING") { if (b.has && r.sort < b.cs) b.adj += r.qty; }
+        else if (r.type === "TRANSFER" || r.type === "PANIC" || r.type === "REJECTION") b.adj -= r.qty;
+      }
+    }
+    const hm = new Map();
+    for (const [id, dm] of dayMap) {
+      const entries = [];
+      for (const [dk, b] of dm) {
+        if (!b.has) continue;
+        entries.push({ sortValue: b.cs, qty: b.cq + b.adj, iso: dk, dateLabel: labelFromKey(dk) });
+      }
+      entries.sort((a, b) => b.sortValue - a.sortValue);
+      hm.set(id, entries);
+    }
+    return hm;
+  }
+
+  function headerDates(ctx, catIds, hm, maxCount) {
+    const uniq = new Map();
+    for (const id of catIds) {
+      for (const e of (hm.get(id) || [])) {
+        const ex = uniq.get(e.dateLabel);
+        if (!ex || e.sortValue > ex.sortValue) uniq.set(e.dateLabel, { sortValue: e.sortValue, label: e.dateLabel, iso: e.iso });
+      }
+    }
+    const ordered = Array.from(uniq.values()).sort((a, b) => b.sortValue - a.sortValue);
+    return maxCount === null ? ordered : ordered.slice(0, maxCount);
+  }
+
+  function weeksCover(row) {
+    const cs = row.values.length && isNum(row.values[0]) ? row.values[0] : 0;
+    const rop = row.rop || 0;
+    const lt = isNum(row.lead_time) ? row.lead_time : null;
+    if (!rop || !lt) return null;
+    return round1((cs / rop) * (lt / 7));
+  }
+
+  function countsForRange(ctx, cat, days, maxDates, isLtc) {
+    const catRows = ctx.histByCat.get(cat.toUpperCase()) || [];
+    const rows = filterRange(catRows, days, ctx.now);
+    const hm = buildHistoryMap(rows, isLtc);
+    const mrows = ctx.masterRowsByCat.get(cat.toUpperCase()) || [];
+    const ids = new Set(mrows.map(r => str(r[ctx.mc.ID])).filter(Boolean));
+    const hdr = headerDates(ctx, ids, hm, maxDates);
+    const labels = hdr.map(d => d.label);
+    const out = [];
+    for (const row of mrows) {
+      const id = str(row[ctx.mc.ID]);
+      const description = str(row[ctx.mc.DESCRIPTION]);
+      const minimum = num(row[ctx.mc.MINIMUM], 0);
+      const byLabel = new Map();
+      for (const e of (hm.get(id) || [])) byLabel.set(e.dateLabel, e.qty);
+      const values = labels.map(l => (byLabel.has(l) ? byLabel.get(l) : ""));
+      const [disp, ct] = openOrderInfo(id, ctx);
+      const cs = values.length && isNum(values[0]) ? values[0] : 0;
+      const flag = (cs + ct) < minimum ? "✖" : "✔";
+      const info = ctx.itemInfo.get(id) || { supplier: "", lead_time: "" };
+      const r = { id, description, rop: minimum, store_room: isLtc ? "" : null, values, open_order: disp, flag,
+                  supplier: info.supplier, lead_time: info.lead_time };
+      r.weeks_cover = weeksCover(r);
+      out.push(r);
+    }
+    // flag sort: red first, stable
+    out.sort((a, b) => (a.flag === "✖" ? 1 : 2) - (b.flag === "✖" ? 1 : 2));
+    return { dates: hdr.map(d => d.label), date_keys: hdr.map(d => d.iso || ""), rows: out };
+  }
+
+  function movementForRange(ctx, cat, type, days, maxDates) {
+    const catRows = (ctx.histByCat.get(cat.toUpperCase()) || []).filter(r => r.type === type);
+    const rows = filterRange(catRows, days, ctx.now);
+    const mrows = ctx.masterRowsByCat.get(cat.toUpperCase()) || [];
+    const items = [];
+    for (const row of mrows) {
+      const id = str(row[ctx.mc.ID]);
+      if (!id) continue;
+      items.push({ id, description: str(row[ctx.mc.DESCRIPTION]), rop: num(row[ctx.mc.MINIMUM], 0) });
+    }
+    const ids = new Set(items.map(i => i.id));
+    const per = new Map(), seen = new Set();
+    for (const r of rows) {
+      if (!ids.has(r.id) || !r.dk) continue;
+      if (!per.has(r.id)) per.set(r.id, new Map());
+      const dm = per.get(r.id);
+      dm.set(r.dk, (dm.get(r.dk) || 0) + r.qty);
+      seen.add(r.dk);
+    }
+    let days_ = Array.from(seen).sort().reverse();
+    if (maxDates !== null) days_ = days_.slice(0, maxDates);
+    const out = items.map(it => {
+      const sums = per.get(it.id) || new Map();
+      const values = days_.map(d => (sums.has(d) ? round2(sums.get(d)) : ""));
+      const total = round2(values.reduce((a, v) => a + (v === "" ? 0 : v), 0));
+      const o = { id: it.id, description: it.description, rop: it.rop, values, total };
+      if (type === "RECEIVING") o.open_order = openOrderInfo(it.id, ctx)[0];
+      return o;
+    });
+    return { dates: days_.map(labelFromKey), date_keys: days_, rows: out };
+  }
+
+  function usageIndex(ctx) {
+    if (ctx.usageIndex) return ctx.usageIndex;
+    const best = new Map(), recv = new Map();
+    for (const r of ctx.hist) {
+      if (r.type !== "COUNT" && r.type !== "RECEIVING") continue;
+      if (!r.id || !r.dk) continue;
+      if (r.type === "COUNT") {
+        if (r.qraw === null || r.qraw === undefined || r.qraw === "") continue;
+        const key = r.id + "\u0001" + r.dk;
+        const cur = best.get(key);
+        if (!cur || r.sort > cur.sort || (r.sort === cur.sort && r.idx > cur.idx)) best.set(key, { sort: r.sort, idx: r.idx, qty: r.qty, id: r.id, dk: r.dk });
+      } else {
+        if (!recv.has(r.id)) recv.set(r.id, []);
+        recv.get(r.id).push([r.dk, r.qty]);
+      }
+    }
+    const counts = new Map();
+    for (const b of best.values()) {
+      if (!counts.has(b.id)) counts.set(b.id, []);
+      counts.get(b.id).push([b.dk, b.qty]);
+    }
+    for (const l of counts.values()) l.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    ctx.usageIndex = { counts, recv };
+    // months list
+    const firsts = [];
+    for (const l of counts.values()) if (l.length) firsts.push(l[0][0]);
+    const months = [];
+    if (firsts.length) {
+      const mn = firsts.reduce((a, b) => (a < b ? a : b));
+      let y = +mn.slice(0, 4), m = +mn.slice(5, 7);
+      while (y < ctx.now.getFullYear() || (y === ctx.now.getFullYear() && m <= ctx.now.getMonth() + 1)) {
+        months.push(String(y).padStart(4, "0") + "-" + pad2(m));
+        m++; if (m === 13) { y++; m = 1; }
+      }
+    }
+    ctx.usageMonthList = months;
+    return ctx.usageIndex;
+  }
+  function usageForCategory(ctx, cat) {
+    const idx = usageIndex(ctx), months = ctx.usageMonthList;
+    const rows = [];
+    for (const row of (ctx.masterRowsByCat.get(cat.toUpperCase()) || [])) {
+      const id = str(row[ctx.mc.ID]);
+      if (!id) continue;
+      const cl = idx.counts.get(id) || [], rl = idx.recv.get(id) || [];
+      const cells = months.map(mo => {
+        const lo = mo + "-01", hi = mo + "-31";
+        const inside = cl.filter(c => c[0] >= lo && c[0] <= hi);
+        if (!inside.length) return null;
+        const end = inside[inside.length - 1];
+        const before = cl.filter(c => c[0] < lo);
+        const begin = before.length ? before[before.length - 1] : (inside.length > 1 ? inside[0] : null);
+        if (!begin || begin[0] === end[0]) return null;
+        let got = 0;
+        for (const [d, q] of rl) if (d > begin[0] && d <= end[0]) got += q;
+        return [round2(begin[1]), round2(got), round2(end[1]), round2(begin[1] + got - end[1]), begin[0], end[0]];
+      });
+      const info = ctx.itemInfo.get(id) || {};
+      rows.push({ id, part: info.inventory_id || id, m: cells });
+    }
+    return { months, rows };
+  }
+
+  function computeCategory(ctx, cat) {
+    const key = cat;
+    if (ctx.cache.has(key)) return ctx.cache.get(key);
+    const isLtc = cat.toUpperCase() === "LTC PAINT";
+    const ranges = {}, moves = { receiving: {}, transfer: {} };
+    const layoutEntries = ctx.layouts[cat];
+    for (const [k, days, maxD] of RANGE_DAYS) {
+      const res = countsForRange(ctx, cat, days, maxD, isLtc);
+      if (k === "latest" && layoutEntries && layoutEntries.length) {
+        const byId = new Map(res.rows.map(r => [r.id, r]));
+        res.layout_rows = layoutEntries.map(e => {
+          const base = byId.get(e.id);
+          const info = ctx.itemInfo.get(e.id) || {};
+          return { id: e.id, part_number: info.inventory_id || "", description: base ? base.description : "",
+                   inches: e.inches, feet: e.feet, qty: e.qty,
+                   count_value: base && base.values.length ? base.values[0] : "", flag: base ? base.flag : "", type: e.type };
+        });
+      }
+      ranges[k] = res;
+      moves.receiving[k] = movementForRange(ctx, cat, "RECEIVING", days, maxD);
+      moves.transfer[k] = movementForRange(ctx, cat, "TRANSFER", days, maxD);
+    }
+    const out = { is_ltc: isLtc, ranges, moves, pos: ctx.poByCat.get(cat) || [], usage: usageForCategory(ctx, cat) };
+    ctx.cache.set(key, out);
+    return out;
+  }
+
+
+  // =====================================================================
+  // MICROSOFT SIGN-IN + READ-ONLY GRAPH
+  // =====================================================================
+  let msalApp = null, token = null, sessionId = null;
+
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error("could not load " + src));
+      document.head.appendChild(s);
+    });
+  }
+  async function ensureMsal() {
+    if (window.msal) return;
+    const urls = [
+      "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js",
+      "https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js",
+    ];
+    let lastErr;
+    for (const u of urls) { try { await loadScript(u); if (window.msal) return; } catch (e) { lastErr = e; } }
+    throw lastErr || new Error("Microsoft sign-in library did not load.");
+  }
+
+  // The ONLY network door. Everything is a GET, except Microsoft's "open a temporary
+  // read session" call (persistChanges:false), which is the same call the Vendor page makes.
+  async function graph(path, method, body, attempt) {
+    method = method || "GET"; attempt = attempt || 1;
+    if (method !== "GET" && !(method === "POST" && /\/workbook\/createSession$/.test(path))) {
+      throw new Error("Blocked: this page only reads from OneDrive.");
+    }
+    const headers = { Authorization: "Bearer " + token };
+    if (sessionId && path.includes("/workbook/")) headers["workbook-session-id"] = sessionId;
+    if (body) headers["Content-Type"] = "application/json";
+    const res = await fetch("https://graph.microsoft.com/v1.0" + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    if (!res.ok) {
+      const txt = await res.text();
+      if ([429, 503, 504].includes(res.status) && attempt < 5) {
+        const wait = (parseInt(res.headers.get("Retry-After") || "0", 10) || attempt * 3) * 1000;
+        await new Promise(r => setTimeout(r, wait));
+        return graph(path, method, body, attempt + 1);
+      }
+      const err = new Error("OneDrive said " + res.status + ": " + txt.slice(0, 200));
+      err.status = res.status;
+      throw err;
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  function colNum(letters) { let n = 0; for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64); return n; }
+  function colLetters(n) { let s = ""; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
+
+  async function fetchTable(itemId, name, onProgress) {
+    let meta;
+    try {
+      meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`);
+    } catch (e) { if (e.status === 404) return null; throw e; }
+    const bang = meta.address.lastIndexOf("!");
+    let sheet = meta.address.slice(0, bang);
+    if (sheet.startsWith("'")) sheet = sheet.slice(1, -1).replace(/''/g, "'");
+    const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(meta.address.slice(bang + 1));
+    if (!m) throw new Error("Unexpected table address for " + name + ": " + meta.address);
+    const c1 = m[1], c2 = m[3], r1 = +m[2], r2 = +m[4];
+    const base = `/me/drive/items/${itemId}/workbook/worksheets('${encodeURIComponent(sheet.replace(/'/g, "''"))}')`;
+    const chunks = [];
+    for (let s = r1; s <= r2; s += ROW_CHUNK) chunks.push([s, Math.min(s + ROW_CHUNK - 1, r2)]);
+    const results = new Array(chunks.length);
+    let next = 0, done = 0;
+    async function worker() {
+      while (next < chunks.length) {
+        const i = next++;
+        const [s, e] = chunks[i];
+        const r = await graph(`${base}/range(address='${c1}${s}:${c2}${e}')?$select=values`);
+        results[i] = r.values; done++;
+        if (onProgress) onProgress(name, Math.min(done * ROW_CHUNK, r2 - r1), r2 - r1);
+      }
+    }
+    await Promise.all([worker(), worker(), worker()]);
+    const all = [].concat(...results);
+    const headers = all[0].map(h => String(h).trim().toUpperCase());
+    return { headers, rows: all.slice(1) };
+  }
+
+  async function loadFromOneDrive(setStatus) {
+    setStatus("Looking for " + WORKBOOK_FILENAME + " in OneDrive...");
+    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(WORKBOOK_FILENAME)}')?$select=id,name,file,lastModifiedDateTime`);
+    const matches = found.value.filter(i => i.file && i.name === WORKBOOK_FILENAME)
+      .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
+    if (!matches.length) throw new Error('No file named "' + WORKBOOK_FILENAME + '" found. Search returned: ' + (found.value.map(i => i.name).join(", ") || "(nothing)"));
+    const itemId = matches[0].id;
+    sessionId = null;
+    const s = await graph(`/me/drive/items/${itemId}/workbook/createSession`, "POST", { persistChanges: false });
+    sessionId = s.id;
+    const tables = {};
+    const names = REQUIRED_TABLES.concat(Object.values(LAYOUT_TABLES));
+    for (const n of names) {
+      const t = await fetchTable(itemId, n, (nm, got, total) => setStatus("Reading " + nm + ": " + got.toLocaleString() + " of " + total.toLocaleString() + " rows..."));
+      if (t) tables[n] = t;
+      else if (REQUIRED_TABLES.includes(n)) throw new Error("The workbook has no table named " + n + ".");
+    }
+    return tables;
+  }
+
+  // =====================================================================
+  // DEMO DATA (fake, made up here; this is what everyone without a sign-in sees)
+  // =====================================================================
+  function demoTables(now) {
+    let seed = 7;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const serial = d => Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1899, 11, 30)) / 86400000);
+    const stamp = (d, hh) => Number(d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + pad2(hh) + "0000");
+    const cats = [
+      ["PAINT", ["White Paint 1L", "Black Paint 1L", "Grey Paint 1L", "Primer 1L", "Clear Coat 1L", "Red Paint 1L"], "Acme Paint", 14],
+      ["HARDWARE", ["Door Hinge", "Handle Set", "Lock Body", "Screw Pack", "Strike Plate", "Roller Kit", "Latch", "Pull Bar"], "Hinge Co", 7],
+      ["PATIO VISION", ["Frame Section A", "Frame Section B", "Track Piece", "Sill Cap", "Bracket Bag", "Corner Key"], "Vision Co", 10],
+      ["LTC PAINT", ["LTC White", "LTC Black", "LTC Bronze", "LTC Clear"], "Acme Paint", 14],
+      ["GLASS", ["Clear Panel", "Tinted Panel", "Low-E Panel", "Spacer Bar", "Gasket Roll"], "Sample Glass", 21],
+    ];
+    const master = { headers: ["ID", "INVENTORY ID", "DESCRIPTION", "MINIMUM", "SUPPLIER", "CATEGORY", "LEAD TIME (DAYS)"], rows: [] };
+    const hist = { headers: ["ID", "INVENTORY NAME", "DATE", "QTY", "TYPE", "BATCH_ID", "BATCH_TIME"], rows: [] };
+    const oo = { headers: ["ID", "PO_NUMBER", "INVENTORY_ID", "DESCRIPTION", "ORDERED_QTY", "RECEIVED_QTY", "OPEN_QTY", "DATE_RAISED", "STATUS", "VENDOR"], rows: [] };
+    const uom = { headers: ["INVENTORY ID", "INVENTORY NAME", "ID", "DESCRIPTION", "COUNT_UOM", "COUNT_UNIT_SIZE", "PURCHASE_UOM", "RECEIVING_UOM", "RECEIVING_TO_COUNT"], rows: [] };
+    const layout = { headers: ["ID", "PART#", "DESCRIPTION", "INCHES", "FEET", "QTY", "BUGGYS", "ORDER", "BAGS", "ORDER2", "SKIDS", "ORDER3"], rows: [] };
+    let nextId = 1001, po = 100;
+    for (const [cat, names, sup, lead] of cats) {
+      names.forEach((nm, i) => {
+        const id = String(nextId++);
+        const min = 20 + Math.floor(rnd() * 60);
+        master.rows.push([id, "SMP-" + id, nm, min, sup, cat, lead]);
+        let stock = Math.round(min * (1.6 + rnd() * 1.4));
+        const burn = Math.max(2, Math.round(min * (0.08 + rnd() * 0.12)));
+        for (let w = 30; w >= 0; w--) {
+          const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - w * 7);   // everyone in a category is counted the same day
+          stock = Math.max(0, stock - burn - Math.floor(rnd() * burn));
+          if (stock < min * 0.9 && w > 0) {            // refill the day before the count
+            const r = Math.round(min * 2);
+            const dr = new Date(now.getFullYear(), now.getMonth(), now.getDate() - w * 7 - 1);
+            stock += r;
+            hist.rows.push([id, nm, serial(dr), r, "RECEIVING", "B" + id + w, stamp(dr, 9)]);
+          }
+          if (rnd() < 0.15) { const tr = 1 + Math.floor(rnd() * 4); stock = Math.max(0, stock - tr); hist.rows.push([id, nm, serial(d), tr, "TRANSFER", "T" + id + w, stamp(d, 11)]); }
+          hist.rows.push([id, nm, serial(d), stock, "COUNT", "C" + id + w, stamp(d, 10)]);
+        }
+        if (i % 3 === 0) {
+          const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 4);
+          oo.rows.push([id, "PO" + (po++), "SMP-" + id, nm, 100, 0, 100, serial(d), "OPEN", sup]);
+        }
+        uom.rows.push(["SMP-" + id, nm, id, nm, "EA", 1, "CASE", "CASE", i % 2 ? 10 : 1]);
+        if (cat === "PATIO VISION") layout.rows.push([id, "x", nm, 84 + i * 12.000000001, 7 + i, 20 + i * 5, i % 3 === 0 ? "x" : "", "", i % 3 === 1 ? "x" : "", "", i % 3 === 2 ? "x" : "", ""]);
+      });
+    }
+    return { tbl_MASTER: master, tbl_HISTORY: hist, tbl_HISTORY_March_2026: { headers: hist.headers, rows: [] },
+             tbl_OPEN_ORDERS: oo, tbl_UOM_CONVERSION: uom, Tbl_MG_PATIO_VISION: layout };
+  }
+
+  // =====================================================================
+  // SCREEN (phone layout)
+  // =====================================================================
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const S = { ctx: null, live: false, cat: "", view: "count", range: "latest", onlyRed: false, q: "", ua: "", ub: "" };
+
+  function setData(tables, live) {
+    S.ctx = buildContext(tables, new Date());
+    S.live = live;
+    const sel = $("cat"), keep = S.cat;
+    sel.innerHTML = '<option value="">Choose a category</option>' + S.ctx.categories.map(c => "<option>" + esc(c) + "</option>").join("");
+    S.cat = S.ctx.categories.includes(keep) ? keep : "";
+    sel.value = S.cat;
+    $("src").textContent = live ? "LIVE" : "DEMO";
+    $("src").className = "badge " + (live ? "live" : "demo");
+    render();
+  }
+
+  function matches(id, desc, part) {
+    if (!S.q) return true;
+    const q = S.q.toLowerCase();
+    return (id + " " + desc + " " + part).toLowerCase().includes(q);
+  }
+  const partOf = id => { const i = S.ctx.itemInfo.get(id); return (i && i.inventory_id) || ""; };
+  const chips = (dates, values) => {
+    let h = "";
+    dates.forEach((d, i) => { const v = values[i]; if (v !== "" && v !== null && v !== undefined) h += '<span class="chip"><i>' + esc(d) + "</i>" + esc(v) + "</span>"; });
+    return h || '<span class="muted">nothing in this range</span>';
+  };
+  function poBlock(pos) {
+    if (!pos || !pos.length) return "";
+    let h = '<details class="po"><summary>Open purchase orders (' + pos.length + ")</summary>";
+    for (const p of pos) {
+      h += '<div class="pocard"><b>' + esc(p.po) + "</b> &middot; ID " + esc(p.id) + "<br>" + esc(p.description) +
+        '<br><span class="muted">Ordered ' + esc(p.ordered) + " / Received " + esc(p.received) + " / Open " + esc(p.open) +
+        " &middot; Raised " + esc(p.date_raised) + " &middot; " + esc(p.vendor) + "</span></div>";
+    }
+    return h + "</details>";
+  }
+  const note = (cat, d) => {
+    const base = d.ranges.latest.rows[0];
+    return base ? "Supplier: " + esc(base.supplier || "-") + " | Lead time: " + esc(base.lead_time || "-") + " days" : "";
+  };
+
+  function renderCounts(d) {
+    const rd = d.ranges[S.range];
+    const redOnly = S.onlyRed;
+    let h = "", shown = 0, total = 0;
+    if (S.range === "latest" && rd.layout_rows && rd.layout_rows.length) {
+      total = rd.layout_rows.length;
+      for (const r of rd.layout_rows) {
+        if (redOnly && r.flag !== "✖") continue;
+        if (!matches(r.id, r.description, r.part_number)) continue;
+        shown++;
+        const typ = r.type === "BUGGY" ? "BUGGYS" : r.type;
+        h += '<div class="card ' + (r.flag === "✖" ? "bad" : "ok") + '"><div class="top"><b>' + esc(r.id) + '</b><span class="part">' + esc(r.part_number) +
+          '</span><span class="flag">' + esc(r.flag) + "</span></div><div class=\"desc\">" + esc(r.description) + '</div>' +
+          '<div class="kv"><span>INCHES <b>' + esc(r.inches) + "</b></span><span>FEET <b>" + esc(r.feet) + "</b></span><span>QTY per <b>" + esc(r.qty) + "</b></span></div>" +
+          '<div class="big">' + (typ ? esc(typ) + " <b>" + esc(r.count_value) + "</b>" : '<span class="muted">no BUGGYS / BAGS / SKIDS mark in your sheet</span>') + "</div></div>";
+      }
+    } else {
+      total = rd.rows.length;
+      for (const r of rd.rows) {
+        if (redOnly && r.flag !== "✖") continue;
+        const part = partOf(r.id);
+        if (!matches(r.id, r.description, part)) continue;
+        shown++;
+        h += '<div class="card ' + (r.flag === "✖" ? "bad" : "ok") + '"><div class="top"><b>' + esc(r.id) + '</b><span class="part">' + esc(part) +
+          '</span><span class="flag">' + esc(r.flag) + '</span></div><div class="desc">' + esc(r.description) + "</div>" +
+          '<div class="kv"><span>ROP <b>' + esc(r.rop) + "</b></span><span>OPEN ORDER <b>" + esc(r.open_order) + "</b></span><span>WEEKS COVER <b>" +
+          (r.weeks_cover === null ? "-" : esc(r.weeks_cover)) + '</b></span></div><div class="chips">' + chips(rd.dates, r.values) + "</div></div>";
+      }
+    }
+    const msg = redOnly && !shown && total ? "No red flags in this view." : (!total ? "No items in this category." : (!shown ? "Nothing matches your search." : ""));
+    $("list").innerHTML = (h || '<div class="empty">' + msg + "</div>") + poBlock(d.pos);
+    $("info").innerHTML = (shown === total ? shown + " items." : shown + " of " + total + " items shown.") + " &#10006; = at or below minimum including open orders.<br>" + note(S.cat, d);
+  }
+
+  function renderMoves(d) {
+    const rd = d.moves[S.view][S.range], isRecv = S.view === "receiving";
+    let h = "", shown = 0;
+    for (const r of rd.rows) {
+      const part = partOf(r.id);
+      if (!matches(r.id, r.description, part)) continue;
+      shown++;
+      h += '<div class="card"><div class="top"><b>' + esc(r.id) + '</b><span class="part">' + esc(part) + '</span><span class="flag tot">TOTAL ' + esc(r.total) + "</span></div>" +
+        '<div class="desc">' + esc(r.description) + '</div><div class="kv"><span>ROP <b>' + esc(r.rop) + "</b></span>" +
+        (isRecv ? "<span>OPEN ORDER <b>" + esc(r.open_order) + "</b></span>" : "") + '</div><div class="chips">' + chips(rd.dates, r.values) + "</div></div>";
+    }
+    $("list").innerHTML = (h || '<div class="empty">' + (rd.rows.length ? "Nothing matches your search." : "No items in this category.") + "</div>") + (isRecv ? poBlock(d.pos) : "");
+    const word = isRecv ? "received" : "transferred";
+    $("info").innerHTML = shown + " items. " + (rd.dates.length ? "Each day is the total " + word + " that day." : "Nothing " + word + " in this range.") + "<br>" + note(S.cat, d);
+  }
+
+  const monthLabel = m => MON_FULL[+m.slice(5, 7) - 1] + " " + m.slice(0, 4);
+  const monthShort = m => MON3[+m.slice(5, 7) - 1] + " " + m.slice(0, 4);
+  function usageLine(label, c) {
+    if (!c) return '<div class="uline"><span class="ulab">' + esc(label) + '</span><span class="muted">no count to compare</span></div>';
+    return '<div class="uline' + (c[3] < 0 ? " neg" : "") + '"><span class="ulab">' + esc(label) + "</span>" +
+      "<span>" + esc(c[0]) + " + " + esc(c[1]) + " &minus; " + esc(c[2]) + " = <b>" + esc(c[3]) + '</b><br><span class="muted">counts ' + esc(labelFromKey(c[4])) + " to " + esc(labelFromKey(c[5])) + "</span></span></div>";
+  }
+  function usageChange(a, b) {
+    if (!a || !b) return "-";
+    const u1 = a[3], u2 = b[3];
+    if (u1 === 0 && u2 === 0) return "0%";
+    if (u1 === 0) return "new";
+    const pct = Math.round((u2 - u1) / Math.abs(u1) * 100);
+    if (pct === 0) return "0%";
+    return (pct > 0 ? "&#9650; +" : "&#9660; ") + pct + "%";
+  }
+  function renderUsage(d) {
+    const u = d.usage;
+    if (!u.months.length) { $("list").innerHTML = '<div class="empty">No count history to build usage from.</div>'; $("info").textContent = ""; return; }
+    const last = u.months.length - 1;
+    if (!u.months.includes(S.ub)) S.ub = u.months[last];
+    if (!u.months.includes(S.ua)) S.ua = u.months[Math.max(0, last - 1)];
+    const opts = cur => u.months.map((m, i) => '<option value="' + m + '"' + (m === cur ? " selected" : "") + ">" + monthShort(m) + (i === last ? " (so far)" : "") + "</option>").join("");
+    $("usageRow").innerHTML = '<select id="ua">' + opts(S.ua) + '</select><select id="ub">' + opts(S.ub) + "</select>";
+    $("ua").onchange = () => { S.ua = $("ua").value; render(); };
+    $("ub").onchange = () => { S.ub = $("ub").value; render(); };
+    const ia = u.months.indexOf(S.ua), ib = u.months.indexOf(S.ub);
+    let h = "", shown = 0;
+    for (const r of u.rows) {
+      const desc = S.ctx.descById.get(r.id) || "";
+      if (!matches(r.id, desc, r.part)) continue;
+      shown++;
+      const a = r.m[ia], b = r.m[ib];
+      h += '<div class="card"><div class="top"><b>' + esc(r.part) + '</b><span class="part">' + esc(r.id) + '</span><span class="flag tot">' + usageChange(a, b) + '</span></div><div class="desc">' + esc(desc) + "</div>" +
+        usageLine(monthLabel(S.ua), a) + usageLine(monthLabel(S.ub), b) + "</div>";
+    }
+    $("list").innerHTML = h || '<div class="empty">Nothing matches your search.</div>';
+    $("info").innerHTML = shown + " items. Each line: beginning + receivings &minus; ending = usage. Transfers and rejections are already inside the ending count, so they are not added. " +
+      "A yellow line means negative usage. Under each line are the two count days used. The arrow compares the top month with the bottom month.";
+  }
+
+  function render() {
+    const usage = S.view === "usage";
+    $("viewTabs").querySelectorAll("button").forEach(b => {
+      const v = b.dataset.v;
+      b.style.display = usage ? (v === "usage" || v === "back" ? "" : "none") : (v === "back" ? "none" : "");
+      b.classList.toggle("on", v === S.view);
+    });
+    $("rangeRow").style.display = usage ? "none" : "";
+    $("usageRow").style.display = usage ? "" : "none";
+    $("redWrap").style.visibility = S.view === "count" ? "visible" : "hidden";
+    $("rangeChips").querySelector('[data-v="latest"]').textContent = S.view === "count" ? "Latest Cycle Count" : "Latest activity day";
+    $("rangeChips").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === S.range));
+    if (!S.cat) { $("list").innerHTML = '<div class="empty">Pick a category.</div>'; $("info").textContent = ""; return; }
+    const d = computeCategory(S.ctx, S.cat);
+    if (usage) renderUsage(d); else if (S.view === "count") renderCounts(d); else renderMoves(d);
+  }
+
+  function wire() {
+    $("cat").onchange = () => { S.cat = $("cat").value; render(); };
+    $("viewTabs").querySelectorAll("button").forEach(b => b.onclick = () => { S.view = b.dataset.v === "back" ? "count" : b.dataset.v; render(); });
+    $("rangeChips").querySelectorAll("button").forEach(b => b.onclick = () => { S.range = b.dataset.v; render(); });
+    $("onlyRed").onchange = () => { S.onlyRed = $("onlyRed").checked; render(); };
+    $("search").oninput = () => { S.q = $("search").value.trim(); render(); };
+    $("signIn").onclick = signIn;
+    $("refresh").onclick = refresh;
+  }
+
+  async function startLive() {
+    const setStatus = t => { $("status").textContent = t; };
+    $("refresh").disabled = true;
+    try {
+      const tables = await loadFromOneDrive(setStatus);
+      setData(tables, true);
+      const rows = tables.tbl_HISTORY.rows.length + (tables.tbl_HISTORY_March_2026 ? tables.tbl_HISTORY_March_2026.rows.length : 0);
+      setStatus("Live data loaded " + new Date().toLocaleTimeString() + " (" + rows.toLocaleString() + " history rows). Nothing was saved or changed in OneDrive.");
+    } catch (e) {
+      setStatus("Could not read OneDrive: " + e.message + " (still showing demo data)");
+    }
+    $("refresh").disabled = false;
+  }
+  async function signIn() {
+    try {
+      await ensureMsal();
+      msalApp = msalApp || new msal.PublicClientApplication(MSAL_CONFIG);
+      await msalApp.initialize();
+      const login = await msalApp.loginPopup({ scopes: GRAPH_SCOPES });
+      const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: login.account })
+        .catch(() => msalApp.acquireTokenPopup({ scopes: GRAPH_SCOPES, account: login.account }));
+      token = tr.accessToken;
+      $("refresh").style.display = "";
+      startLive();
+    } catch (e) { $("status").textContent = "Sign-in failed: " + e.message; }
+  }
+  async function refresh() {
+    try {
+      const accounts = msalApp.getAllAccounts();
+      const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      token = tr.accessToken;
+    } catch (e) { return signIn(); }
+    startLive();
+  }
+  async function trySilent() {
+    try {
+      if (!Object.keys(localStorage).some(k => k.includes("msal"))) return;
+      await ensureMsal();
+      msalApp = new msal.PublicClientApplication(MSAL_CONFIG);
+      await msalApp.initialize();
+      const accounts = msalApp.getAllAccounts();
+      if (!accounts.length) return;
+      const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      token = tr.accessToken;
+      $("refresh").style.display = "";
+      startLive();
+    } catch (e) { /* not signed in: stay on demo data */ }
+  }
+
+  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData };
+  if (!window.__TR_TEST) {
+    wire();
+    setData(demoTables(new Date()), false);
+    trySilent();
+  }
+
+})();
+</script>
+</body></html>
