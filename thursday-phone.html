@@ -44,8 +44,32 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
 .muted{color:#7a8a99;font-size:13px}.empty{padding:30px 10px;color:#5b6b7c;text-align:center}
 .po{margin-top:12px}.po summary{font-weight:700;padding:10px;background:#fff;border:1px solid #dde3ea;border-radius:10px}
 .pocard{background:#fff;border:1px solid #dde3ea;border-radius:10px;padding:8px 12px;margin-top:6px;font-size:14px}
+.cov-tap{cursor:pointer;text-decoration:underline dotted}
+.covnote{font-size:12px;color:#5b6b7c;background:#eef2f6;border-radius:6px;padding:6px 8px;margin:-2px 0 6px}
+#warn{display:none;background:#fff6d6;color:#7a5a00;font-size:12px;padding:8px 14px}
+#bellBtn{position:relative;background:none;border:none;color:#fff;font-size:20px;padding:4px 6px;line-height:1}
+.bellBadge{position:absolute;top:-2px;right:-2px;background:#c0392b;color:#fff;font-size:11px;font-weight:700;border-radius:9px;min-width:16px;padding:1px 4px;display:none;line-height:1.3}
+#bellPanel{display:none;position:fixed;inset:0;background:#f5f6f8;z-index:50;overflow-y:auto;padding-bottom:28px}
+#bellHead{display:flex;justify-content:space-between;align-items:center;background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:600;position:sticky;top:0}
+#bellHead button{font-size:14px;padding:8px 14px;border:1px solid #fff;background:none;color:#fff;border-radius:8px}
+.bellSum{font-size:12px;color:#5b6b7c;padding:10px 14px}
+.bcard{background:#fff;border:1px solid #dde3ea;border-radius:10px;padding:10px 12px;margin:0 12px 8px}
+.bcard.t1{background:#ffecec;border-color:#f3c4c4}.bcard.t2{background:#fff6d6;border-color:#eadb9c}.bcard.t3{background:#fff;border-color:#dde3ea}
+.bcard .btop{font-size:15px;margin-bottom:4px}
+.tag{display:inline-block;font-size:12px;font-weight:700;background:#1d2733;color:#fff;border-radius:6px;padding:3px 8px;margin-bottom:4px}
+.brow{font-size:12px;color:#5b6b7c;margin-bottom:4px}.brow b{color:#1d2733}
+.act{font-weight:700;margin-bottom:4px}
+.bcard .why div{font-size:12px;color:#5b6b7c;margin-top:4px}
 </style></head><body>
-<header><span>Thursday Report</span><span id="src" class="badge demo">DEMO</span></header>
+<header><span>Thursday Report</span><span style="display:flex;align-items:center;gap:10px">
+  <button id="bellBtn" aria-label="Needs attention">&#128276;<span id="bellBadge" class="bellBadge"></span></button>
+  <span id="src" class="badge demo">DEMO</span>
+</span></header>
+<div id="warn"></div>
+<div id="bellPanel">
+  <div id="bellHead"><span>Needs attention</span><button id="bellClose">Close</button></div>
+  <div id="bellBody"></div>
+</div>
 <div id="auth">
   <div id="status">Showing demo data (fake numbers). Sign in with your work Microsoft account to see your real workbook.</div>
   <button id="signIn">Sign in with Microsoft</button><button id="refresh" style="display:none">Refresh</button>
@@ -170,12 +194,13 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     const supplierCol = colIndex(M.headers, "SUPPLIER");
     const leadCol = colIndex(M.headers, "LEAD TIME (DAYS)");
     const invCol = colIndex(M.headers, "INVENTORY ID");
+    const statusCol = colIndex(M.headers, "STATUS");
     const hc = {};
     for (const h of ["ID", "DATE", "QTY", "TYPE", "BATCH_TIME"]) {
       hc[h] = colIndex(H.headers, h);
       if (hc[h] < 0) throw new Error("tbl_HISTORY is missing column " + h + ".");
     }
-    const descById = new Map(), itemInfo = new Map(), idToCat = new Map(), catItems = new Map(), masterByCat = new Map();
+    const descById = new Map(), itemInfo = new Map(), idToCat = new Map(), catItems = new Map(), masterByCat = new Map(), deadIds = new Set();
     for (const row of M.rows) {
       const id = str(row[mc.ID]);
       const cat = str(row[mc.CATEGORY]);
@@ -187,6 +212,10 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
         });
         idToCat.set(id, str(row[mc.CATEGORY]));
         descById.set(id, str(row[mc.DESCRIPTION]));
+        if (statusCol >= 0) {
+          const s = str(row[statusCol]).trim();
+          if (s === "0" || s === "0.0") deadIds.add(id);
+        }
       }
       if (cat) {
         if (!masterByCat.has(cat.toUpperCase())) masterByCat.set(cat.toUpperCase(), []);
@@ -230,9 +259,11 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     }
     const ctx = {
       now, categories, mc, descById, itemInfo, idToCat, masterRowsByCat, histByCat, hist,
+      deadIds, statusMissing: statusCol < 0,
       openSplit: readOpenOrdersSplit(T("tbl_OPEN_ORDERS")),
       factors: readFactors(T("tbl_UOM_CONVERSION")),
       poByCat: buildPoLists(T("tbl_OPEN_ORDERS"), idToCat),
+      openPoDates: readOpenPoDates(T("tbl_OPEN_ORDERS")),
       layouts: {}, usageIndex: null, usageMonthList: null, cache: new Map(),
     };
     for (const [cat, tname] of Object.entries(LAYOUT_TABLES)) {
@@ -257,6 +288,22 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       grouped.get(id).push(q);
     }
     for (const [id, qs] of grouped) out.set(id, { total: qs.reduce((a, b) => a + b, 0), quantities: qs });
+    return out;
+  }
+  function readOpenPoDates(tbl) {
+    const out = new Map();
+    if (!tbl) return out;
+    const hs = tbl.headers.map(h => String(h).trim().toUpperCase().replace(/ /g, "_"));
+    const idc = hs.indexOf("ID"), qc = hs.indexOf("OPEN_QTY"), sc = hs.indexOf("STATUS"), dtc = hs.indexOf("DATE_RAISED");
+    if (idc < 0 || qc < 0 || sc < 0) return out;
+    for (const row of tbl.rows) {
+      const id = str(row[idc]);
+      if (!id || str(row[sc]).toUpperCase() !== "OPEN") continue;
+      const q = num(row[qc], 0);
+      if (q <= 0) continue;
+      if (!out.has(id)) out.set(id, []);
+      out.get(id).push({ qty: q, raised: dtc >= 0 ? getDateKey(row[dtc]) : "" });
+    }
     return out;
   }
   function readFactors(tbl) {
@@ -509,6 +556,131 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     return { months, rows };
   }
 
+  // ---- Bell: items that need attention (worked out from data already loaded; nothing is written anywhere) ----
+  function dkToDate(dk) { return new Date(Date.UTC(+dk.slice(0, 4), +dk.slice(5, 7) - 1, +dk.slice(8, 10))); }
+  function addDaysKey(dk, days) {
+    const d = dkToDate(dk);
+    d.setUTCDate(d.getUTCDate() + days);
+    return ymd(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+  }
+  function daysBetweenKeys(dkA, dkB) { return Math.round((dkToDate(dkB) - dkToDate(dkA)) / 86400000); }
+  function shortLabel(dk) { return dk ? MON3[+dk.slice(5, 7) - 1] + " " + (+dk.slice(8, 10)) : ""; }
+  const USAGE_WINDOW_DAYS = 28, MAX_GAP_DAYS = 90;
+
+  function buildBellCards(ctx) {
+    const now = ctx.now;
+    const todayKey = ymd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    const movedOut = new Map();
+    for (const r of ctx.hist) {
+      if (r.type !== "TRANSFER" && r.type !== "REJECTION") continue;
+      if (!r.id || !r.dk) continue;
+      if (!movedOut.has(r.id)) movedOut.set(r.id, []);
+      movedOut.get(r.id).push([r.dk, r.qty]);
+    }
+    const idx = usageIndex(ctx);
+    const cards = [];
+    let skippedNoCount = 0, skippedNoMin = 0, skippedStruck = 0, newestCount = "";
+    const seen = new Set();
+    for (const arr of ctx.masterRowsByCat.values()) {
+      for (const row of arr) {
+        const id = str(row[ctx.mc.ID]);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        if (ctx.deadIds.has(id)) { skippedStruck++; continue; }
+        const minimum = num(row[ctx.mc.MINIMUM], 0);
+        if (minimum <= 0) { skippedNoMin++; continue; }
+        const counts = idx.counts.get(id) || [];
+        if (!counts.length) { skippedNoCount++; continue; }
+        const [endDate, endQty] = counts[counts.length - 1];
+        if (endDate > newestCount) newestCount = endDate;
+        const info = ctx.itemInfo.get(id) || {};
+        const lead = isNum(info.lead_time) && info.lead_time > 0 ? info.lead_time : null;
+        const recv = idx.recv.get(id) || [];
+
+        let rate = null, basis = "Not enough history (fewer than 2 counts) to estimate use.";
+        if (counts.length >= 2) {
+          const loKey = addDaysKey(endDate, -USAGE_WINDOW_DAYS);
+          const earlier = counts.slice(0, -1).filter(c => c[0] >= loKey);
+          const begin = earlier.length ? earlier[0] : counts[counts.length - 2];
+          const gap = daysBetweenKeys(begin[0], endDate);
+          if (gap <= 0 || (gap > MAX_GAP_DAYS && !earlier.length)) {
+            basis = "Not enough recent history to estimate use.";
+          } else {
+            let got = 0;
+            for (const [d, q] of recv) if (d > begin[0] && d <= endDate) got += q;
+            const used = begin[1] + got - endQty;
+            basis = "Used " + fmtNum(round2(used)) + " over " + gap + " days (" + shortLabel(begin[0]) + " to " + shortLabel(endDate) + "): " +
+              fmtNum(begin[1]) + " + " + fmtNum(round2(got)) + " received - " + fmtNum(endQty) + " counted.";
+            if (used > 0) rate = used / gap; else basis += " No use in that period.";
+          }
+        }
+
+        let recvSince = 0;
+        for (const [d, q] of recv) if (d > endDate) recvSince += q;
+        recvSince = round2(recvSince);
+        let outSince = 0;
+        for (const [d, q] of (movedOut.get(id) || [])) if (d > endDate) outSince += q;
+        outSince = round2(outSince);
+
+        let runoutKey = null, daysLeft = null;
+        if (rate) {
+          const runDays = (endQty + recvSince) / rate;
+          const runout = new Date(dkToDate(endDate).getTime() + runDays * 86400000);
+          runoutKey = ymd(runout.getUTCFullYear(), runout.getUTCMonth() + 1, runout.getUTCDate());
+          daysLeft = Math.floor((runout.getTime() - dkToDate(todayKey).getTime()) / 86400000);
+        }
+
+        const factor = ctx.factors.get(id) || 1;
+        const poDates = ctx.openPoDates.get(id) || [];
+        const pos = [];
+        let totalOpen = 0;
+        for (const po of poDates) {
+          const cq = round2(po.qty / factor);
+          totalOpen += cq;
+          const est = po.raised && lead ? addDaysKey(po.raised, lead) : "";
+          pos.push({ qty: fmtNum(cq), raised: po.raised ? shortLabel(po.raised) : "", est: est ? shortLabel(est) : "", est_key: est });
+        }
+        totalOpen = round2(totalOpen);
+
+        let tier = 0, headline = "", advice = "";
+        if (endQty <= 0) { tier = 1; headline = "OUT OF STOCK"; }
+        else if (daysLeft !== null && daysLeft <= 0) { tier = 1; headline = "PROBABLY OUT NOW"; }
+        else if (daysLeft !== null && lead !== null && daysLeft < lead) {
+          const onTime = pos.filter(p => p.est_key && todayKey <= p.est_key && p.est_key <= runoutKey);
+          if (!onTime.length) { tier = 2; headline = "RUNS OUT IN ~" + daysLeft + " DAYS (supplier needs " + fmtNum(lead) + ")"; }
+        }
+        if (!tier && (endQty + totalOpen) < minimum) { tier = 3; headline = "BELOW MINIMUM"; }
+        if (!tier) continue;
+
+        const late = pos.filter(p => p.est_key && p.est_key < todayKey);
+        if (tier === 1) advice = !pos.length ? "Order now." : (!late.length ? "Chase the open order." : "Open order is late. Chase it.");
+        else if (tier === 2) advice = !pos.length ? "Order now." : "Open order may arrive too late. Chase it or order more.";
+        else advice = "Order now.";
+
+        cards.push({
+          id, part: info.inventory_id || id,
+          description: str(row[ctx.mc.DESCRIPTION]), category: str(row[ctx.mc.CATEGORY]),
+          supplier: info.supplier || "", lead: lead ? fmtNum(lead) : "",
+          tier, headline, advice,
+          count: fmtNum(endQty), count_date: shortLabel(endDate),
+          minimum: fmtNum(minimum), open_total: fmtNum(totalOpen),
+          pos: pos.map(p => ({ qty: p.qty, raised: p.raised, est: p.est })),
+          received_since: fmtNum(recvSince), transferred_since: fmtNum(outSince),
+          rate: rate ? fmtNum(round2(rate)) : "", basis,
+          days_left: daysLeft, runout: runoutKey ? shortLabel(runoutKey) : "",
+        });
+      }
+    }
+    cards.sort((a, b) => {
+      if (a.tier !== b.tier) return a.tier - b.tier;
+      const da = a.days_left === null ? Infinity : a.days_left, db = b.days_left === null ? Infinity : b.days_left;
+      if (da !== db) return da - db;
+      return a.description < b.description ? -1 : a.description > b.description ? 1 : 0;
+    });
+    return { cards, skipped_no_count: skippedNoCount, skipped_no_min: skippedNoMin, skipped_struck: skippedStruck,
+             newest_count: newestCount ? shortLabel(newestCount) : "" };
+  }
+
   function computeCategory(ctx, cat) {
     const key = cat;
     if (ctx.cache.has(key)) return ctx.cache.get(key);
@@ -707,6 +879,15 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     sel.value = S.cat;
     $("src").textContent = live ? "LIVE" : "DEMO";
     $("src").className = "badge " + (live ? "live" : "demo");
+    if (S.ctx.statusMissing) {
+      $("warn").textContent = "No STATUS column found in tbl_MASTER, so no item is treated as dead stock.";
+      $("warn").style.display = "block";
+    } else {
+      $("warn").style.display = "none";
+    }
+    S.bell = buildBellCards(S.ctx);
+    $("bellBadge").textContent = S.bell.cards.length;
+    $("bellBadge").style.display = S.bell.cards.length ? "block" : "none";
     render();
   }
 
@@ -735,6 +916,40 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     const base = d.ranges.latest.rows[0];
     return base ? "Supplier: " + esc(base.supplier || "-") + " | Lead time: " + esc(base.lead_time || "-") + " days" : "";
   };
+  function coverTitleText(w) {
+    if (w === null || w === undefined || isNaN(w)) return "";
+    const now = S.ctx.now;
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    d.setDate(d.getDate() + Math.round(w * 7));
+    const dateStr = MON_FULL[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+    const todayStr = MON_FULL[now.getMonth()] + " " + now.getDate() + ", " + now.getFullYear();
+    return "Stock plus open orders cover until about " + dateStr + " (" + w + " weeks counted from " + todayStr + ").";
+  }
+  function bellCard(c) {
+    const left = c.days_left !== null ? ("~" + Math.max(0, c.days_left) + " days") : "?";
+    const short = c.description.length > 60 ? c.description.slice(0, 60) + "..." : c.description;
+    let det = '<div>' + esc(c.category) + (c.supplier ? " &middot; " + esc(c.supplier) : "") + '</div>' +
+      '<div>Received since count: <b>' + esc(c.received_since) + '</b> &middot; Transferred since count: <b>' + esc(c.transferred_since) + '</b></div>';
+    if (c.pos.length) det += c.pos.map(p => '<div>PO ' + esc(p.qty) + ' raised ' + esc(p.raised) + (p.est ? ", expected about " + esc(p.est) : "") + '</div>').join("");
+    det += '<div>' + esc(c.basis) + (c.rate ? " About " + esc(c.rate) + " a day." : "") + '</div>' +
+      (c.days_left !== null ? '<div>Projected to run out about ' + esc(c.runout) + '.</div>' : "");
+    return '<div class="bcard t' + c.tier + '"><div class="btop"><b>' + esc(c.part) + '</b> ' + esc(short) + '</div>' +
+      '<div><span class="tag">' + esc(c.headline) + '</span></div>' +
+      '<div class="brow">Count <b>' + esc(c.count) + '</b> (' + esc(c.count_date) + ') &middot; Min <b>' + esc(c.minimum) +
+      '</b> &middot; Open <b>' + esc(c.open_total) + '</b> &middot; Left <b>' + esc(left) + '</b> &middot; Lead <b>' + esc(c.lead || "?") + 'd</b></div>' +
+      '<div class="act">' + esc(c.advice) + '</div>' +
+      '<details><summary>Details</summary><div class="why">' + det + '</div></details></div>';
+  }
+  function renderBell() {
+    const b = S.bell;
+    const n = t => b.cards.filter(c => c.tier === t).length;
+    let h = '<div class="bellSum">' + n(1) + ' out of stock &middot; ' + n(2) + ' running out before the supplier can deliver &middot; ' + n(3) + ' below minimum.<br>' +
+      "Based on counts up to " + esc(b.newest_count || "?") + ".</div>";
+    if (!b.cards.length) h += '<div class="empty">Nothing needs attention.</div>';
+    for (const c of b.cards) h += bellCard(c);
+    h += '<div class="bellSum">Not checked: ' + b.skipped_no_count + ' items with no count, ' + b.skipped_no_min + ' items with no minimum, ' + b.skipped_struck + ' dead-stock items (Status 0).</div>';
+    $("bellBody").innerHTML = h;
+  }
 
   function renderCounts(d) {
     const rd = d.ranges[S.range];
@@ -759,10 +974,12 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
         const part = partOf(r.id);
         if (!matches(r.id, r.description, part)) continue;
         shown++;
+        const covTitle = r.weeks_cover === null ? "" : coverTitleText(r.weeks_cover);
         h += '<div class="card ' + (r.flag === "✖" ? "bad" : "ok") + '"><div class="top"><b>' + esc(r.id) + '</b><span class="part">' + esc(part) +
           '</span><span class="flag">' + esc(r.flag) + '</span></div><div class="desc">' + esc(r.description) + "</div>" +
-          '<div class="kv"><span>ROP <b>' + esc(r.rop) + "</b></span><span>OPEN ORDER <b>" + esc(r.open_order) + "</b></span><span>WEEKS COVER <b>" +
-          (r.weeks_cover === null ? "-" : esc(r.weeks_cover)) + '</b></span></div><div class="chips">' + chips(rd.dates, r.values) + "</div></div>";
+          '<div class="kv"><span>ROP <b>' + esc(r.rop) + "</b></span><span>OPEN ORDER <b>" + esc(r.open_order) + "</b></span><span>WEEKS COVER " +
+          (covTitle ? '<b class="cov-tap" data-note="' + esc(covTitle) + '">' + esc(r.weeks_cover) + "</b>" : "<b>-</b>") +
+          '</span></div><div class="covnote" style="display:none"></div><div class="chips">' + chips(rd.dates, r.values) + "</div></div>";
       }
     }
     const msg = redOnly && !shown && total ? "No red flags in this view." : (!total ? "No items in this category." : (!shown ? "Nothing matches your search." : ""));
@@ -852,6 +1069,16 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     $("search").oninput = () => { S.q = $("search").value.trim(); render(); };
     $("signIn").onclick = signIn;
     $("refresh").onclick = refresh;
+    $("bellBtn").onclick = () => { renderBell(); $("bellPanel").style.display = "block"; };
+    $("bellClose").onclick = () => { $("bellPanel").style.display = "none"; };
+    $("list").addEventListener("click", e => {
+      const t = e.target.closest(".cov-tap");
+      if (!t) return;
+      const note = t.closest(".card").querySelector(".covnote");
+      if (!note) return;
+      if (note.style.display === "block") { note.style.display = "none"; }
+      else { note.textContent = t.dataset.note; note.style.display = "block"; }
+    });
   }
 
   async function startLive() {
@@ -905,7 +1132,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     } catch (e) { /* not signed in: stay on demo data */ }
   }
 
-  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData };
+  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData, buildBellCards, coverTitleText: w => coverTitleText(w) };
   if (!window.__TR_TEST) {
     wire();
     setData(demoTables(new Date()), false);
