@@ -377,10 +377,11 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
 
   function weeksCover(row) {
     const cs = row.values.length && isNum(row.values[0]) ? row.values[0] : 0;
+    const openQty = isNum(row.open_qty) ? row.open_qty : 0;
     const rop = row.rop || 0;
     const lt = isNum(row.lead_time) ? row.lead_time : null;
     if (!rop || !lt) return null;
-    return round1((cs / rop) * (lt / 7));
+    return round1(((cs + openQty) / rop) * (lt / 7));
   }
 
   function countsForRange(ctx, cat, days, maxDates, isLtc) {
@@ -403,7 +404,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       const cs = values.length && isNum(values[0]) ? values[0] : 0;
       const flag = (cs + ct) < minimum ? "✖" : "✔";
       const info = ctx.itemInfo.get(id) || { supplier: "", lead_time: "" };
-      const r = { id, description, rop: minimum, store_room: isLtc ? "" : null, values, open_order: disp, flag,
+      const r = { id, description, rop: minimum, store_room: isLtc ? "" : null, values, open_order: disp, open_qty: ct, flag,
                   supplier: info.supplier, lead_time: info.lead_time };
       r.weeks_cover = weeksCover(r);
       out.push(r);
