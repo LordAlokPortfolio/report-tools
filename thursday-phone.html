@@ -44,8 +44,8 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
 .muted{color:#7a8a99;font-size:13px}.empty{padding:30px 10px;color:#5b6b7c;text-align:center}
 .po{margin-top:12px}.po summary{font-weight:700;padding:10px;background:#fff;border:1px solid #dde3ea;border-radius:10px}
 .pocard{background:#fff;border:1px solid #dde3ea;border-radius:10px;padding:8px 12px;margin-top:6px;font-size:14px}
-.cov-tap{cursor:pointer;text-decoration:underline dotted}
-.covnote{font-size:12px;color:#5b6b7c;background:#eef2f6;border-radius:6px;padding:6px 8px;margin:-2px 0 6px}
+.cov-tap,.live-tap{cursor:pointer;text-decoration:underline dotted}
+.covnote,.livenote{font-size:12px;color:#5b6b7c;background:#eef2f6;border-radius:6px;padding:6px 8px;margin:-2px 0 6px}
 #warn{display:none;background:#fff6d6;color:#7a5a00;font-size:12px;padding:8px 14px}
 #bellBtn{position:relative;background:none;border:none;color:#fff;font-size:20px;padding:4px 6px;line-height:1}
 .bellBadge{position:absolute;top:-2px;right:-2px;background:#c0392b;color:#fff;font-size:11px;font-weight:700;border-radius:9px;min-width:16px;padding:1px 4px;display:none;line-height:1.3}
@@ -78,7 +78,8 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   <select id="cat"></select>
   <div class="seg" id="viewTabs">
     <button data-v="back" style="display:none">&larr; Back</button>
-    <button data-v="count" class="on">Counts</button>
+    <button data-v="count" class="on">Cycle Count</button>
+    <button data-v="live">Live Count</button>
     <button data-v="receiving">Receivings</button>
     <button data-v="transfer">Transfers</button>
     <button data-v="usage">Usage</button>
@@ -195,6 +196,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     const leadCol = colIndex(M.headers, "LEAD TIME (DAYS)");
     const invCol = colIndex(M.headers, "INVENTORY ID");
     const statusCol = colIndex(M.headers, "STATUS");
+    const qtyCol = colIndex(M.headers, "QTY");
     const hc = {};
     for (const h of ["ID", "DATE", "QTY", "TYPE", "BATCH_TIME"]) {
       hc[h] = colIndex(H.headers, h);
@@ -259,7 +261,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     }
     const ctx = {
       now, categories, mc, descById, itemInfo, idToCat, masterRowsByCat, histByCat, hist,
-      deadIds, statusMissing: statusCol < 0,
+      deadIds, statusMissing: statusCol < 0, qtyCol,
       openSplit: readOpenOrdersSplit(T("tbl_OPEN_ORDERS")),
       factors: readFactors(T("tbl_UOM_CONVERSION")),
       poByCat: buildPoLists(T("tbl_OPEN_ORDERS"), idToCat),
@@ -431,6 +433,51 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     return round1(((cs + openQty) / rop) * (lt / 7));
   }
 
+  // Live Count: QTY straight off tbl_MASTER, in MASTER order (no sorting, no date range).
+  function liveForCategory(ctx, cat) {
+    const mrows = ctx.masterRowsByCat.get(cat.toUpperCase()) || [];
+    const out = [];
+    for (const row of mrows) {
+      const id = str(row[ctx.mc.ID]);
+      const description = str(row[ctx.mc.DESCRIPTION]);
+      const minimum = num(row[ctx.mc.MINIMUM], 0);
+      const qtyRaw = ctx.qtyCol >= 0 ? row[ctx.qtyCol] : undefined;
+      const qty = isNum(qtyRaw) ? qtyRaw : null;
+      const [disp, ct] = openOrderInfo(id, ctx);
+      const info = ctx.itemInfo.get(id) || { supplier: "", lead_time: "" };
+      const weeks_cover = qty === null ? null : weeksCover({ values: [qty], rop: minimum, lead_time: info.lead_time, open_qty: ct });
+      out.push({ id, description, rop: minimum, qty, open_order: disp, open_qty: ct, weeks_cover,
+                 supplier: info.supplier, lead_time: info.lead_time });
+    }
+    return { rows: out };
+  }
+
+  // Tap text for a LIVE COUNT value: reuses the same counts/receivings (usageIndex) and
+  // transfers/rejections (movedOutIndex) the bell already builds. No new workbook reads.
+  function liveTipText(ctx, id, qty) {
+    if (qty === null) return "The QTY cell for this item is blank or not a number in the master sheet.";
+    const idx = usageIndex(ctx);
+    const counts = idx.counts.get(id) || [];
+    const qtyLabel = fmtNum(round2(qty));
+    if (!counts.length) {
+      return "Live count (QTY in the master sheet): " + qtyLabel + ". No cycle count on record for this item.";
+    }
+    const [cDate, cQty] = counts[counts.length - 1];
+    const recv = idx.recv.get(id) || [];
+    const movedOut = movedOutIndex(ctx);
+    let R = 0;
+    for (const [d, q] of recv) if (d > cDate) R += q;
+    let T = 0;
+    for (const [d, q] of (movedOut.get(id) || [])) if (d > cDate) T += q;
+    const todayKey = ymd(ctx.now.getFullYear(), ctx.now.getMonth() + 1, ctx.now.getDate());
+    const days = daysBetweenKeys(cDate, todayKey);
+    const diff = round2(qty - cQty);
+    const diffStr = (diff > 0 ? "+" : "") + fmtNum(diff);
+    return "Live count (QTY in the master sheet): " + qtyLabel + ". Last cycle count: " + fmtNum(cQty) + " on " + shortLabel(cDate) +
+      " (" + days + " day" + (days === 1 ? "" : "s") + " ago). Since then: received " + fmtNum(round2(R)) + ", transferred or rejected " + fmtNum(round2(T)) +
+      ". Live count minus last cycle count: " + diffStr + ".";
+  }
+
   function countsForRange(ctx, cat, days, maxDates, isLtc) {
     const catRows = ctx.histByCat.get(cat.toUpperCase()) || [];
     const rows = filterRange(catRows, days, ctx.now);
@@ -567,9 +614,9 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   function shortLabel(dk) { return dk ? MON3[+dk.slice(5, 7) - 1] + " " + (+dk.slice(8, 10)) : ""; }
   const USAGE_WINDOW_DAYS = 28, MAX_GAP_DAYS = 90;
 
-  function buildBellCards(ctx) {
-    const now = ctx.now;
-    const todayKey = ymd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  // TRANSFER + REJECTION rows per item, cached on ctx: shared by the bell and the Live Count tap text.
+  function movedOutIndex(ctx) {
+    if (ctx.movedOut) return ctx.movedOut;
     const movedOut = new Map();
     for (const r of ctx.hist) {
       if (r.type !== "TRANSFER" && r.type !== "REJECTION") continue;
@@ -577,6 +624,14 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       if (!movedOut.has(r.id)) movedOut.set(r.id, []);
       movedOut.get(r.id).push([r.dk, r.qty]);
     }
+    ctx.movedOut = movedOut;
+    return movedOut;
+  }
+
+  function buildBellCards(ctx) {
+    const now = ctx.now;
+    const todayKey = ymd(now.getFullYear(), now.getMonth() + 1, now.getDate());
+    const movedOut = movedOutIndex(ctx);
     const idx = usageIndex(ctx);
     const cards = [];
     let skippedNoCount = 0, skippedNoMin = 0, skippedStruck = 0, newestCount = "";
@@ -703,7 +758,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       moves.receiving[k] = movementForRange(ctx, cat, "RECEIVING", days, maxD);
       moves.transfer[k] = movementForRange(ctx, cat, "TRANSFER", days, maxD);
     }
-    const out = { is_ltc: isLtc, ranges, moves, pos: ctx.poByCat.get(cat) || [], usage: usageForCategory(ctx, cat) };
+    const out = { is_ltc: isLtc, ranges, moves, pos: ctx.poByCat.get(cat) || [], usage: usageForCategory(ctx, cat), live: liveForCategory(ctx, cat) };
     ctx.cache.set(key, out);
     return out;
   }
@@ -987,6 +1042,29 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     $("info").innerHTML = (shown === total ? shown + " items." : shown + " of " + total + " items shown.") + " &#10006; = at or below minimum including open orders.<br>" + note(S.cat, d);
   }
 
+  function renderLive(d) {
+    const rows = d.live.rows;
+    let h = "", shown = 0;
+    for (const r of rows) {
+      const part = partOf(r.id);
+      if (!matches(r.id, r.description, part)) continue;
+      shown++;
+      const liveVal = r.qty === null ? "-" : esc(round2(r.qty));
+      const liveNote = liveTipText(S.ctx, r.id, r.qty);
+      const covTitle = r.weeks_cover === null ? "" : coverTitleText(r.weeks_cover);
+      h += '<div class="card"><div class="top"><b>' + esc(r.id) + '</b><span class="part">' + esc(part) + '</span></div><div class="desc">' + esc(r.description) + "</div>" +
+        '<div class="kv"><span>ROP <b>' + esc(r.rop) + "</b></span><span>OPEN ORDER <b>" + esc(r.open_order) + "</b></span></div>" +
+        '<div class="kv"><span>LIVE COUNT <b class="live-tap" data-note="' + esc(liveNote) + '">' + liveVal + "</b></span><span>WEEKS COVER " +
+        (covTitle ? '<b class="cov-tap" data-note="' + esc(covTitle) + '">' + esc(r.weeks_cover) + "</b>" : "<b>-</b>") +
+        '</span></div><div class="livenote" style="display:none"></div><div class="covnote" style="display:none"></div></div>';
+    }
+    $("list").innerHTML = (h || '<div class="empty">' + (rows.length ? "Nothing matches your search." : "No items in this category.") + "</div>") + poBlock(d.pos);
+    const first = rows[0];
+    const supplierLine = first ? ("Supplier: " + esc(first.supplier || "-") + " | Lead time: " + esc(first.lead_time || "-") + " days") : "";
+    $("info").innerHTML = shown + " of " + rows.length + " items shown. LIVE COUNT is the QTY column of the master sheet. It is not a cycle count. " +
+      "WEEKS COVER = (live count + all open orders) / ROP x (lead time / 7)." + (supplierLine ? ("<br>" + supplierLine) : "");
+  }
+
   function renderMoves(d) {
     const rd = d.moves[S.view][S.range], isRecv = S.view === "receiving";
     let h = "", shown = 0;
@@ -1046,19 +1124,20 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
 
   function render() {
     const usage = S.view === "usage";
+    const live = S.view === "live";
     $("viewTabs").querySelectorAll("button").forEach(b => {
       const v = b.dataset.v;
       b.style.display = usage ? (v === "usage" || v === "back" ? "" : "none") : (v === "back" ? "none" : "");
       b.classList.toggle("on", v === S.view);
     });
-    $("rangeRow").style.display = usage ? "none" : "";
+    $("rangeRow").style.display = (usage || live) ? "none" : "";
     $("usageRow").style.display = usage ? "" : "none";
     $("redWrap").style.visibility = S.view === "count" ? "visible" : "hidden";
     $("rangeChips").querySelector('[data-v="latest"]').textContent = S.view === "count" ? "Latest Cycle Count" : "Latest activity day";
     $("rangeChips").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === S.range));
     if (!S.cat) { $("list").innerHTML = '<div class="empty">Pick a category.</div>'; $("info").textContent = ""; return; }
     const d = computeCategory(S.ctx, S.cat);
-    if (usage) renderUsage(d); else if (S.view === "count") renderCounts(d); else renderMoves(d);
+    if (usage) renderUsage(d); else if (live) renderLive(d); else if (S.view === "count") renderCounts(d); else renderMoves(d);
   }
 
   function wire() {
@@ -1072,9 +1151,11 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     $("bellBtn").onclick = () => { renderBell(); $("bellPanel").style.display = "block"; };
     $("bellClose").onclick = () => { $("bellPanel").style.display = "none"; };
     $("list").addEventListener("click", e => {
-      const t = e.target.closest(".cov-tap");
+      const liveT = e.target.closest(".live-tap");
+      const covT = liveT ? null : e.target.closest(".cov-tap");
+      const t = liveT || covT;
       if (!t) return;
-      const note = t.closest(".card").querySelector(".covnote");
+      const note = t.closest(".card").querySelector(liveT ? ".livenote" : ".covnote");
       if (!note) return;
       if (note.style.display === "block") { note.style.display = "none"; }
       else { note.textContent = t.dataset.note; note.style.display = "block"; }
@@ -1132,7 +1213,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     } catch (e) { /* not signed in: stay on demo data */ }
   }
 
-  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData, buildBellCards, coverTitleText: w => coverTitleText(w) };
+  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData, buildBellCards, coverTitleText: w => coverTitleText(w), liveTipText };
   if (!window.__TR_TEST) {
     wire();
     setData(demoTables(new Date()), false);
