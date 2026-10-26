@@ -266,6 +266,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       factors: readFactors(T("tbl_UOM_CONVERSION")),
       poByCat: buildPoLists(T("tbl_OPEN_ORDERS"), idToCat),
       openPoDates: readOpenPoDates(T("tbl_OPEN_ORDERS")),
+      latestStock: buildLatestStockMap(histByCat),
       layouts: {}, usageIndex: null, usageMonthList: null, cache: new Map(),
     };
     for (const [cat, tname] of Object.entries(LAYOUT_TABLES)) {
@@ -384,6 +385,21 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     return rows.filter(r => r.dk && r.dk >= ck);
   }
 
+  // Every item's own newest count, from ALL history (no date-range cutoff), computed once per
+  // data load. Used so an item that simply wasn't counted on the category's newest date doesn't
+  // get treated as stock 0 for the flag/WEEKS COVER (see countsForRange).
+  function buildLatestStockMap(histByCat) {
+    const out = new Map();
+    for (const [cat, rows] of histByCat) {
+      const isLtc = cat === "LTC PAINT";
+      const hm = buildHistoryMap(rows, isLtc);
+      for (const [id, entries] of hm) {
+        if (entries.length) out.set(id, entries[0].qty);
+      }
+    }
+    return out;
+  }
+
   function buildHistoryMap(rows, isLtc) {
     const dayMap = new Map();
     for (const r of rows) {
@@ -425,7 +441,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   }
 
   function weeksCover(row) {
-    const cs = row.values.length && isNum(row.values[0]) ? row.values[0] : 0;
+    const cs = isNum(row.stock) ? row.stock : 0;
     const openQty = isNum(row.open_qty) ? row.open_qty : 0;
     const rop = row.rop || 0;
     const lt = isNum(row.lead_time) ? row.lead_time : null;
@@ -445,7 +461,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       const qty = isNum(qtyRaw) ? qtyRaw : null;
       const [disp, ct] = openOrderInfo(id, ctx);
       const info = ctx.itemInfo.get(id) || { supplier: "", lead_time: "" };
-      const weeks_cover = qty === null ? null : weeksCover({ values: [qty], rop: minimum, lead_time: info.lead_time, open_qty: ct });
+      const weeks_cover = qty === null ? null : weeksCover({ stock: qty, rop: minimum, lead_time: info.lead_time, open_qty: ct });
       out.push({ id, description, rop: minimum, qty, open_order: disp, open_qty: ct, weeks_cover,
                  supplier: info.supplier, lead_time: info.lead_time });
     }
@@ -495,10 +511,12 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       for (const e of (hm.get(id) || [])) byLabel.set(e.dateLabel, e.qty);
       const values = labels.map(l => (byLabel.has(l) ? byLabel.get(l) : ""));
       const [disp, ct] = openOrderInfo(id, ctx);
-      const cs = values.length && isNum(values[0]) ? values[0] : 0;
-      const flag = (cs + ct) < minimum ? "✖" : "✔";
+      // Flag/WEEKS COVER use the item's OWN newest count, not the category's newest column: an
+      // item simply not counted that day has a blank cell here, which must not read as stock 0.
+      const stock = isNum(values[0]) ? values[0] : (ctx.latestStock.has(id) ? ctx.latestStock.get(id) : 0);
+      const flag = (stock + ct) < minimum ? "✖" : "✔";
       const info = ctx.itemInfo.get(id) || { supplier: "", lead_time: "" };
-      const r = { id, description, rop: minimum, store_room: isLtc ? "" : null, values, open_order: disp, open_qty: ct, flag,
+      const r = { id, description, rop: minimum, store_room: isLtc ? "" : null, values, open_order: disp, open_qty: ct, stock, flag,
                   supplier: info.supplier, lead_time: info.lead_time };
       r.weeks_cover = weeksCover(r);
       out.push(r);
@@ -1039,7 +1057,8 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     }
     const msg = redOnly && !shown && total ? "No red flags in this view." : (!total ? "No items in this category." : (!shown ? "Nothing matches your search." : ""));
     $("list").innerHTML = (h || '<div class="empty">' + msg + "</div>") + poBlock(d.pos);
-    $("info").innerHTML = (shown === total ? shown + " items." : shown + " of " + total + " items shown.") + " &#10006; = at or below minimum including open orders.<br>" + note(S.cat, d);
+    $("info").innerHTML = (shown === total ? shown + " items." : shown + " of " + total + " items shown.") + " &#10006; = at or below minimum including open orders. " +
+      "The flag and WEEKS COVER use each item's own latest count, even if it was counted on an earlier day than the newest column.<br>" + note(S.cat, d);
   }
 
   function renderLive(d) {
