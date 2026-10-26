@@ -767,7 +767,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   // =====================================================================
   // MICROSOFT SIGN-IN + READ-ONLY GRAPH
   // =====================================================================
-  let msalApp = null, token = null, sessionId = null;
+  let msalApp = null, token = null, sessionId = null, msalReadyPromise = null, redirectResult = null;
 
   function loadScript(src) {
     return new Promise((res, rej) => {
@@ -1175,24 +1175,37 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     }
     $("refresh").disabled = false;
   }
+  // One shared, lazily-created MSAL instance per page load. handleRedirectPromise() is
+  // called here (once) because MSAL requires it to run before any other interactive call
+  // on every page load, not just the one that comes back from Microsoft.
+  async function getMsalApp() {
+    if (!msalReadyPromise) {
+      msalReadyPromise = (async () => {
+        await ensureMsal();
+        msalApp = msalApp || new msal.PublicClientApplication(MSAL_CONFIG);
+        await msalApp.initialize();
+        redirectResult = await msalApp.handleRedirectPromise();
+        return msalApp;
+      })();
+    }
+    return msalReadyPromise;
+  }
+  // Mobile browsers (iOS Safari/Chrome, most in-app browsers) only allow window.open() to
+  // succeed when it happens synchronously inside the tap -- any await beforehand (here,
+  // downloading the MSAL library) breaks that, so loginPopup()/acquireTokenPopup() fail
+  // there with "empty_window_error". loginRedirect() has no popup to block: it's a normal,
+  // full-page navigation to Microsoft and back, so it can't be blocked the same way.
   async function signIn() {
     try {
-      await ensureMsal();
-      msalApp = msalApp || new msal.PublicClientApplication(MSAL_CONFIG);
-      await msalApp.initialize();
-      const login = await msalApp.loginPopup({ scopes: GRAPH_SCOPES });
-      const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: login.account })
-        .catch(() => msalApp.acquireTokenPopup({ scopes: GRAPH_SCOPES, account: login.account }));
-      token = tr.accessToken;
-      $("signIn").style.display = "none";
-      $("refresh").style.display = "";
-      startLive();
+      const app = await getMsalApp();
+      await app.loginRedirect({ scopes: GRAPH_SCOPES });   // navigates away; nothing after this runs
     } catch (e) { $("status").textContent = "Sign-in failed: " + e.message; }
   }
   async function refresh() {
     try {
-      const accounts = msalApp.getAllAccounts();
-      const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      const app = await getMsalApp();
+      const accounts = app.getAllAccounts();
+      const tr = await app.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
       token = tr.accessToken;
     } catch (e) { return signIn(); }
     startLive();
@@ -1200,12 +1213,17 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   async function trySilent() {
     try {
       if (!Object.keys(localStorage).some(k => k.includes("msal"))) return;
-      await ensureMsal();
-      msalApp = new msal.PublicClientApplication(MSAL_CONFIG);
-      await msalApp.initialize();
-      const accounts = msalApp.getAllAccounts();
+      const app = await getMsalApp();
+      if (redirectResult) {   // this load is Microsoft redirecting back after signIn()
+        token = redirectResult.accessToken;
+        $("signIn").style.display = "none";
+        $("refresh").style.display = "";
+        startLive();
+        return;
+      }
+      const accounts = app.getAllAccounts();
       if (!accounts.length) return;
-      const tr = await msalApp.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      const tr = await app.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
       token = tr.accessToken;
       $("signIn").style.display = "none";
       $("refresh").style.display = "";
