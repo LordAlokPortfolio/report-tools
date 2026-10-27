@@ -462,7 +462,8 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       const [disp, ct] = openOrderInfo(id, ctx);
       const info = ctx.itemInfo.get(id) || { supplier: "", lead_time: "" };
       const weeks_cover = qty === null ? null : weeksCover({ stock: qty, rop: minimum, lead_time: info.lead_time, open_qty: ct });
-      out.push({ id, description, rop: minimum, qty, open_order: disp, open_qty: ct, weeks_cover,
+      const flag = qty === null ? null : ((qty + ct) < minimum ? "✖" : "✔");
+      out.push({ id, description, rop: minimum, qty, open_order: disp, open_qty: ct, weeks_cover, flag,
                  supplier: info.supplier, lead_time: info.lead_time });
     }
     return { rows: out };
@@ -1063,24 +1064,29 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
 
   function renderLive(d) {
     const rows = d.live.rows;
+    const redOnly = S.onlyRed;
+    const total = rows.length;
     let h = "", shown = 0;
     for (const r of rows) {
+      if (redOnly && r.flag !== "✖") continue;
       const part = partOf(r.id);
       if (!matches(r.id, r.description, part)) continue;
       shown++;
       const liveVal = r.qty === null ? "-" : esc(round2(r.qty));
       const liveNote = liveTipText(S.ctx, r.id, r.qty);
       const covTitle = r.weeks_cover === null ? "" : coverTitleText(r.weeks_cover);
-      h += '<div class="card"><div class="top"><b>' + esc(r.id) + '</b><span class="part">' + esc(part) + '</span></div><div class="desc">' + esc(r.description) + "</div>" +
+      h += '<div class="card ' + (r.flag === "✖" ? "bad" : r.flag === "✔" ? "ok" : "") + '"><div class="top"><b>' + esc(r.id) + '</b><span class="part">' + esc(part) +
+        '</span><span class="flag">' + esc(r.flag === null ? "" : r.flag) + '</span></div><div class="desc">' + esc(r.description) + "</div>" +
         '<div class="kv"><span>ROP <b>' + esc(r.rop) + "</b></span><span>OPEN ORDER <b>" + esc(r.open_order) + "</b></span></div>" +
         '<div class="kv"><span>LIVE COUNT <b class="live-tap" data-note="' + esc(liveNote) + '">' + liveVal + "</b></span><span>WEEKS COVER " +
         (covTitle ? '<b class="cov-tap" data-note="' + esc(covTitle) + '">' + esc(r.weeks_cover) + "</b>" : "<b>-</b>") +
         '</span></div><div class="livenote" style="display:none"></div><div class="covnote" style="display:none"></div></div>';
     }
-    $("list").innerHTML = (h || '<div class="empty">' + (rows.length ? "Nothing matches your search." : "No items in this category.") + "</div>") + poBlock(d.pos);
+    const msg = redOnly && !shown && total ? "No red flags in this view." : (!total ? "No items in this category." : (!shown ? "Nothing matches your search." : ""));
+    $("list").innerHTML = (h || '<div class="empty">' + msg + "</div>") + poBlock(d.pos);
     const first = rows[0];
     const supplierLine = first ? ("Supplier: " + esc(first.supplier || "-") + " | Lead time: " + esc(first.lead_time || "-") + " days") : "";
-    $("info").innerHTML = shown + " of " + rows.length + " items shown. LIVE COUNT is the QTY column of the master sheet. It is not a cycle count. " +
+    $("info").innerHTML = (shown === total ? shown + " items." : shown + " of " + total + " items shown.") + " LIVE COUNT is the QTY column of the master sheet. It is not a cycle count. " +
       "WEEKS COVER = (live count + all open orders) / ROP x (lead time / 7)." + (supplierLine ? ("<br>" + supplierLine) : "");
   }
 
@@ -1149,9 +1155,10 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       b.style.display = usage ? (v === "usage" || v === "back" ? "" : "none") : (v === "back" ? "none" : "");
       b.classList.toggle("on", v === S.view);
     });
-    $("rangeRow").style.display = (usage || live) ? "none" : "";
+    $("rangeRow").style.display = usage ? "none" : "";
+    $("rangeChips").style.display = (usage || live) ? "none" : "";
     $("usageRow").style.display = usage ? "" : "none";
-    $("redWrap").style.visibility = S.view === "count" ? "visible" : "hidden";
+    $("redWrap").style.visibility = (S.view === "count" || live) ? "visible" : "hidden";
     $("rangeChips").querySelector('[data-v="latest"]').textContent = S.view === "count" ? "Latest Cycle Count" : "Latest activity day";
     $("rangeChips").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === S.range));
     if (!S.cat) { $("list").innerHTML = '<div class="empty">Pick a category.</div>'; $("info").textContent = ""; return; }
