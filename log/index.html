@@ -64,7 +64,6 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     cache: { cacheLocation: "localStorage" },
   };
   const GRAPH_SCOPES = ["User.Read", "Files.Read", "Files.ReadWrite.Selected"];
-  const MASTER_WORKBOOK_FILENAME = "MASTER EXCEL SHEET.xlsx";
   const HELPER_TABLE_NAME = "tbl_helper";
   const LOG_WORKBOOK_FILENAME = "MATERIAL MOVEMENT LOG.xlsx";
   const LOG_TABLE_NAME = "tbl_MATERIAL_MOVEMENTS";
@@ -161,20 +160,13 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     return res.status === 204 ? null : res.json();
   }
 
-  async function findFileId(filename) {
-    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(filename)}')?$select=id,name,file,lastModifiedDateTime`);
-    const matches = found.value.filter(i => i.file && i.name === filename)
-      .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
-    if (!matches.length) throw new Error('No file named "' + filename + '" found.');
-    return matches[0].id;
-  }
-
-  // Like findFileId, but also returns the item's own driveId. /me/drive/items/{id}
-  // only resolves when the file lives in the signed-in user's OWN OneDrive - if it
-  // actually lives in a shared SharePoint/Team document library instead, that path
-  // 404s even though /me/drive/root/search can still find it. The fully-qualified
-  // /drives/{driveId}/items/{id} form works either way, so the log file (unlike the
-  // master workbook, where /me/drive/items has already been working) uses this.
+  // /me/drive/items/{id} only resolves when the file lives in the signed-in
+  // user's OWN OneDrive - if it actually lives in a shared SharePoint/Team
+  // document library instead, that path 404s even though
+  // /me/drive/root/search can still find it. The fully-qualified
+  // /drives/{driveId}/items/{id} form works either way, so this is used for
+  // the one workbook this page ever opens (the movement log file, which also
+  // now holds the tbl_helper catalog).
   async function findFileIdAndDrive(filename) {
     const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(filename)}')?$select=id,name,file,lastModifiedDateTime,parentReference`);
     const matches = found.value.filter(i => i.file && i.name === filename)
@@ -212,23 +204,23 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 
   // =====================================================================
   // Departments > Areas > Items: all live off tbl_helper (Department/Area/
-  // Inventory ID/Description/UoM), one sheet in the same master workbook,
-  // already curated to exactly what Cody moves - no separate allowlist or
-  // cross-referencing against tbl_MASTER needed.
+  // Inventory ID/Description/UoM) - a table in the SAME workbook as the
+  // movement log itself (not the master sheet), already curated to exactly
+  // what Cody moves - no separate allowlist or cross-referencing needed.
   // =====================================================================
   let deptMap = new Map(), departments = [], unitById = new Map();
   async function loadCatalog() {
-    const masterId = await findFileId(MASTER_WORKBOOK_FILENAME);
+    const id = await ensureLogFileId();
     // Open a read-only workbook session (same pattern thursday-phone.html /
     // vendor-analysis.html use) so Excel Online doesn't "cold open" the workbook
     // again on every single range call below. Optional - if it fails, the read
     // below still works, just slower, so a failure here is never fatal.
     let sessionId = null;
     try {
-      const sess = await graph(`/me/drive/items/${masterId}/workbook/createSession`, "POST", { persistChanges: false });
+      const sess = await graph(`/drives/${logFileDriveId}/items/${id}/workbook/createSession`, "POST", { persistChanges: false });
       sessionId = sess && sess.id;
     } catch (e) { /* session reuse is an optimization only */ }
-    const tbl = await fetchTable(masterId, HELPER_TABLE_NAME, sessionId);
+    const tbl = await fetchTable(id, HELPER_TABLE_NAME, sessionId, logFileDriveId);
     const dc = tbl.headers.indexOf("DEPARTMENT"), ac = tbl.headers.indexOf("AREA"),
       ic = tbl.headers.indexOf("INVENTORY ID"), descc = tbl.headers.indexOf("DESCRIPTION"), uc = tbl.headers.indexOf("UOM");
     if (dc < 0 || ac < 0 || ic < 0) throw new Error("tbl_helper is missing Department, Area or Inventory ID.");
