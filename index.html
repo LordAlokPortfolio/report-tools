@@ -155,6 +155,12 @@
 
     <div class="content">
       <div class="tools-grid">
+        <a href="log/?driver=cody" class="tool-card movelog">
+          <div class="tool-icon">🚜</div>
+          <div class="tool-title">Cody</div>
+          <div class="tool-desc">Fast forklift-driver logging - tap a department, tap an item, done. Writes live to a dedicated OneDrive log file.</div>
+        </a>
+
         <a href="ncr-generator.html" class="tool-card ncr">
           <div class="tool-icon">📋</div>
           <div class="tool-title">NCR Generator</div>
@@ -191,26 +197,8 @@
           <div class="tool-desc">Phone-friendly counts, receivings, transfers, usage &amp; red flags, read live from your OneDrive workbook</div>
         </a>
 
-        <a href="log/" class="tool-card movelog">
-          <div class="tool-icon">🚜</div>
-          <div class="tool-title">Material Movement Log</div>
-          <div class="tool-desc">Fast forklift-driver logging - tap a department, tap an item, done. Writes live to a dedicated OneDrive log file.</div>
-        </a>
       </div>
     </div>
   </div>
-  <script>
-    // If this page itself was bookmarked with ?driver=, relabel the Movement Log
-    // card with that name so it's unmistakably theirs, and carry the param through
-    // to the log page. Does nothing when there's no driver param (the normal case).
-    (function () {
-      var driver = new URLSearchParams(window.location.search).get("driver");
-      if (!driver) return;
-      var card = document.querySelector("a.tool-card.movelog");
-      if (!card) return;
-      card.href = "log/?driver=" + encodeURIComponent(driver);
-      card.querySelector(".tool-title").textContent = "Material Movement Log - " + driver;
-    })();
-  </script>
 </body>
 </html>

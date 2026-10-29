@@ -42,7 +42,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 <div id="crumb"><button id="backBtn">&larr; Departments</button></div>
 <div id="grid"></div>
 
-<details id="setup">
+<details id="setup" style="display:none">
   <summary>Admin: one-time log file setup</summary>
   <p>Grants this app write access to ONLY the movement-log file below - nothing else in OneDrive, never the master sheet. Run once, ever; not needed again on this or any other driver's phone.</p>
   <button id="connectBtn">Grant write access to the log file</button>
@@ -299,6 +299,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 
   // One-time admin action: grants this app write access to ONLY this one file.
   $("connectBtn").onclick = async () => {
+    if (!token) { $("setupStatus").textContent = "Sign in first, then try Connect again."; return; }
     $("setupStatus").textContent = "Connecting...";
     try {
       const id = await ensureLogFileId();
@@ -326,6 +327,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     $("src").textContent = "CONNECTED";
     $("src").className = "badge live";
     $("auth").style.display = "none";
+    $("setup").style.display = "";
     if (!DRIVER) {
       $("grid").innerHTML = '<div class="empty">No driver specified in the link. Ask your supervisor for your personal link (&hellip;/log/?driver=yourname). The admin setup panel below still works from here.</div>';
       return;
