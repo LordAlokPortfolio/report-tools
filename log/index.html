@@ -52,9 +52,18 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   "use strict";
   // Same app registration, same tenant as the other OneDrive-connected pages in this
   // toolkit (thursday-phone.html, vendor-analysis.html). Files.ReadWrite.Selected is the
-  // only new scope: it lets the app write, but ONLY to the one log file, which was
-  // granted to this app's own item-level permission via a one-time Graph Explorer
-  // step (already done) - never anything else in OneDrive.
+  // only new scope: it lets the app write, but ONLY to the one CSV log file, which
+  // was granted to this app's own item-level permission via a one-time Graph
+  // Explorer step - never anything else in OneDrive.
+  //
+  // The movement log is written as a plain CSV file, not an Excel table. Writing
+  // into an .xlsx workbook's table goes through Excel Online's "WAC" edit-session
+  // mechanism, which this tenant's Conditional Access policy blocks for API calls
+  // (confirmed: even Microsoft's own Graph Explorer, under full admin consent, gets
+  // the same block). A plain file write is a completely different, much simpler
+  // Graph operation that never touches that mechanism, so it isn't affected. The
+  // department/area/item catalog (tbl_helper) is still read from the .xlsx
+  // workbook, since READS were never blocked - only edit sessions were.
   const MSAL_CONFIG = {
     auth: {
       clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
@@ -65,8 +74,11 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   };
   const GRAPH_SCOPES = ["User.Read", "Files.Read", "Files.ReadWrite.Selected"];
   const HELPER_TABLE_NAME = "tbl_helper";
-  const LOG_WORKBOOK_FILENAME = "MATERIAL MOVEMENT LOG.xlsx";
-  const LOG_TABLE_NAME = "tbl_MATERIAL_MOVEMENTS";
+  // Read-only: holds the tbl_helper catalog.
+  const CATALOG_WORKBOOK_FILENAME = "MATERIAL MOVEMENT LOG.xlsx";
+  // Write target: a plain CSV file (not a workbook table) - see note above.
+  const CSV_LOG_FILENAME = "MATERIAL MOVEMENT LOG.csv";
+  const CSV_HEADER = "Date,Time,Driver,Department,Item,Qty";
   const ROW_CHUNK = 2000;
 
   const $ = id => document.getElementById(id);
@@ -130,16 +142,15 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   // =====================================================================
   // THE ONLY NETWORK DOOR. Reads are unrestricted (Files.Read already covers any
   // file this signed-in account can see - same as the rest of the toolkit). Writes
-  // are hard-blocked unless the path targets the ONE known log-file item ID, and only
-  // the two exact operations this page ever needs (append a row; the one-time
-  // permission grant). logFileItemId is only ever set by searching for the log
-  // file's own filename, so this can't be redirected at a different item.
+  // are hard-blocked unless the path is exactly a PUT of the CSV log file's own
+  // content. csvFileItemId is only ever set by searching for that file's own
+  // filename, so this can't be redirected at a different item.
   // =====================================================================
-  let logFileItemId = null;
-  async function graph(path, method, body, extraHeaders) {
+  let csvFileItemId = null, csvFileDriveId = null;
+  async function graph(path, method, body, extraHeaders, raw) {
     method = method || "GET";
-    const writeOk = logFileItemId && path.includes("/items/" + logFileItemId + "/") &&
-      path.endsWith("/tables('" + LOG_TABLE_NAME + "')/rows/add");
+    const writeOk = csvFileItemId && csvFileDriveId && method === "PUT" &&
+      path === `/drives/${csvFileDriveId}/items/${csvFileItemId}/content`;
     // createSession is allowed for any item even though it's a POST: with
     // persistChanges:false (the only way this page ever calls it) it opens a
     // read session and changes nothing, so it's not a "write" the guard needs to block.
@@ -148,25 +159,25 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
       throw new Error("Blocked: this page can only write to the movement log file.");
     }
     const headers = { Authorization: "Bearer " + token };
-    if (body) headers["Content-Type"] = "application/json";
+    if (body) headers["Content-Type"] = raw ? "text/csv" : "application/json";
     if (extraHeaders) Object.assign(headers, extraHeaders);
-    const res = await fetch("https://graph.microsoft.com/v1.0" + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch("https://graph.microsoft.com/v1.0" + path, { method, headers, body: body ? (raw ? body : JSON.stringify(body)) : undefined });
     if (!res.ok) {
       const txt = await res.text();
       const err = new Error("OneDrive said " + res.status + ": " + txt.slice(0, 300));
       err.status = res.status;
       throw err;
     }
-    return res.status === 204 ? null : res.json();
+    if (res.status === 204) return null;
+    return raw ? res.text() : res.json();
   }
 
   // /me/drive/items/{id} only resolves when the file lives in the signed-in
   // user's OWN OneDrive - if it actually lives in a shared SharePoint/Team
   // document library instead, that path 404s even though
   // /me/drive/root/search can still find it. The fully-qualified
-  // /drives/{driveId}/items/{id} form works either way, so this is used for
-  // the one workbook this page ever opens (the movement log file, which also
-  // now holds the tbl_helper catalog).
+  // /drives/{driveId}/items/{id} form works either way, so this is used to
+  // locate both files this page opens (the catalog workbook and the CSV log).
   async function findFileIdAndDrive(filename) {
     const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(filename)}')?$select=id,name,file,lastModifiedDateTime,parentReference`);
     const matches = found.value.filter(i => i.file && i.name === filename)
@@ -210,17 +221,17 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   // =====================================================================
   let deptMap = new Map(), departments = [], unitById = new Map();
   async function loadCatalog() {
-    const id = await ensureLogFileId();
+    const id = await ensureCatalogFileId();
     // Open a read-only workbook session (same pattern thursday-phone.html /
     // vendor-analysis.html use) so Excel Online doesn't "cold open" the workbook
     // again on every single range call below. Optional - if it fails, the read
     // below still works, just slower, so a failure here is never fatal.
     let sessionId = null;
     try {
-      const sess = await graph(`/drives/${logFileDriveId}/items/${id}/workbook/createSession`, "POST", { persistChanges: false });
+      const sess = await graph(`/drives/${catalogFileDriveId}/items/${id}/workbook/createSession`, "POST", { persistChanges: false });
       sessionId = sess && sess.id;
     } catch (e) { /* session reuse is an optimization only */ }
-    const tbl = await fetchTable(id, HELPER_TABLE_NAME, sessionId, logFileDriveId);
+    const tbl = await fetchTable(id, HELPER_TABLE_NAME, sessionId, catalogFileDriveId);
     const dc = tbl.headers.indexOf("DEPARTMENT"), ac = tbl.headers.indexOf("AREA"),
       ic = tbl.headers.indexOf("INVENTORY ID"), descc = tbl.headers.indexOf("DESCRIPTION"), uc = tbl.headers.indexOf("UOM");
     if (dc < 0 || ac < 0 || ic < 0) throw new Error("tbl_helper is missing Department, Area or Inventory ID.");
@@ -241,14 +252,33 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     departments = Array.from(deptMap.keys()).sort();
   }
 
-  let logFileDriveId = null;
-  async function ensureLogFileId() {
-    if (!logFileItemId) {
-      const found = await findFileIdAndDrive(LOG_WORKBOOK_FILENAME);
-      logFileItemId = found.id;
-      logFileDriveId = found.driveId;
+  let catalogFileItemId = null, catalogFileDriveId = null;
+  async function ensureCatalogFileId() {
+    if (!catalogFileItemId) {
+      const found = await findFileIdAndDrive(CATALOG_WORKBOOK_FILENAME);
+      catalogFileItemId = found.id;
+      catalogFileDriveId = found.driveId;
     }
-    return logFileItemId;
+    return catalogFileItemId;
+  }
+
+  async function ensureCsvFileId() {
+    if (!csvFileItemId) {
+      const found = await findFileIdAndDrive(CSV_LOG_FILENAME);
+      csvFileItemId = found.id;
+      csvFileDriveId = found.driveId;
+    }
+    return csvFileItemId;
+  }
+
+  async function getCsvContent() {
+    const id = await ensureCsvFileId();
+    return await graph(`/drives/${csvFileDriveId}/items/${id}/content`, "GET", null, null, true);
+  }
+
+  async function putCsvContent(text) {
+    const id = await ensureCsvFileId();
+    await graph(`/drives/${csvFileDriveId}/items/${id}/content`, "PUT", text, null, true);
   }
 
   function pad2(n) { return String(n).padStart(2, "0"); }
@@ -260,11 +290,37 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     };
   }
 
+  function csvField(v) {
+    v = String(v === null || v === undefined ? "" : v);
+    return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }
+  function csvRow(fields) { return fields.map(csvField).join(",") + "\r\n"; }
+  function parseCsvLine(line) {
+    const out = []; let cur = ""; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inQ) {
+        if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+        else cur += c;
+      } else if (c === '"') inQ = true;
+      else if (c === ",") { out.push(cur); cur = ""; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  // Read-modify-write: there's no "append a row" API for a plain file, so each
+  // write fetches the current content and re-uploads it with the new row added.
+  // Fine for one driver tapping sequentially; two simultaneous writes from
+  // different devices could race and one could be lost - not a concern here.
   async function logMovement(dept, item, qty) {
-    const id = await ensureLogFileId();
     const { date, time } = nowParts();
-    await graph(`/drives/${logFileDriveId}/items/${id}/workbook/tables('${LOG_TABLE_NAME}')/rows/add`, "POST",
-      { values: [[date, time, DRIVER, dept, item.id, qty]] });
+    const row = csvRow([date, time, DRIVER, dept, item.id, qty]);
+    let current = await getCsvContent();
+    if (!current || !current.trim()) current = CSV_HEADER + "\r\n";
+    if (!current.endsWith("\n")) current += "\r\n";
+    await putCsvContent(current + row);
   }
 
   // =====================================================================
@@ -381,9 +437,9 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     const grid = $("grid");
     grid.innerHTML = '<div class="empty">Loading recorded entries&hellip;</div>';
     try {
-      const id = await ensureLogFileId();
-      const tbl = await fetchTable(id, LOG_TABLE_NAME, null, logFileDriveId);
-      const rows = tbl.rows.slice(-50).reverse();
+      const text = await getCsvContent();
+      const lines = (text || "").split(/\r?\n/).filter(l => l.trim().length);
+      const rows = lines.slice(1).map(parseCsvLine).slice(-50).reverse();
       if (!rows.length) { grid.innerHTML = '<div class="empty">No entries recorded yet.</div>'; return; }
       grid.innerHTML = '<div id="logWrap"><table class="logView"><thead><tr><th>Date</th><th>Time</th><th>Driver</th><th>Dept</th><th>Item</th><th>Qty</th></tr></thead><tbody>' +
         rows.map(r => "<tr>" + r.slice(0, 6).map(c => "<td>" + esc(c) + "</td>").join("") + "</tr>").join("") +
