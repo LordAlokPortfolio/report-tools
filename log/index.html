@@ -20,23 +20,16 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 #grid{display:flex;flex-wrap:wrap;gap:10px;padding:14px}
 .tile{flex:1 1 calc(50% - 10px);min-width:140px;background:#fff;border:1px solid #dde3ea;border-radius:12px;padding:20px 10px;text-align:center;font-size:19px;font-weight:700}
 .tile:active{background:#eef2f6}
-.item-tile{flex:1 1 100%;display:flex;align-items:center;gap:10px;padding:14px;text-align:left}
-.item-main{flex:1;cursor:pointer}
+.item-tile{flex:1 1 100%;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px;text-align:left}
+.item-main{flex:1 1 100%}
 .item-id{font-size:12px;color:#5b6b7c;font-weight:400;margin-top:2px}
 .stepper{display:flex;align-items:center;gap:8px}
-.stepper button{width:44px;height:44px;font-size:24px;font-weight:700;border:1px solid #9aa7b5;background:#fff;border-radius:8px}
-.stepper span{min-width:26px;text-align:center;font-size:18px;font-weight:700}
+.stepper button{width:44px;height:44px;font-size:24px;font-weight:700;border:1px solid #9aa7b5;background:#fff;border-radius:8px;flex:none}
+.stepper .qtyInput{width:64px;height:44px;text-align:center;font-size:18px;font-weight:700;border:1px solid #9aa7b5;border-radius:8px}
+.stepper .unit{font-size:13px;color:#5b6b7c;font-weight:600}
+.logBtn{margin-left:auto;font-size:16px;font-weight:700;padding:12px 20px;border:none;background:#1e5a96;color:#fff;border-radius:8px}
+.logBtn:active{background:#164677}
 .empty{padding:40px 16px;text-align:center;color:#5b6b7c;width:100%}
-#setup{margin:24px 16px;padding-top:12px;border-top:1px solid #dde3ea}
-#setup summary{font-size:12px;color:#8a97a3}
-#setup p{font-size:12px;color:#5b6b7c;margin:8px 0}
-#setup button{font-size:13px;padding:8px 12px;border:1px solid #1d2733;background:#fff;color:#1d2733;border-radius:8px}
-#setup ol{font-size:12px;color:#5b6b7c;margin:8px 0;padding-left:20px}
-#setup ol li{margin-bottom:4px}
-#setup code{background:#eef2f6;padding:1px 4px;border-radius:4px}
-#setup a{color:#1e5a96}
-#setupStatus{font-size:12px;color:#5b6b7c;margin-top:6px}
-#setupUrl,#setupBody{font-size:11px;background:#eef2f6;border-radius:6px;padding:8px;margin-top:6px;white-space:pre-wrap;word-break:break-all;user-select:all}
 </style></head><body>
 <header><span>Material Movement Log</span><span id="src" class="badge off">NOT CONNECTED</span></header>
 <div id="toast"></div>
@@ -47,28 +40,14 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 <div id="crumb"><button id="backBtn">&larr; Departments</button></div>
 <div id="grid"></div>
 
-<details id="setup" style="display:none">
-  <summary>Admin: one-time log file setup</summary>
-  <p>This app's own sign-in only ever has narrow access (read everything in OneDrive, write to nothing). Granting it write access to ONE file needs a bigger permission than this app is allowed to request for itself - so this one-time step is done through Microsoft's own tool, signed in as you, not through this page. Run once, ever; not needed again on this or any other driver's phone.</p>
-  <ol>
-    <li>Tap "Find log file ID" below.</li>
-    <li>Open <a href="https://developer.microsoft.com/graph/graph-explorer" target="_blank" rel="noopener">Graph Explorer</a> and sign in with your Microsoft account.</li>
-    <li>Click "Modify permissions" (or the permissions/scopes link near your profile), find <code>Files.ReadWrite</code>, consent to it, and sign in again when it asks.</li>
-    <li>Set the method dropdown to <b>POST</b>, paste the URL below into the query box, paste the body below that into the Request body tab, then click Run query.</li>
-  </ol>
-  <button id="findIdBtn">Find log file ID</button>
-  <div id="setupStatus"></div>
-  <pre id="setupUrl" style="display:none"></pre>
-  <pre id="setupBody" style="display:none"></pre>
-</details>
-
 <script>
 (function () {
   "use strict";
   // Same app registration, same tenant as the other OneDrive-connected pages in this
   // toolkit (thursday-phone.html, vendor-analysis.html). Files.ReadWrite.Selected is the
-  // only new scope: it lets the app write, but ONLY to files it has been explicitly
-  // granted access to (see the admin setup panel below) - never anything else in OneDrive.
+  // only new scope: it lets the app write, but ONLY to the one log file, which was
+  // granted to this app's own item-level permission via a one-time Graph Explorer
+  // step (already done) - never anything else in OneDrive.
   const MSAL_CONFIG = {
     auth: {
       clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
@@ -82,6 +61,14 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   const LOG_WORKBOOK_FILENAME = "MATERIAL MOVEMENT LOG.xlsx";
   const LOG_TABLE_NAME = "tbl_MATERIAL_MOVEMENTS";
   const ROW_CHUNK = 2000;
+  // Only these departments move material through Cody - everything else in
+  // tbl_MASTER's CATEGORY column is left off the list entirely. Matched
+  // case-insensitively, trimmed; the tile itself still shows the category text
+  // exactly as it's stored in tbl_MASTER, not as typed here.
+  const ALLOWED_DEPARTMENTS = [
+    "METAL -PATIO SPECTRA", "METAL -RPM PUNCHED", "PATIO VISION", "PRIME WOOD",
+    "SMOOTH VINYL WOOD", "SPACER", "SPECTRA DOORLINE", "STOCK SCREENS",
+  ];
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -150,15 +137,20 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   // file's own filename, so this can't be redirected at a different item.
   // =====================================================================
   let logFileItemId = null;
-  async function graph(path, method, body) {
+  async function graph(path, method, body, extraHeaders) {
     method = method || "GET";
     const writeOk = logFileItemId && path.includes("/items/" + logFileItemId + "/") &&
       path.endsWith("/tables('" + LOG_TABLE_NAME + "')/rows/add");
-    if (method !== "GET" && !writeOk) {
+    // createSession is allowed for any item even though it's a POST: with
+    // persistChanges:false (the only way this page ever calls it) it opens a
+    // read session and changes nothing, so it's not a "write" the guard needs to block.
+    const isCreateSession = path.endsWith("/workbook/createSession");
+    if (method !== "GET" && !writeOk && !isCreateSession) {
       throw new Error("Blocked: this page can only write to the movement log file.");
     }
     const headers = { Authorization: "Bearer " + token };
     if (body) headers["Content-Type"] = "application/json";
+    if (extraHeaders) Object.assign(headers, extraHeaders);
     const res = await fetch("https://graph.microsoft.com/v1.0" + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
     if (!res.ok) {
       const txt = await res.text();
@@ -193,8 +185,9 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     return { id: m.id, driveId: m.parentReference.driveId };
   }
 
-  async function fetchTable(itemId, name) {
-    const meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`);
+  async function fetchTable(itemId, name, sessionId) {
+    const sessHeaders = sessionId ? { "workbook-session-id": sessionId } : undefined;
+    const meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`, "GET", null, sessHeaders);
     const bang = meta.address.lastIndexOf("!");
     let sheet = meta.address.slice(0, bang);
     if (sheet.startsWith("'")) sheet = sheet.slice(1, -1).replace(/''/g, "'");
@@ -204,11 +197,10 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     const base = `/me/drive/items/${itemId}/workbook/worksheets('${encodeURIComponent(sheet.replace(/'/g, "''"))}')`;
     const chunks = [];
     for (let s = r1; s <= r2; s += ROW_CHUNK) chunks.push([s, Math.min(s + ROW_CHUNK - 1, r2)]);
-    const results = [];
-    for (const [s, e] of chunks) {
-      const r = await graph(`${base}/range(address='${c1}${s}:${c2}${e}')?$select=values`);
-      results.push(r.values);
-    }
+    // Fetch chunks in parallel (same pattern thursday-phone.html uses for its larger
+    // reads) instead of waiting for each one before starting the next.
+    const results = await Promise.all(chunks.map(([s, e]) =>
+      graph(`${base}/range(address='${c1}${s}:${c2}${e}')?$select=values`, "GET", null, sessHeaders).then(r => r.values)));
     const all = [].concat(...results);
     const headers = all[0].map(h => String(h).trim().toUpperCase());
     return { headers, rows: all.slice(1) };
@@ -225,7 +217,21 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   async function loadDepartments() {
     $("status").textContent = "Reading item list from OneDrive...";
     const masterId = await findFileId(MASTER_WORKBOOK_FILENAME);
-    const tbl = await fetchTable(masterId, "tbl_MASTER");
+    // Open a read-only workbook session (same pattern thursday-phone.html /
+    // vendor-analysis.html use) so Excel Online doesn't "cold open" the workbook
+    // again on every single range call below. Optional - if it fails, the reads
+    // below still work, just slower, so a failure here is never fatal.
+    let sessionId = null;
+    try {
+      const sess = await graph(`/me/drive/items/${masterId}/workbook/createSession`, "POST", { persistChanges: false });
+      sessionId = sess && sess.id;
+    } catch (e) { /* session reuse is an optimization only */ }
+    // tbl_MASTER and tbl_UOM_CONVERSION are independent reads - fetch them at the
+    // same time instead of waiting for one to finish before starting the other.
+    const [tbl, uomTbl] = await Promise.all([
+      fetchTable(masterId, "tbl_MASTER", sessionId),
+      fetchTable(masterId, "tbl_UOM_CONVERSION", sessionId).catch(() => null), // no UOM table, or shaped differently - items just show with no unit label
+    ]);
     const idc = tbl.headers.indexOf("ID"), dc = tbl.headers.indexOf("DESCRIPTION"), cc = tbl.headers.indexOf("CATEGORY");
     if (idc < 0 || dc < 0 || cc < 0) throw new Error("tbl_MASTER is missing ID, DESCRIPTION or CATEGORY.");
 
@@ -234,8 +240,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     // the qty/stepper so "3" isn't ambiguous. Display only - the log file itself
     // still just stores the raw number, same six columns as always.
     const uomById = new Map();
-    try {
-      const uomTbl = await fetchTable(masterId, "tbl_UOM_CONVERSION");
+    if (uomTbl) {
       const uidc = uomTbl.headers.indexOf("ID"), uc = uomTbl.headers.indexOf("COUNT_UOM");
       if (uidc >= 0 && uc >= 0) {
         for (const row of uomTbl.rows) {
@@ -243,13 +248,14 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
           if (id && uom) uomById.set(id, uom);
         }
       }
-    } catch (e) { /* no UOM table, or it's shaped differently - items just show with no unit label */ }
+    }
 
+    const allowedSet = new Set(ALLOWED_DEPARTMENTS.map(s => s.trim().toUpperCase()));
     itemsByDept = new Map();
     unitById = new Map();
     for (const row of tbl.rows) {
       const id = str(row[idc]), desc = str(row[dc]), cat = str(row[cc]);
-      if (!id || !cat) continue;
+      if (!id || !cat || !allowedSet.has(cat.trim().toUpperCase())) continue;
       const uom = uomById.get(id) || "";
       if (!itemsByDept.has(cat)) itemsByDept.set(cat, []);
       itemsByDept.get(cat).push({ id, description: desc, uom });
@@ -289,20 +295,21 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   // =====================================================================
   const S = { qty: new Map() };
   function qtyOf(id) { return S.qty.get(id) || 1; }
-  function stepperSpan(id) {
-    for (const s of document.querySelectorAll(".stepper")) if (s.dataset.id === id) return s.querySelector("span");
+  function qtyInputEl(id) {
+    for (const el of document.querySelectorAll(".qtyInput")) if (el.dataset.id === id) return el;
     return null;
   }
   function qtyLabel(id, v) {
     const unit = unitById.get(id);
     return unit ? v + " " + unit : String(v);
   }
-  function bumpQty(id, delta) {
-    const v = Math.max(1, qtyOf(id) + delta);
+  function setQty(id, v) {
+    v = Math.max(1, Math.round(v) || 1);
     S.qty.set(id, v);
-    const el = stepperSpan(id);
-    if (el) el.textContent = qtyLabel(id, v);
+    const el = qtyInputEl(id);
+    if (el && +el.value !== v) el.value = v;
   }
+  function bumpQty(id, delta) { setQty(id, qtyOf(id) + delta); }
   function showToast(msg, isErr) {
     const t = $("toast");
     t.textContent = msg;
@@ -327,57 +334,38 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     const items = itemsByDept.get(dept) || [];
     if (!items.length) { grid.innerHTML = '<div class="empty">No items in this department.</div>'; return; }
     grid.innerHTML = items.map(it => (
-      '<div class="tile item-tile"><div class="item-main" data-id="' + esc(it.id) + '"><div>' + esc(it.description || it.id) +
+      '<div class="tile item-tile"><div class="item-main"><div>' + esc(it.description || it.id) +
       '</div><div class="item-id">' + esc(it.id) + (it.uom ? " &middot; " + esc(it.uom) : "") + "</div></div>" +
       '<div class="stepper" data-id="' + esc(it.id) + '">' +
-      '<button data-act="minus">-</button><span>' + esc(qtyLabel(it.id, 1)) + '</span><button data-act="plus">+</button></div></div>'
+      '<button type="button" data-act="minus">-</button>' +
+      '<input type="number" inputmode="numeric" class="qtyInput" data-id="' + esc(it.id) + '" value="1" min="1">' +
+      (it.uom ? '<span class="unit">' + esc(it.uom) + "</span>" : "") +
+      '<button type="button" data-act="plus">+</button></div>' +
+      '<button type="button" class="logBtn" data-id="' + esc(it.id) + '">Log</button></div>'
     )).join("");
-    grid.querySelectorAll(".item-main").forEach(el => el.onclick = () => submitTap(dept, el.dataset.id, items));
-    grid.querySelectorAll(".stepper button").forEach(btn => btn.onclick = e => {
-      e.stopPropagation();
+    grid.querySelectorAll(".stepper button").forEach(btn => btn.onclick = () => {
       bumpQty(btn.closest(".stepper").dataset.id, btn.dataset.act === "plus" ? 1 : -1);
     });
+    grid.querySelectorAll(".qtyInput").forEach(inp => {
+      inp.oninput = () => { S.qty.set(inp.dataset.id, Math.max(1, parseInt(inp.value, 10) || 1)); };
+      inp.onblur = () => { setQty(inp.dataset.id, parseInt(inp.value, 10) || 1); };
+    });
+    grid.querySelectorAll(".logBtn").forEach(btn => btn.onclick = () => submitLog(dept, btn.dataset.id, items));
   }
 
-  async function submitTap(dept, itemId, items) {
+  async function submitLog(dept, itemId, items) {
     const item = items.find(i => i.id === itemId);
     const qty = qtyOf(itemId);
     try {
       await logMovement(dept, item, qty);
       showToast("Logged " + qtyLabel(itemId, qty) + " x " + (item.description || item.id));
-      S.qty.set(itemId, 1);
-      const span = stepperSpan(itemId);
-      if (span) span.textContent = qtyLabel(itemId, 1);
+      setQty(itemId, 1);
     } catch (e) {
       showToast("Could not save: " + e.message, true);
     }
   }
 
   $("backBtn").onclick = renderDepartments;
-
-  // One-time admin action: this page's own narrow sign-in can't grant itself
-  // broader access, so it only looks up the log file's ID (read-only, uses the
-  // same Files.Read access this page already has) and hands the admin the exact
-  // request to run once in Graph Explorer, under their own elevated consent -
-  // this app's registered permissions never include anything broader than
-  // Files.Read + Files.ReadWrite.Selected, even for this one-time step.
-  $("findIdBtn").onclick = async () => {
-    if (!token) { $("setupStatus").textContent = "Sign in first, then try again."; return; }
-    $("setupStatus").textContent = "Looking up...";
-    try {
-      const id = await ensureLogFileId();
-      $("setupStatus").textContent = "Found it - paste these into Graph Explorer:";
-      $("setupUrl").textContent = "POST https://graph.microsoft.com/v1.0/drives/" + logFileDriveId + "/items/" + id + "/permissions";
-      $("setupUrl").style.display = "block";
-      $("setupBody").textContent = JSON.stringify({
-        grantedToV2: { application: { id: MSAL_CONFIG.auth.clientId, displayName: "KV Vendor Analysis Tool" } },
-        roles: ["write"],
-      }, null, 2);
-      $("setupBody").style.display = "block";
-    } catch (e) {
-      $("setupStatus").textContent = "Failed: " + e.message;
-    }
-  };
 
   async function boot() {
     const signedIn = await trySilent();
@@ -393,9 +381,8 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     $("src").textContent = "CONNECTED";
     $("src").className = "badge live";
     $("auth").style.display = "none";
-    $("setup").style.display = "";
     if (!DRIVER) {
-      $("grid").innerHTML = '<div class="empty">No driver specified in the link. Ask your supervisor for your personal link (&hellip;/log/?driver=yourname). The admin setup panel below still works from here.</div>';
+      $("grid").innerHTML = '<div class="empty">No driver specified in the link. Ask your supervisor for your personal link (&hellip;/log/?driver=yourname).</div>';
       return;
     }
     document.title = "Movement Log - " + DRIVER;
