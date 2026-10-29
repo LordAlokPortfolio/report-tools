@@ -177,6 +177,22 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     return matches[0].id;
   }
 
+  // Like findFileId, but also returns the item's own driveId. /me/drive/items/{id}
+  // only resolves when the file lives in the signed-in user's OWN OneDrive - if it
+  // actually lives in a shared SharePoint/Team document library instead, that path
+  // 404s even though /me/drive/root/search can still find it. The fully-qualified
+  // /drives/{driveId}/items/{id} form works either way, so the log file (unlike the
+  // master workbook, where /me/drive/items has already been working) uses this.
+  async function findFileIdAndDrive(filename) {
+    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(filename)}')?$select=id,name,file,lastModifiedDateTime,parentReference`);
+    const matches = found.value.filter(i => i.file && i.name === filename)
+      .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
+    if (!matches.length) throw new Error('No file named "' + filename + '" found.');
+    const m = matches[0];
+    if (!m.parentReference || !m.parentReference.driveId) throw new Error('Found "' + filename + '" but could not determine its drive.');
+    return { id: m.id, driveId: m.parentReference.driveId };
+  }
+
   async function fetchTable(itemId, name) {
     const meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`);
     const bang = meta.address.lastIndexOf("!");
@@ -242,8 +258,13 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     departments = Array.from(itemsByDept.keys()).sort();
   }
 
+  let logFileDriveId = null;
   async function ensureLogFileId() {
-    if (!logFileItemId) logFileItemId = await findFileId(LOG_WORKBOOK_FILENAME);
+    if (!logFileItemId) {
+      const found = await findFileIdAndDrive(LOG_WORKBOOK_FILENAME);
+      logFileItemId = found.id;
+      logFileDriveId = found.driveId;
+    }
     return logFileItemId;
   }
 
@@ -259,7 +280,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   async function logMovement(dept, item, qty) {
     const id = await ensureLogFileId();
     const { date, time } = nowParts();
-    await graph(`/me/drive/items/${id}/workbook/tables('${LOG_TABLE_NAME}')/rows/add`, "POST",
+    await graph(`/drives/${logFileDriveId}/items/${id}/workbook/tables('${LOG_TABLE_NAME}')/rows/add`, "POST",
       { values: [[date, time, DRIVER, dept, item.id, qty]] });
   }
 
@@ -346,7 +367,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     try {
       const id = await ensureLogFileId();
       $("setupStatus").textContent = "Found it - paste these into Graph Explorer:";
-      $("setupUrl").textContent = "POST https://graph.microsoft.com/v1.0/me/drive/items/" + id + "/permissions";
+      $("setupUrl").textContent = "POST https://graph.microsoft.com/v1.0/drives/" + logFileDriveId + "/items/" + id + "/permissions";
       $("setupUrl").style.display = "block";
       $("setupBody").textContent = JSON.stringify({
         grantedToV2: { application: { id: MSAL_CONFIG.auth.clientId, displayName: "KV Vendor Analysis Tool" } },
