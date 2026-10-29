@@ -6,8 +6,8 @@
 <meta name="apple-mobile-web-app-title" content="Move Log">
 <meta name="theme-color" content="#1d2733">
 <style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:0;color:#1d2733;background:#f5f6f8;font-size:16px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:0;color:#1d2733;background:#f5f6f8;font-size:16px;padding-bottom:env(safe-area-inset-bottom)}
 header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
 .badge{font-size:12px;padding:3px 9px;border-radius:10px;font-weight:700}
 .badge.off{background:#8a97a3;color:#fff}.badge.live{background:#2e9e5b;color:#fff}
@@ -27,7 +27,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 .stepper button{width:44px;height:44px;font-size:24px;font-weight:700;border:1px solid #9aa7b5;background:#fff;border-radius:8px;flex:none}
 .stepper .qtyInput{width:64px;height:44px;text-align:center;font-size:18px;font-weight:700;border:1px solid #9aa7b5;border-radius:8px}
 .stepper .unit{font-size:13px;color:#5b6b7c;font-weight:600}
-.logBtn{margin-left:auto;font-size:16px;font-weight:700;padding:12px 20px;border:none;background:#1e5a96;color:#fff;border-radius:8px}
+.logBtn{margin-left:auto;font-size:16px;font-weight:700;padding:12px 20px;min-height:44px;border:none;background:#1e5a96;color:#fff;border-radius:8px}
 .logBtn:active{background:#164677}
 .logBtn:disabled{opacity:.75}
 .logBtn.ok{background:#2e9e5b}
