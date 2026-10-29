@@ -199,5 +199,18 @@
       </div>
     </div>
   </div>
+  <script>
+    // If this page itself was bookmarked with ?driver=, relabel the Movement Log
+    // card with that name so it's unmistakably theirs, and carry the param through
+    // to the log page. Does nothing when there's no driver param (the normal case).
+    (function () {
+      var driver = new URLSearchParams(window.location.search).get("driver");
+      if (!driver) return;
+      var card = document.querySelector("a.tool-card.movelog");
+      if (!card) return;
+      card.href = "log/?driver=" + encodeURIComponent(driver);
+      card.querySelector(".tool-title").textContent = "Material Movement Log - " + driver;
+    })();
+  </script>
 </body>
 </html>

@@ -318,6 +318,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
       $("status").textContent = DRIVER
         ? "Sign in once with your work Microsoft account to start logging, " + DRIVER + "."
         : "Sign in with your work Microsoft account.";
+      $("signIn").textContent = DRIVER ? "Sign in - " + DRIVER : "Sign in with Microsoft";
       $("signIn").style.display = "";
       $("signIn").onclick = signIn;
       return;
