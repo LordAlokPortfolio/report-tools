@@ -29,15 +29,22 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 .stepper .unit{font-size:13px;color:#5b6b7c;font-weight:600}
 .logBtn{margin-left:auto;font-size:16px;font-weight:700;padding:12px 20px;border:none;background:#1e5a96;color:#fff;border-radius:8px}
 .logBtn:active{background:#164677}
+.logBtn:disabled{opacity:.75}
+.logBtn.ok{background:#2e9e5b}
 .empty{padding:40px 16px;text-align:center;color:#5b6b7c;width:100%}
+#viewLogBtn{font-size:12px;padding:5px 10px;border:1px solid rgba(255,255,255,.5);background:none;color:#fff;border-radius:14px;margin-right:8px}
+.logView{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+.logView th,.logView td{padding:8px 6px;border-bottom:1px solid #dde3ea;text-align:left;white-space:nowrap}
+.logView th{color:#5b6b7c;font-size:11px;text-transform:uppercase}
+#logWrap{width:100%;overflow-x:auto}
 </style></head><body>
-<header><span>Material Movement Log</span><span id="src" class="badge off">NOT CONNECTED</span></header>
+<header><span>Material Movement Log</span><span><button id="viewLogBtn" style="display:none">View Log</button><span id="src" class="badge off">NOT CONNECTED</span></span></header>
 <div id="toast"></div>
 <div id="auth">
   <div id="status">Loading...</div>
   <button id="signIn" style="display:none">Sign in with Microsoft</button>
 </div>
-<div id="crumb"><button id="backBtn">&larr; Departments</button></div>
+<div id="crumb"><button id="backBtn">&larr; Back</button></div>
 <div id="grid"></div>
 
 <script>
@@ -58,17 +65,10 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   };
   const GRAPH_SCOPES = ["User.Read", "Files.Read", "Files.ReadWrite.Selected"];
   const MASTER_WORKBOOK_FILENAME = "MASTER EXCEL SHEET.xlsx";
+  const HELPER_TABLE_NAME = "tbl_helper";
   const LOG_WORKBOOK_FILENAME = "MATERIAL MOVEMENT LOG.xlsx";
   const LOG_TABLE_NAME = "tbl_MATERIAL_MOVEMENTS";
   const ROW_CHUNK = 2000;
-  // Only these departments move material through Cody - everything else in
-  // tbl_MASTER's CATEGORY column is left off the list entirely. Matched
-  // case-insensitively, trimmed; the tile itself still shows the category text
-  // exactly as it's stored in tbl_MASTER, not as typed here.
-  const ALLOWED_DEPARTMENTS = [
-    "METAL -PATIO SPECTRA", "METAL -RPM PUNCHED", "PATIO VISION", "PRIME WOOD",
-    "SMOOTH VINYL WOOD", "SPACER", "SPECTRA DOORLINE", "STOCK SCREENS",
-  ];
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -185,16 +185,20 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     return { id: m.id, driveId: m.parentReference.driveId };
   }
 
-  async function fetchTable(itemId, name, sessionId) {
+  async function fetchTable(itemId, name, sessionId, driveId) {
     const sessHeaders = sessionId ? { "workbook-session-id": sessionId } : undefined;
-    const meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`, "GET", null, sessHeaders);
+    // /me/drive/items/{id} only resolves for files in the signed-in user's own
+    // OneDrive; a file in a shared SharePoint/Team library (like the log file)
+    // needs the fully-qualified /drives/{driveId}/items/{id} form instead.
+    const root = driveId ? `/drives/${driveId}/items/${itemId}` : `/me/drive/items/${itemId}`;
+    const meta = await graph(`${root}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`, "GET", null, sessHeaders);
     const bang = meta.address.lastIndexOf("!");
     let sheet = meta.address.slice(0, bang);
     if (sheet.startsWith("'")) sheet = sheet.slice(1, -1).replace(/''/g, "'");
     const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(meta.address.slice(bang + 1));
     if (!m) throw new Error("Unexpected table address for " + name + ": " + meta.address);
     const c1 = m[1], c2 = m[3], r1 = +m[2], r2 = +m[4];
-    const base = `/me/drive/items/${itemId}/workbook/worksheets('${encodeURIComponent(sheet.replace(/'/g, "''"))}')`;
+    const base = `${root}/workbook/worksheets('${encodeURIComponent(sheet.replace(/'/g, "''"))}')`;
     const chunks = [];
     for (let s = r1; s <= r2; s += ROW_CHUNK) chunks.push([s, Math.min(s + ROW_CHUNK - 1, r2)]);
     // Fetch chunks in parallel (same pattern thursday-phone.html uses for its larger
@@ -207,61 +211,42 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   }
 
   // =====================================================================
-  // Departments + items: live off tbl_MASTER (ID/DESCRIPTION/CATEGORY), the exact
-  // same columns thursday-phone.html already reads. TEMPORARY until a curated
-  // top-10-per-department list is supplied - swapping that in later only needs
-  // loadDepartments() replaced with a fetch() of a static JSON file; nothing else
-  // in this page changes.
+  // Departments > Areas > Items: all live off tbl_helper (Department/Area/
+  // Inventory ID/Description/UoM), one sheet in the same master workbook,
+  // already curated to exactly what Cody moves - no separate allowlist or
+  // cross-referencing against tbl_MASTER needed.
   // =====================================================================
-  let itemsByDept = new Map(), departments = [], unitById = new Map();
-  async function loadDepartments() {
-    $("status").textContent = "Reading item list from OneDrive...";
+  let deptMap = new Map(), departments = [], unitById = new Map();
+  async function loadCatalog() {
     const masterId = await findFileId(MASTER_WORKBOOK_FILENAME);
     // Open a read-only workbook session (same pattern thursday-phone.html /
     // vendor-analysis.html use) so Excel Online doesn't "cold open" the workbook
-    // again on every single range call below. Optional - if it fails, the reads
-    // below still work, just slower, so a failure here is never fatal.
+    // again on every single range call below. Optional - if it fails, the read
+    // below still works, just slower, so a failure here is never fatal.
     let sessionId = null;
     try {
       const sess = await graph(`/me/drive/items/${masterId}/workbook/createSession`, "POST", { persistChanges: false });
       sessionId = sess && sess.id;
     } catch (e) { /* session reuse is an optimization only */ }
-    // tbl_MASTER and tbl_UOM_CONVERSION are independent reads - fetch them at the
-    // same time instead of waiting for one to finish before starting the other.
-    const [tbl, uomTbl] = await Promise.all([
-      fetchTable(masterId, "tbl_MASTER", sessionId),
-      fetchTable(masterId, "tbl_UOM_CONVERSION", sessionId).catch(() => null), // no UOM table, or shaped differently - items just show with no unit label
-    ]);
-    const idc = tbl.headers.indexOf("ID"), dc = tbl.headers.indexOf("DESCRIPTION"), cc = tbl.headers.indexOf("CATEGORY");
-    if (idc < 0 || dc < 0 || cc < 0) throw new Error("tbl_MASTER is missing ID, DESCRIPTION or CATEGORY.");
+    const tbl = await fetchTable(masterId, HELPER_TABLE_NAME, sessionId);
+    const dc = tbl.headers.indexOf("DEPARTMENT"), ac = tbl.headers.indexOf("AREA"),
+      ic = tbl.headers.indexOf("INVENTORY ID"), descc = tbl.headers.indexOf("DESCRIPTION"), uc = tbl.headers.indexOf("UOM");
+    if (dc < 0 || ac < 0 || ic < 0) throw new Error("tbl_helper is missing Department, Area or Inventory ID.");
 
-    // Not all items move in pieces - some are bags, skids, etc. COUNT_UOM (same
-    // table thursday-phone.html already reads for its own open-order math) labels
-    // the qty/stepper so "3" isn't ambiguous. Display only - the log file itself
-    // still just stores the raw number, same six columns as always.
-    const uomById = new Map();
-    if (uomTbl) {
-      const uidc = uomTbl.headers.indexOf("ID"), uc = uomTbl.headers.indexOf("COUNT_UOM");
-      if (uidc >= 0 && uc >= 0) {
-        for (const row of uomTbl.rows) {
-          const id = str(row[uidc]), uom = str(row[uc]);
-          if (id && uom) uomById.set(id, uom);
-        }
-      }
-    }
-
-    const allowedSet = new Set(ALLOWED_DEPARTMENTS.map(s => s.trim().toUpperCase()));
-    itemsByDept = new Map();
+    deptMap = new Map();
     unitById = new Map();
     for (const row of tbl.rows) {
-      const id = str(row[idc]), desc = str(row[dc]), cat = str(row[cc]);
-      if (!id || !cat || !allowedSet.has(cat.trim().toUpperCase())) continue;
-      const uom = uomById.get(id) || "";
-      if (!itemsByDept.has(cat)) itemsByDept.set(cat, []);
-      itemsByDept.get(cat).push({ id, description: desc, uom });
+      const dept = str(row[dc]), area = str(row[ac]), id = str(row[ic]);
+      if (!dept || !area || !id) continue;
+      const description = descc >= 0 ? str(row[descc]) : "";
+      const uom = uc >= 0 ? str(row[uc]) : "";
+      if (!deptMap.has(dept)) deptMap.set(dept, new Map());
+      const areaMap = deptMap.get(dept);
+      if (!areaMap.has(area)) areaMap.set(area, []);
+      areaMap.get(area).push({ id, description, uom });
       unitById.set(id, uom);
     }
-    departments = Array.from(itemsByDept.keys()).sort();
+    departments = Array.from(deptMap.keys()).sort();
   }
 
   let logFileDriveId = null;
@@ -319,20 +304,34 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     showToast._h = setTimeout(() => { t.style.display = "none"; }, 1800);
   }
 
+  let screen = "depts", currentDept = null, currentArea = null;
+
   function renderDepartments() {
+    screen = "depts"; currentDept = null; currentArea = null;
     $("crumb").style.display = "none";
     const grid = $("grid");
-    if (!departments.length) { grid.innerHTML = '<div class="empty">No departments found in the master sheet.</div>'; return; }
+    if (!departments.length) { grid.innerHTML = '<div class="empty">No departments found in tbl_helper.</div>'; return; }
     grid.innerHTML = departments.map(d => '<div class="tile" data-dept="' + esc(d) + '">' + esc(d) + "</div>").join("");
-    grid.querySelectorAll(".tile").forEach(t => t.onclick = () => renderItems(t.dataset.dept));
+    grid.querySelectorAll(".tile").forEach(t => t.onclick = () => renderAreas(t.dataset.dept));
   }
 
-  function renderItems(dept) {
+  function renderAreas(dept) {
+    screen = "areas"; currentDept = dept; currentArea = null;
+    $("crumb").style.display = "block";
+    const grid = $("grid");
+    const areas = Array.from((deptMap.get(dept) || new Map()).keys()).sort();
+    if (!areas.length) { grid.innerHTML = '<div class="empty">No areas under ' + esc(dept) + '.</div>'; return; }
+    grid.innerHTML = areas.map(a => '<div class="tile" data-area="' + esc(a) + '">' + esc(a) + "</div>").join("");
+    grid.querySelectorAll(".tile").forEach(t => t.onclick = () => renderItems(dept, t.dataset.area));
+  }
+
+  function renderItems(dept, area) {
+    screen = "items"; currentDept = dept; currentArea = area;
     S.qty = new Map();
     $("crumb").style.display = "block";
     const grid = $("grid");
-    const items = itemsByDept.get(dept) || [];
-    if (!items.length) { grid.innerHTML = '<div class="empty">No items in this department.</div>'; return; }
+    const items = (deptMap.get(dept) && deptMap.get(dept).get(area)) || [];
+    if (!items.length) { grid.innerHTML = '<div class="empty">No items in this area.</div>'; return; }
     grid.innerHTML = items.map(it => (
       '<div class="tile item-tile"><div class="item-main"><div>' + esc(it.description || it.id) +
       '</div><div class="item-id">' + esc(it.id) + (it.uom ? " &middot; " + esc(it.uom) : "") + "</div></div>" +
@@ -350,22 +349,64 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
       inp.oninput = () => { S.qty.set(inp.dataset.id, Math.max(1, parseInt(inp.value, 10) || 1)); };
       inp.onblur = () => { setQty(inp.dataset.id, parseInt(inp.value, 10) || 1); };
     });
-    grid.querySelectorAll(".logBtn").forEach(btn => btn.onclick = () => submitLog(dept, btn.dataset.id, items));
+    grid.querySelectorAll(".logBtn").forEach(btn => btn.onclick = () => submitLog(dept, area, btn.dataset.id, items, btn));
   }
 
-  async function submitLog(dept, itemId, items) {
+  // Logged dept column combines Department + Area ("PATIO - VISION") so the
+  // sheet keeps the same level of detail the old single-category list had,
+  // even though the catalog now stores them as two separate columns.
+  async function submitLog(dept, area, itemId, items, btn) {
     const item = items.find(i => i.id === itemId);
     const qty = qtyOf(itemId);
+    // Visible, unmistakable feedback on the button itself - not just a toast
+    // that can be missed - and disabled while in flight so a slow connection
+    // can't be mistaken for "nothing happened" and tapped again.
+    btn.disabled = true;
+    btn.classList.remove("ok");
+    btn.textContent = "Logging…";
     try {
-      await logMovement(dept, item, qty);
+      await logMovement(dept + " - " + area, item, qty);
       showToast("Logged " + qtyLabel(itemId, qty) + " x " + (item.description || item.id));
       setQty(itemId, 1);
+      btn.textContent = "✓ Logged";
+      btn.classList.add("ok");
+      setTimeout(() => {
+        if (!btn.isConnected) return;
+        btn.textContent = "Log";
+        btn.classList.remove("ok");
+        btn.disabled = false;
+      }, 1200);
     } catch (e) {
       showToast("Could not save: " + e.message, true);
+      btn.textContent = "Log";
+      btn.disabled = false;
     }
   }
 
-  $("backBtn").onclick = renderDepartments;
+  async function renderLog() {
+    screen = "log";
+    $("crumb").style.display = "block";
+    const grid = $("grid");
+    grid.innerHTML = '<div class="empty">Loading recorded entries&hellip;</div>';
+    try {
+      const id = await ensureLogFileId();
+      const tbl = await fetchTable(id, LOG_TABLE_NAME, null, logFileDriveId);
+      const rows = tbl.rows.slice(-50).reverse();
+      if (!rows.length) { grid.innerHTML = '<div class="empty">No entries recorded yet.</div>'; return; }
+      grid.innerHTML = '<div id="logWrap"><table class="logView"><thead><tr><th>Date</th><th>Time</th><th>Driver</th><th>Dept</th><th>Item</th><th>Qty</th></tr></thead><tbody>' +
+        rows.map(r => "<tr>" + r.slice(0, 6).map(c => "<td>" + esc(c) + "</td>").join("") + "</tr>").join("") +
+        "</tbody></table></div>";
+    } catch (e) {
+      grid.innerHTML = '<div class="empty">Could not load log: ' + esc(e.message) + "</div>";
+    }
+  }
+
+  function goBack() {
+    if (screen === "items") renderAreas(currentDept);
+    else renderDepartments();
+  }
+  $("backBtn").onclick = goBack;
+  $("viewLogBtn").onclick = renderLog;
 
   async function boot() {
     const signedIn = await trySilent();
@@ -381,6 +422,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     $("src").textContent = "CONNECTED";
     $("src").className = "badge live";
     $("auth").style.display = "none";
+    $("viewLogBtn").style.display = "";
     if (!DRIVER) {
       $("grid").innerHTML = '<div class="empty">No driver specified in the link. Ask your supervisor for your personal link (&hellip;/log/?driver=yourname).</div>';
       return;
@@ -388,7 +430,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     document.title = "Movement Log - " + DRIVER;
     $("grid").innerHTML = '<div class="empty">Loading items from OneDrive&hellip;</div>';
     try {
-      await loadDepartments();
+      await loadCatalog();
       renderDepartments();
     } catch (e) {
       $("grid").innerHTML = '<div class="empty">Could not load items: ' + esc(e.message) + "</div>";
