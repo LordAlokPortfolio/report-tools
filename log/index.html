@@ -51,10 +51,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 (function () {
   "use strict";
   // Same app registration, same tenant as the other OneDrive-connected pages in this
-  // toolkit (thursday-phone.html, vendor-analysis.html). Files.ReadWrite.Selected is the
-  // only new scope: it lets the app write, but ONLY to the one CSV log file, which
-  // was granted to this app's own item-level permission via a one-time Graph
-  // Explorer step - never anything else in OneDrive.
+  // toolkit (thursday-phone.html, vendor-analysis.html).
   //
   // The movement log is written as a plain CSV file, not an Excel table. Writing
   // into an .xlsx workbook's table goes through Excel Online's "WAC" edit-session
@@ -64,6 +61,17 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   // Graph operation that never touches that mechanism, so it isn't affected. The
   // department/area/item catalog (tbl_helper) is still read from the .xlsx
   // workbook, since READS were never blocked - only edit sessions were.
+  //
+  // Scope: Files.ReadWrite (not the narrower .Selected variant). Files.ReadWrite.Selected
+  // turned out to only grant access via an interactive file-picker consent for a
+  // user sign-in app like this one - the item-level /permissions grant we tried
+  // (the right mechanism for an app-only/client-credentials flow) never actually
+  // applied to our delegated user token, which is why writes kept failing even
+  // after a "successful" grant. Files.ReadWrite gives this app's OAuth TOKEN
+  // access to the signed-in account's whole OneDrive, but the code below still
+  // hard-blocks every write except the one CSV log file's content endpoint - see
+  // graph() - so in practice nothing the app actually does changes; only the
+  // theoretical ceiling of the token does.
   const MSAL_CONFIG = {
     auth: {
       clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
@@ -72,7 +80,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     },
     cache: { cacheLocation: "localStorage" },
   };
-  const GRAPH_SCOPES = ["User.Read", "Files.Read", "Files.ReadWrite.Selected"];
+  const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite"];
   const HELPER_TABLE_NAME = "tbl_helper";
   // Read-only: holds the tbl_helper catalog.
   const CATALOG_WORKBOOK_FILENAME = "MATERIAL MOVEMENT LOG.xlsx";
