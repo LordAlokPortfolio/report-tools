@@ -386,6 +386,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
       return;
     }
     document.title = "Movement Log - " + DRIVER;
+    $("grid").innerHTML = '<div class="empty">Loading items from OneDrive&hellip;</div>';
     try {
       await loadDepartments();
       renderDepartments();
