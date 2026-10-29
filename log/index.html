@@ -31,7 +31,12 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 #setup summary{font-size:12px;color:#8a97a3}
 #setup p{font-size:12px;color:#5b6b7c;margin:8px 0}
 #setup button{font-size:13px;padding:8px 12px;border:1px solid #1d2733;background:#fff;color:#1d2733;border-radius:8px}
+#setup ol{font-size:12px;color:#5b6b7c;margin:8px 0;padding-left:20px}
+#setup ol li{margin-bottom:4px}
+#setup code{background:#eef2f6;padding:1px 4px;border-radius:4px}
+#setup a{color:#1e5a96}
 #setupStatus{font-size:12px;color:#5b6b7c;margin-top:6px}
+#setupUrl,#setupBody{font-size:11px;background:#eef2f6;border-radius:6px;padding:8px;margin-top:6px;white-space:pre-wrap;word-break:break-all;user-select:all}
 </style></head><body>
 <header><span>Material Movement Log</span><span id="src" class="badge off">NOT CONNECTED</span></header>
 <div id="toast"></div>
@@ -44,9 +49,17 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 
 <details id="setup" style="display:none">
   <summary>Admin: one-time log file setup</summary>
-  <p>Grants this app write access to ONLY the movement-log file below - nothing else in OneDrive, never the master sheet. Run once, ever; not needed again on this or any other driver's phone.</p>
-  <button id="connectBtn">Grant write access to the log file</button>
+  <p>This app's own sign-in only ever has narrow access (read everything in OneDrive, write to nothing). Granting it write access to ONE file needs a bigger permission than this app is allowed to request for itself - so this one-time step is done through Microsoft's own tool, signed in as you, not through this page. Run once, ever; not needed again on this or any other driver's phone.</p>
+  <ol>
+    <li>Tap "Find log file ID" below.</li>
+    <li>Open <a href="https://developer.microsoft.com/graph/graph-explorer" target="_blank" rel="noopener">Graph Explorer</a> and sign in with your Microsoft account.</li>
+    <li>Click "Modify permissions" (or the permissions/scopes link near your profile), find <code>Files.ReadWrite</code>, consent to it, and sign in again when it asks.</li>
+    <li>Set the method dropdown to <b>POST</b>, paste the URL below into the query box, paste the body below that into the Request body tab, then click Run query.</li>
+  </ol>
+  <button id="findIdBtn">Find log file ID</button>
   <div id="setupStatus"></div>
+  <pre id="setupUrl" style="display:none"></pre>
+  <pre id="setupBody" style="display:none"></pre>
 </details>
 
 <script>
@@ -140,7 +153,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   async function graph(path, method, body) {
     method = method || "GET";
     const writeOk = logFileItemId && path.includes("/items/" + logFileItemId + "/") &&
-      (path.endsWith("/permissions") || path.endsWith("/tables('" + LOG_TABLE_NAME + "')/rows/add"));
+      path.endsWith("/tables('" + LOG_TABLE_NAME + "')/rows/add");
     if (method !== "GET" && !writeOk) {
       throw new Error("Blocked: this page can only write to the movement log file.");
     }
@@ -192,19 +205,39 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   // loadDepartments() replaced with a fetch() of a static JSON file; nothing else
   // in this page changes.
   // =====================================================================
-  let itemsByDept = new Map(), departments = [];
+  let itemsByDept = new Map(), departments = [], unitById = new Map();
   async function loadDepartments() {
     $("status").textContent = "Reading item list from OneDrive...";
     const masterId = await findFileId(MASTER_WORKBOOK_FILENAME);
     const tbl = await fetchTable(masterId, "tbl_MASTER");
     const idc = tbl.headers.indexOf("ID"), dc = tbl.headers.indexOf("DESCRIPTION"), cc = tbl.headers.indexOf("CATEGORY");
     if (idc < 0 || dc < 0 || cc < 0) throw new Error("tbl_MASTER is missing ID, DESCRIPTION or CATEGORY.");
+
+    // Not all items move in pieces - some are bags, skids, etc. COUNT_UOM (same
+    // table thursday-phone.html already reads for its own open-order math) labels
+    // the qty/stepper so "3" isn't ambiguous. Display only - the log file itself
+    // still just stores the raw number, same six columns as always.
+    const uomById = new Map();
+    try {
+      const uomTbl = await fetchTable(masterId, "tbl_UOM_CONVERSION");
+      const uidc = uomTbl.headers.indexOf("ID"), uc = uomTbl.headers.indexOf("COUNT_UOM");
+      if (uidc >= 0 && uc >= 0) {
+        for (const row of uomTbl.rows) {
+          const id = str(row[uidc]), uom = str(row[uc]);
+          if (id && uom) uomById.set(id, uom);
+        }
+      }
+    } catch (e) { /* no UOM table, or it's shaped differently - items just show with no unit label */ }
+
     itemsByDept = new Map();
+    unitById = new Map();
     for (const row of tbl.rows) {
       const id = str(row[idc]), desc = str(row[dc]), cat = str(row[cc]);
       if (!id || !cat) continue;
+      const uom = uomById.get(id) || "";
       if (!itemsByDept.has(cat)) itemsByDept.set(cat, []);
-      itemsByDept.get(cat).push({ id, description: desc });
+      itemsByDept.get(cat).push({ id, description: desc, uom });
+      unitById.set(id, uom);
     }
     departments = Array.from(itemsByDept.keys()).sort();
   }
@@ -239,11 +272,15 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     for (const s of document.querySelectorAll(".stepper")) if (s.dataset.id === id) return s.querySelector("span");
     return null;
   }
+  function qtyLabel(id, v) {
+    const unit = unitById.get(id);
+    return unit ? v + " " + unit : String(v);
+  }
   function bumpQty(id, delta) {
     const v = Math.max(1, qtyOf(id) + delta);
     S.qty.set(id, v);
     const el = stepperSpan(id);
-    if (el) el.textContent = v;
+    if (el) el.textContent = qtyLabel(id, v);
   }
   function showToast(msg, isErr) {
     const t = $("toast");
@@ -270,9 +307,9 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     if (!items.length) { grid.innerHTML = '<div class="empty">No items in this department.</div>'; return; }
     grid.innerHTML = items.map(it => (
       '<div class="tile item-tile"><div class="item-main" data-id="' + esc(it.id) + '"><div>' + esc(it.description || it.id) +
-      '</div><div class="item-id">' + esc(it.id) + "</div></div>" +
+      '</div><div class="item-id">' + esc(it.id) + (it.uom ? " &middot; " + esc(it.uom) : "") + "</div></div>" +
       '<div class="stepper" data-id="' + esc(it.id) + '">' +
-      '<button data-act="minus">-</button><span>1</span><button data-act="plus">+</button></div></div>'
+      '<button data-act="minus">-</button><span>' + esc(qtyLabel(it.id, 1)) + '</span><button data-act="plus">+</button></div></div>'
     )).join("");
     grid.querySelectorAll(".item-main").forEach(el => el.onclick = () => submitTap(dept, el.dataset.id, items));
     grid.querySelectorAll(".stepper button").forEach(btn => btn.onclick = e => {
@@ -286,10 +323,10 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     const qty = qtyOf(itemId);
     try {
       await logMovement(dept, item, qty);
-      showToast("Logged " + qty + " x " + (item.description || item.id));
+      showToast("Logged " + qtyLabel(itemId, qty) + " x " + (item.description || item.id));
       S.qty.set(itemId, 1);
       const span = stepperSpan(itemId);
-      if (span) span.textContent = "1";
+      if (span) span.textContent = qtyLabel(itemId, 1);
     } catch (e) {
       showToast("Could not save: " + e.message, true);
     }
@@ -297,17 +334,25 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 
   $("backBtn").onclick = renderDepartments;
 
-  // One-time admin action: grants this app write access to ONLY this one file.
-  $("connectBtn").onclick = async () => {
-    if (!token) { $("setupStatus").textContent = "Sign in first, then try Connect again."; return; }
-    $("setupStatus").textContent = "Connecting...";
+  // One-time admin action: this page's own narrow sign-in can't grant itself
+  // broader access, so it only looks up the log file's ID (read-only, uses the
+  // same Files.Read access this page already has) and hands the admin the exact
+  // request to run once in Graph Explorer, under their own elevated consent -
+  // this app's registered permissions never include anything broader than
+  // Files.Read + Files.ReadWrite.Selected, even for this one-time step.
+  $("findIdBtn").onclick = async () => {
+    if (!token) { $("setupStatus").textContent = "Sign in first, then try again."; return; }
+    $("setupStatus").textContent = "Looking up...";
     try {
       const id = await ensureLogFileId();
-      await graph(`/me/drive/items/${id}/permissions`, "POST", {
+      $("setupStatus").textContent = "Found it - paste these into Graph Explorer:";
+      $("setupUrl").textContent = "POST https://graph.microsoft.com/v1.0/me/drive/items/" + id + "/permissions";
+      $("setupUrl").style.display = "block";
+      $("setupBody").textContent = JSON.stringify({
+        grantedToV2: { application: { id: MSAL_CONFIG.auth.clientId, displayName: "KV Vendor Analysis Tool" } },
         roles: ["write"],
-        grantedTo: { application: { id: MSAL_CONFIG.auth.clientId, displayName: "KV Vendor Analysis Tool" } },
-      });
-      $("setupStatus").textContent = "Done - the app can now write to the log file.";
+      }, null, 2);
+      $("setupBody").style.display = "block";
     } catch (e) {
       $("setupStatus").textContent = "Failed: " + e.message;
     }
