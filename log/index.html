@@ -305,7 +305,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
       const id = await ensureLogFileId();
       await graph(`/me/drive/items/${id}/permissions`, "POST", {
         roles: ["write"],
-        grantedToIdentities: [{ application: { id: MSAL_CONFIG.auth.clientId, displayName: "KV Vendor Analysis Tool" } }],
+        grantedTo: { application: { id: MSAL_CONFIG.auth.clientId, displayName: "KV Vendor Analysis Tool" } },
       });
       $("setupStatus").textContent = "Done - the app can now write to the log file.";
     } catch (e) {
