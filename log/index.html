@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Material Movement Log</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Move Log">
+<meta name="theme-color" content="#1d2733">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:0;color:#1d2733;background:#f5f6f8;font-size:16px}
+header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.badge{font-size:12px;padding:3px 9px;border-radius:10px;font-weight:700}
+.badge.off{background:#8a97a3;color:#fff}.badge.live{background:#2e9e5b;color:#fff}
+#auth{padding:10px 16px;background:#fff;border-bottom:1px solid #dde3ea;font-size:14px;color:#4a5a6a}
+#auth button{font-size:16px;padding:10px 16px;border:1px solid #1d2733;background:#1d2733;color:#fff;border-radius:8px;margin-top:8px}
+#toast{display:none;padding:12px 16px;background:#2e9e5b;color:#fff;font-weight:700;text-align:center;font-size:15px}
+#toast.err{background:#c0392b}
+#crumb{padding:10px 16px 0;display:none}
+#crumb button{background:none;border:none;color:#1e5a96;font-size:16px;font-weight:700;padding:0}
+#grid{display:flex;flex-wrap:wrap;gap:10px;padding:14px}
+.tile{flex:1 1 calc(50% - 10px);min-width:140px;background:#fff;border:1px solid #dde3ea;border-radius:12px;padding:20px 10px;text-align:center;font-size:19px;font-weight:700}
+.tile:active{background:#eef2f6}
+.item-tile{flex:1 1 100%;display:flex;align-items:center;gap:10px;padding:14px;text-align:left}
+.item-main{flex:1;cursor:pointer}
+.item-id{font-size:12px;color:#5b6b7c;font-weight:400;margin-top:2px}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper button{width:44px;height:44px;font-size:24px;font-weight:700;border:1px solid #9aa7b5;background:#fff;border-radius:8px}
+.stepper span{min-width:26px;text-align:center;font-size:18px;font-weight:700}
+.empty{padding:40px 16px;text-align:center;color:#5b6b7c;width:100%}
+#setup{margin:24px 16px;padding-top:12px;border-top:1px solid #dde3ea}
+#setup summary{font-size:12px;color:#8a97a3}
+#setup p{font-size:12px;color:#5b6b7c;margin:8px 0}
+#setup button{font-size:13px;padding:8px 12px;border:1px solid #1d2733;background:#fff;color:#1d2733;border-radius:8px}
+#setupStatus{font-size:12px;color:#5b6b7c;margin-top:6px}
+</style></head><body>
+<header><span>Material Movement Log</span><span id="src" class="badge off">NOT CONNECTED</span></header>
+<div id="toast"></div>
+<div id="auth">
+  <div id="status">Loading...</div>
+  <button id="signIn" style="display:none">Sign in with Microsoft</button>
+</div>
+<div id="crumb"><button id="backBtn">&larr; Departments</button></div>
+<div id="grid"></div>
+
+<details id="setup">
+  <summary>Admin: one-time log file setup</summary>
+  <p>Grants this app write access to ONLY the movement-log file below - nothing else in OneDrive, never the master sheet. Run once, ever; not needed again on this or any other driver's phone.</p>
+  <button id="connectBtn">Grant write access to the log file</button>
+  <div id="setupStatus"></div>
+</details>
+
+<script>
+(function () {
+  "use strict";
+  // Same app registration, same tenant as the other OneDrive-connected pages in this
+  // toolkit (thursday-phone.html, vendor-analysis.html). Files.ReadWrite.Selected is the
+  // only new scope: it lets the app write, but ONLY to files it has been explicitly
+  // granted access to (see the admin setup panel below) - never anything else in OneDrive.
+  const MSAL_CONFIG = {
+    auth: {
+      clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
+      authority: "https://login.microsoftonline.com/972ad3c5-73ca-4f41-89d7-56485631c283",
+      redirectUri: window.location.href.split("?")[0].split("#")[0],
+    },
+    cache: { cacheLocation: "localStorage" },
+  };
+  const GRAPH_SCOPES = ["User.Read", "Files.Read", "Files.ReadWrite.Selected"];
+  const MASTER_WORKBOOK_FILENAME = "MASTER EXCEL SHEET.xlsx";
+  const LOG_WORKBOOK_FILENAME = "MATERIAL MOVEMENT LOG.xlsx";
+  const LOG_TABLE_NAME = "tbl_MATERIAL_MOVEMENTS";
+  const ROW_CHUNK = 2000;
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const str = v => (v === null || v === undefined ? "" : String(v)).trim();
+  const DRIVER = (new URLSearchParams(window.location.search).get("driver") || "").trim();
+
+  // =====================================================================
+  // MICROSOFT SIGN-IN (same redirect-based pattern as thursday-phone.html -
+  // loginPopup() gets silently blocked on mobile browsers; loginRedirect() doesn't.)
+  // =====================================================================
+  let msalApp = null, token = null, msalReadyPromise = null, redirectResult = null;
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error("could not load " + src));
+      document.head.appendChild(s);
+    });
+  }
+  async function ensureMsal() {
+    if (window.msal) return;
+    const urls = [
+      "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js",
+      "https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js",
+    ];
+    let lastErr;
+    for (const u of urls) { try { await loadScript(u); if (window.msal) return; } catch (e) { lastErr = e; } }
+    throw lastErr || new Error("Microsoft sign-in library did not load.");
+  }
+  async function getMsalApp() {
+    if (!msalReadyPromise) {
+      msalReadyPromise = (async () => {
+        await ensureMsal();
+        msalApp = msalApp || new msal.PublicClientApplication(MSAL_CONFIG);
+        await msalApp.initialize();
+        redirectResult = await msalApp.handleRedirectPromise();
+        return msalApp;
+      })();
+    }
+    return msalReadyPromise;
+  }
+  async function signIn() {
+    try {
+      const app = await getMsalApp();
+      await app.loginRedirect({ scopes: GRAPH_SCOPES });
+    } catch (e) { $("status").textContent = "Sign-in failed: " + e.message; }
+  }
+  async function trySilent() {
+    try {
+      const app = await getMsalApp();
+      if (redirectResult) { token = redirectResult.accessToken; return true; }
+      if (!Object.keys(localStorage).some(k => k.includes("msal"))) return false;
+      const accounts = app.getAllAccounts();
+      if (!accounts.length) return false;
+      const tr = await app.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      token = tr.accessToken;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // =====================================================================
+  // THE ONLY NETWORK DOOR. Reads are unrestricted (Files.Read already covers any
+  // file this signed-in account can see - same as the rest of the toolkit). Writes
+  // are hard-blocked unless the path targets the ONE known log-file item ID, and only
+  // the two exact operations this page ever needs (append a row; the one-time
+  // permission grant). logFileItemId is only ever set by searching for the log
+  // file's own filename, so this can't be redirected at a different item.
+  // =====================================================================
+  let logFileItemId = null;
+  async function graph(path, method, body) {
+    method = method || "GET";
+    const writeOk = logFileItemId && path.includes("/items/" + logFileItemId + "/") &&
+      (path.endsWith("/permissions") || path.endsWith("/tables('" + LOG_TABLE_NAME + "')/rows/add"));
+    if (method !== "GET" && !writeOk) {
+      throw new Error("Blocked: this page can only write to the movement log file.");
+    }
+    const headers = { Authorization: "Bearer " + token };
+    if (body) headers["Content-Type"] = "application/json";
+    const res = await fetch("https://graph.microsoft.com/v1.0" + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    if (!res.ok) {
+      const txt = await res.text();
+      const err = new Error("OneDrive said " + res.status + ": " + txt.slice(0, 300));
+      err.status = res.status;
+      throw err;
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  async function findFileId(filename) {
+    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(filename)}')?$select=id,name,file,lastModifiedDateTime`);
+    const matches = found.value.filter(i => i.file && i.name === filename)
+      .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
+    if (!matches.length) throw new Error('No file named "' + filename + '" found.');
+    return matches[0].id;
+  }
+
+  async function fetchTable(itemId, name) {
+    const meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`);
+    const bang = meta.address.lastIndexOf("!");
+    let sheet = meta.address.slice(0, bang);
+    if (sheet.startsWith("'")) sheet = sheet.slice(1, -1).replace(/''/g, "'");
+    const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(meta.address.slice(bang + 1));
+    if (!m) throw new Error("Unexpected table address for " + name + ": " + meta.address);
+    const c1 = m[1], c2 = m[3], r1 = +m[2], r2 = +m[4];
+    const base = `/me/drive/items/${itemId}/workbook/worksheets('${encodeURIComponent(sheet.replace(/'/g, "''"))}')`;
+    const chunks = [];
+    for (let s = r1; s <= r2; s += ROW_CHUNK) chunks.push([s, Math.min(s + ROW_CHUNK - 1, r2)]);
+    const results = [];
+    for (const [s, e] of chunks) {
+      const r = await graph(`${base}/range(address='${c1}${s}:${c2}${e}')?$select=values`);
+      results.push(r.values);
+    }
+    const all = [].concat(...results);
+    const headers = all[0].map(h => String(h).trim().toUpperCase());
+    return { headers, rows: all.slice(1) };
+  }
+
+  // =====================================================================
+  // Departments + items: live off tbl_MASTER (ID/DESCRIPTION/CATEGORY), the exact
+  // same columns thursday-phone.html already reads. TEMPORARY until a curated
+  // top-10-per-department list is supplied - swapping that in later only needs
+  // loadDepartments() replaced with a fetch() of a static JSON file; nothing else
+  // in this page changes.
+  // =====================================================================
+  let itemsByDept = new Map(), departments = [];
+  async function loadDepartments() {
+    $("status").textContent = "Reading item list from OneDrive...";
+    const masterId = await findFileId(MASTER_WORKBOOK_FILENAME);
+    const tbl = await fetchTable(masterId, "tbl_MASTER");
+    const idc = tbl.headers.indexOf("ID"), dc = tbl.headers.indexOf("DESCRIPTION"), cc = tbl.headers.indexOf("CATEGORY");
+    if (idc < 0 || dc < 0 || cc < 0) throw new Error("tbl_MASTER is missing ID, DESCRIPTION or CATEGORY.");
+    itemsByDept = new Map();
+    for (const row of tbl.rows) {
+      const id = str(row[idc]), desc = str(row[dc]), cat = str(row[cc]);
+      if (!id || !cat) continue;
+      if (!itemsByDept.has(cat)) itemsByDept.set(cat, []);
+      itemsByDept.get(cat).push({ id, description: desc });
+    }
+    departments = Array.from(itemsByDept.keys()).sort();
+  }
+
+  async function ensureLogFileId() {
+    if (!logFileItemId) logFileItemId = await findFileId(LOG_WORKBOOK_FILENAME);
+    return logFileItemId;
+  }
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function nowParts() {
+    const d = new Date();
+    return {
+      date: d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()),
+      time: pad2(d.getHours()) + ":" + pad2(d.getMinutes()),
+    };
+  }
+
+  async function logMovement(dept, item, qty) {
+    const id = await ensureLogFileId();
+    const { date, time } = nowParts();
+    await graph(`/me/drive/items/${id}/workbook/tables('${LOG_TABLE_NAME}')/rows/add`, "POST",
+      { values: [[date, time, DRIVER, dept, item.id, qty]] });
+  }
+
+  // =====================================================================
+  // UI
+  // =====================================================================
+  const S = { qty: new Map() };
+  function qtyOf(id) { return S.qty.get(id) || 1; }
+  function stepperSpan(id) {
+    for (const s of document.querySelectorAll(".stepper")) if (s.dataset.id === id) return s.querySelector("span");
+    return null;
+  }
+  function bumpQty(id, delta) {
+    const v = Math.max(1, qtyOf(id) + delta);
+    S.qty.set(id, v);
+    const el = stepperSpan(id);
+    if (el) el.textContent = v;
+  }
+  function showToast(msg, isErr) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.className = isErr ? "err" : "";
+    t.style.display = "block";
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(() => { t.style.display = "none"; }, 1800);
+  }
+
+  function renderDepartments() {
+    $("crumb").style.display = "none";
+    const grid = $("grid");
+    if (!departments.length) { grid.innerHTML = '<div class="empty">No departments found in the master sheet.</div>'; return; }
+    grid.innerHTML = departments.map(d => '<div class="tile" data-dept="' + esc(d) + '">' + esc(d) + "</div>").join("");
+    grid.querySelectorAll(".tile").forEach(t => t.onclick = () => renderItems(t.dataset.dept));
+  }
+
+  function renderItems(dept) {
+    S.qty = new Map();
+    $("crumb").style.display = "block";
+    const grid = $("grid");
+    const items = itemsByDept.get(dept) || [];
+    if (!items.length) { grid.innerHTML = '<div class="empty">No items in this department.</div>'; return; }
+    grid.innerHTML = items.map(it => (
+      '<div class="tile item-tile"><div class="item-main" data-id="' + esc(it.id) + '"><div>' + esc(it.description || it.id) +
+      '</div><div class="item-id">' + esc(it.id) + "</div></div>" +
+      '<div class="stepper" data-id="' + esc(it.id) + '">' +
+      '<button data-act="minus">-</button><span>1</span><button data-act="plus">+</button></div></div>'
+    )).join("");
+    grid.querySelectorAll(".item-main").forEach(el => el.onclick = () => submitTap(dept, el.dataset.id, items));
+    grid.querySelectorAll(".stepper button").forEach(btn => btn.onclick = e => {
+      e.stopPropagation();
+      bumpQty(btn.closest(".stepper").dataset.id, btn.dataset.act === "plus" ? 1 : -1);
+    });
+  }
+
+  async function submitTap(dept, itemId, items) {
+    const item = items.find(i => i.id === itemId);
+    const qty = qtyOf(itemId);
+    try {
+      await logMovement(dept, item, qty);
+      showToast("Logged " + qty + " x " + (item.description || item.id));
+      S.qty.set(itemId, 1);
+      const span = stepperSpan(itemId);
+      if (span) span.textContent = "1";
+    } catch (e) {
+      showToast("Could not save: " + e.message, true);
+    }
+  }
+
+  $("backBtn").onclick = renderDepartments;
+
+  // One-time admin action: grants this app write access to ONLY this one file.
+  $("connectBtn").onclick = async () => {
+    $("setupStatus").textContent = "Connecting...";
+    try {
+      const id = await ensureLogFileId();
+      await graph(`/me/drive/items/${id}/permissions`, "POST", {
+        roles: ["write"],
+        grantedToIdentitiesV2: [{ application: { id: MSAL_CONFIG.auth.clientId, displayName: "KV Vendor Analysis Tool" } }],
+      });
+      $("setupStatus").textContent = "Done - the app can now write to the log file.";
+    } catch (e) {
+      $("setupStatus").textContent = "Failed: " + e.message;
+    }
+  };
+
+  async function boot() {
+    const signedIn = await trySilent();
+    if (!signedIn) {
+      $("status").textContent = DRIVER
+        ? "Sign in once with your work Microsoft account to start logging, " + DRIVER + "."
+        : "Sign in with your work Microsoft account.";
+      $("signIn").style.display = "";
+      $("signIn").onclick = signIn;
+      return;
+    }
+    $("src").textContent = "CONNECTED";
+    $("src").className = "badge live";
+    $("auth").style.display = "none";
+    if (!DRIVER) {
+      $("grid").innerHTML = '<div class="empty">No driver specified in the link. Ask your supervisor for your personal link (&hellip;/log/?driver=yourname). The admin setup panel below still works from here.</div>';
+      return;
+    }
+    document.title = "Movement Log - " + DRIVER;
+    try {
+      await loadDepartments();
+      renderDepartments();
+    } catch (e) {
+      $("grid").innerHTML = '<div class="empty">Could not load items: ' + esc(e.message) + "</div>";
+    }
+  }
+
+  boot();
+})();
+</script>
+</body></html>
