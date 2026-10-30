@@ -833,27 +833,40 @@
         createdAt: currentEditId ? null : new Date().toISOString()
       };
 
-      // Save to history
-      let history = JSON.parse(localStorage.getItem('ncrHistory') || '[]');
-      
-      if (currentEditId) {
-        const index = history.findIndex(n => n.id === currentEditId);
-        if (index >= 0) {
-          history[index] = ncrData;
-        }
-      } else {
-        history.push(ncrData);
-        settings.ncrCounter++;
-        localStorage.setItem('ncrSettings', JSON.stringify(settings));
-      }
+      // Save to history. This is local browser storage with a small, hard quota
+      // (~5MB) that image-heavy NCR history can actually hit - if it throws, the
+      // PDF the user is here for should still open rather than silently doing
+      // nothing (which is what used to happen when this write failed uncaught).
+      let historySaveError = null;
+      try {
+        let history = JSON.parse(localStorage.getItem('ncrHistory') || '[]');
 
-      localStorage.setItem('ncrHistory', JSON.stringify(history));
+        if (currentEditId) {
+          const index = history.findIndex(n => n.id === currentEditId);
+          if (index >= 0) {
+            history[index] = ncrData;
+          }
+        } else {
+          history.push(ncrData);
+          settings.ncrCounter++;
+          localStorage.setItem('ncrSettings', JSON.stringify(settings));
+        }
+
+        localStorage.setItem('ncrHistory', JSON.stringify(history));
+      } catch (e) {
+        historySaveError = e;
+      }
 
       // Generate PDF
       generatePDF(ncrData);
 
+      if (historySaveError) {
+        showStatus('status', 'PDF opened, but could not save to History - local storage is full (usually from old NCRs with photos). Delete a few older NCRs from History to free up space.', 'error');
+        return;
+      }
+
       showStatus('status', 'NCR saved! Opening preview...', 'success');
-      
+
       setTimeout(() => {
         clearForm();
         loadHistory();
@@ -861,6 +874,9 @@
     }
 
     function generatePDF(data) {
+      // "#" is awkward/unsafe in a saved filename on some systems, and this
+      // name is what browsers suggest when printing-to-PDF or saving this page.
+      const fileSafeName = `${data.ncrNumber} - ${data.vendorName}`.replace(/#/g, '-').trim();
       const tableRows = data.poLines.map(line => `
         <tr>
           <td>${line.poNumber}</td>
@@ -892,7 +908,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=1024">
-  <title>${data.ncrNumber} - ${data.vendorName}</title>
+  <title>${fileSafeName}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     @page { 
@@ -984,7 +1000,13 @@
 
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      const win = window.open(url, '_blank');
+      // Belt-and-suspenders: the <title> tag above already sets this once the
+      // blob loads, but setting it again here covers browsers where that's
+      // slow or unreliable for a blob: URL tab.
+      if (win) {
+        try { win.document.title = fileSafeName; } catch (e) { /* ignore - <title> tag is the fallback */ }
+      }
     }
 
     function loadHistory() {
@@ -1110,7 +1132,9 @@
     // =====================================================================
     // NCR FOLDER (OneDrive) - read-only browse of the NCR PDFs folder.
     // Same app registration as the other OneDrive-connected tools in this
-    // toolkit; Files.Read only, since this tab never writes anything.
+    // toolkit. This tab's own code never writes anything (only ever makes
+    // GET calls - see loadNcrFolder()/ncrGraph()), even though it requests
+    // Files.ReadWrite to match what's actually registered on the app now.
     // Loaded lazily (only once the NCR Folder tab is first opened), so
     // users who never touch this tab never pay for loading MSAL or signing in.
     // =====================================================================
@@ -1122,7 +1146,11 @@
       },
       cache: { cacheLocation: "localStorage" },
     };
-    const NCR_GRAPH_SCOPES = ["User.Read", "Files.Read"];
+    // Files.ReadWrite (not Files.Read) to match what's actually registered on the
+    // app now - Files.Read alone was dropped from the app registration when it
+    // was cleaned up for the log tool. This tab's code never writes anything
+    // regardless of what the token could reach; see loadNcrFolder()/ncrGraph().
+    const NCR_GRAPH_SCOPES = ["User.Read", "Files.ReadWrite"];
     const NCR_FOLDER_PATH = "WAREHOUSE AUDITS 2026/NCR Files";
 
     let ncrMsalApp = null, ncrToken = null, ncrMsalReadyPromise = null, ncrRedirectResult = null, ncrFolderInited = false;
@@ -1196,12 +1224,34 @@
       try { return new Date(iso).toLocaleString(); } catch (e) { return iso || ""; }
     }
 
+    // Resolves a folder by NAME rather than by path string. The same path-based
+    // addressing that works for a file in the signed-in user's own OneDrive root
+    // (/me/drive/root:/path:/...) can silently come up empty when the folder
+    // actually lives in a shared SharePoint/Team document library instead (the
+    // same drive mismatch hit twice before with the other OneDrive-connected
+    // tools in this toolkit) - searching by name and following
+    // parentReference.driveId sidesteps that entirely.
+    async function ncrFindFolder(name, parent) {
+      if (!parent) {
+        const found = await ncrGraph(`/me/drive/root/search(q='${encodeURIComponent(name)}')?$select=id,name,folder,parentReference`);
+        const match = found.value.find(i => i.folder && i.name === name);
+        if (!match) throw new Error('Could not find a folder named "' + name + '".');
+        return { id: match.id, driveId: match.parentReference.driveId };
+      }
+      const children = await ncrGraph(`/drives/${parent.driveId}/items/${parent.id}/children?$select=id,name,folder&$top=200`);
+      const match = children.value.find(i => i.folder && i.name === name);
+      if (!match) throw new Error('Could not find a folder named "' + name + '" inside its parent folder.');
+      return { id: match.id, driveId: parent.driveId };
+    }
+
     async function loadNcrFolder() {
       document.getElementById('folderList').innerHTML = '';
       showStatus('folderStatus', 'Loading PDFs from OneDrive…', 'success');
       try {
-        const encodedPath = NCR_FOLDER_PATH.split('/').map(encodeURIComponent).join('/');
-        let url = `/me/drive/root:/${encodedPath}:/children?$select=name,webUrl,lastModifiedDateTime,size,file&$top=200`;
+        const [topFolder, subFolder] = NCR_FOLDER_PATH.split('/');
+        const level1 = await ncrFindFolder(topFolder, null);
+        const level2 = await ncrFindFolder(subFolder, level1);
+        let url = `/drives/${level2.driveId}/items/${level2.id}/children?$select=name,webUrl,lastModifiedDateTime,size,file&$top=200`;
         const files = [];
         while (url) {
           const data = await ncrGraph(url);
