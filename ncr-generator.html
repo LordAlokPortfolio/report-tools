@@ -371,6 +371,7 @@
     <div class="tabs no-print">
       <button class="tab active" onclick="switchTab('create')">Create NCR</button>
       <button class="tab" onclick="switchTab('history')">History</button>
+      <button class="tab" onclick="switchTab('folder')">NCR Folder</button>
       <button class="tab" onclick="switchTab('settings')">Settings</button>
     </div>
 
@@ -441,6 +442,18 @@
     <div id="history-tab" class="tab-content">
       <h2>NCR History</h2>
       <div id="ncrList" class="ncr-list"></div>
+    </div>
+
+    <!-- NCR FOLDER TAB (OneDrive, read-only) -->
+    <div id="folder-tab" class="tab-content">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h2 style="margin:0;">NCR Folder</h2>
+        <button class="btn btn-secondary btn-small" id="folderRefreshBtn" style="display:none;" onclick="refreshNcrFolder()">Refresh</button>
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Live from OneDrive: My files &rsaquo; WAREHOUSE AUDITS 2026 &rsaquo; NCR Files. Read-only - this tab never changes anything there.</p>
+      <div id="folderStatus" class="status"></div>
+      <button class="btn btn-primary" id="folderSignInBtn" style="display:none;margin-bottom:16px;" onclick="signInNcrFolder()">Sign in with Microsoft</button>
+      <div id="folderList" class="ncr-list"></div>
     </div>
 
     <!-- SETTINGS TAB -->
@@ -1075,21 +1088,169 @@
     function switchTab(tab) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-      
+
       event.target.classList.add('active');
       document.getElementById(`${tab}-tab`).classList.add('active');
+
+      if (tab === 'folder') ensureNcrFolderInit();
     }
 
     function showStatus(elementId, message, type) {
       const el = document.getElementById(elementId);
       el.textContent = message;
       el.className = `status ${type}`;
-      
+
       if (type === 'success') {
         setTimeout(() => {
           el.className = 'status';
         }, 3000);
       }
+    }
+
+    // =====================================================================
+    // NCR FOLDER (OneDrive) - read-only browse of the NCR PDFs folder.
+    // Same app registration as the other OneDrive-connected tools in this
+    // toolkit; Files.Read only, since this tab never writes anything.
+    // Loaded lazily (only once the NCR Folder tab is first opened), so
+    // users who never touch this tab never pay for loading MSAL or signing in.
+    // =====================================================================
+    const NCR_MSAL_CONFIG = {
+      auth: {
+        clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
+        authority: "https://login.microsoftonline.com/972ad3c5-73ca-4f41-89d7-56485631c283",
+        redirectUri: window.location.href.split("?")[0].split("#")[0],
+      },
+      cache: { cacheLocation: "localStorage" },
+    };
+    const NCR_GRAPH_SCOPES = ["User.Read", "Files.Read"];
+    const NCR_FOLDER_PATH = "WAREHOUSE AUDITS 2026/NCR Files";
+
+    let ncrMsalApp = null, ncrToken = null, ncrMsalReadyPromise = null, ncrRedirectResult = null, ncrFolderInited = false;
+
+    function ncrEsc(s) {
+      return String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+    function ncrLoadScript(src) {
+      return new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = src; s.onload = res; s.onerror = () => rej(new Error("could not load " + src));
+        document.head.appendChild(s);
+      });
+    }
+    async function ncrEnsureMsal() {
+      if (window.msal) return;
+      const urls = [
+        "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js",
+        "https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js",
+      ];
+      let lastErr;
+      for (const u of urls) { try { await ncrLoadScript(u); if (window.msal) return; } catch (e) { lastErr = e; } }
+      throw lastErr || new Error("Microsoft sign-in library did not load.");
+    }
+    async function ncrGetMsalApp() {
+      if (!ncrMsalReadyPromise) {
+        ncrMsalReadyPromise = (async () => {
+          await ncrEnsureMsal();
+          ncrMsalApp = ncrMsalApp || new msal.PublicClientApplication(NCR_MSAL_CONFIG);
+          await ncrMsalApp.initialize();
+          ncrRedirectResult = await ncrMsalApp.handleRedirectPromise();
+          return ncrMsalApp;
+        })();
+      }
+      return ncrMsalReadyPromise;
+    }
+    async function signInNcrFolder() {
+      try {
+        const app = await ncrGetMsalApp();
+        await app.loginRedirect({ scopes: NCR_GRAPH_SCOPES });
+      } catch (e) { showStatus('folderStatus', 'Sign-in failed: ' + e.message, 'error'); }
+    }
+    async function ncrTrySilent() {
+      try {
+        const app = await ncrGetMsalApp();
+        if (ncrRedirectResult) { ncrToken = ncrRedirectResult.accessToken; return true; }
+        if (!Object.keys(localStorage).some(k => k.includes("msal"))) return false;
+        const accounts = app.getAllAccounts();
+        if (!accounts.length) return false;
+        const tr = await app.acquireTokenSilent({ scopes: NCR_GRAPH_SCOPES, account: accounts[0] });
+        ncrToken = tr.accessToken;
+        return true;
+      } catch (e) { return false; }
+    }
+    async function ncrGraph(path) {
+      const res = await fetch("https://graph.microsoft.com/v1.0" + path, { headers: { Authorization: "Bearer " + ncrToken } });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error("OneDrive said " + res.status + ": " + txt.slice(0, 300));
+      }
+      return res.json();
+    }
+
+    function ncrFmtSize(bytes) {
+      if (!bytes) return "";
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    }
+    function ncrFmtDate(iso) {
+      try { return new Date(iso).toLocaleString(); } catch (e) { return iso || ""; }
+    }
+
+    async function loadNcrFolder() {
+      document.getElementById('folderList').innerHTML = '';
+      showStatus('folderStatus', 'Loading PDFs from OneDrive…', 'success');
+      try {
+        const encodedPath = NCR_FOLDER_PATH.split('/').map(encodeURIComponent).join('/');
+        let url = `/me/drive/root:/${encodedPath}:/children?$select=name,webUrl,lastModifiedDateTime,size,file&$top=200`;
+        const files = [];
+        while (url) {
+          const data = await ncrGraph(url);
+          files.push(...data.value);
+          url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0', '') : null;
+        }
+        const pdfs = files.filter(f => f.file && f.name.toLowerCase().endsWith('.pdf'))
+          .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
+        if (!pdfs.length) {
+          showStatus('folderStatus', 'No PDFs found in "' + NCR_FOLDER_PATH + '".', 'error');
+          return;
+        }
+        document.getElementById('folderStatus').className = 'status';
+        document.getElementById('folderList').innerHTML = pdfs.map(f => `
+          <div class="ncr-item">
+            <div class="ncr-info">
+              <h4>${ncrEsc(f.name)}</h4>
+              <div class="ncr-meta">${ncrEsc(ncrFmtDate(f.lastModifiedDateTime))} &middot; ${ncrEsc(ncrFmtSize(f.size))}</div>
+            </div>
+            <div class="ncr-actions">
+              <button class="btn btn-secondary btn-small" data-url="${ncrEsc(f.webUrl)}" onclick="window.open(this.dataset.url, '_blank')">Open</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        showStatus('folderStatus', 'Could not load folder: ' + e.message, 'error');
+      }
+    }
+
+    function refreshNcrFolder() { loadNcrFolder(); }
+
+    async function ensureNcrFolderInit() {
+      if (ncrFolderInited) return;
+      ncrFolderInited = true;
+      let signedIn;
+      try {
+        signedIn = await ncrTrySilent();
+      } catch (e) {
+        showStatus('folderStatus', 'Could not initialize sign-in: ' + e.message, 'error');
+        return;
+      }
+      if (!signedIn) {
+        document.getElementById('folderSignInBtn').style.display = '';
+        showStatus('folderStatus', 'Sign in with your work Microsoft account to browse the NCR folder.', 'success');
+        return;
+      }
+      document.getElementById('folderSignInBtn').style.display = 'none';
+      document.getElementById('folderRefreshBtn').style.display = '';
+      loadNcrFolder();
     }
   </script>
 </body>
