@@ -37,6 +37,8 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 .logView th,.logView td{padding:8px 6px;border-bottom:1px solid #dde3ea;text-align:left;white-space:nowrap}
 .logView th{color:#5b6b7c;font-size:11px;text-transform:uppercase}
 #logWrap{width:100%;overflow-x:auto}
+.delBtn{font-size:13px;font-weight:700;padding:6px 10px;min-height:32px;border:1px solid #c0392b;background:#fff;color:#c0392b;border-radius:6px}
+.delBtn:disabled{opacity:.6}
 </style></head><body>
 <header><span>Material Movement Log</span><span><button id="viewLogBtn" style="display:none">View Log</button><span id="src" class="badge off">NOT CONNECTED</span></span></header>
 <div id="toast"></div>
@@ -447,13 +449,49 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     try {
       const text = await getCsvContent();
       const lines = (text || "").split(/\r?\n/).filter(l => l.trim().length);
-      const rows = lines.slice(1).map(parseCsvLine).slice(-50).reverse();
+      const dataLines = lines.slice(1);
+      const displayCount = Math.min(50, dataLines.length);
+      const startIdx = dataLines.length - displayCount;
+      // idx = position within dataLines (oldest-first, matching the file's own
+      // order) - kept alongside each row so Delete can target the exact same
+      // line even though the table itself displays newest-first.
+      const rows = dataLines.slice(startIdx).map((line, i) => ({ idx: startIdx + i, fields: parseCsvLine(line) })).reverse();
       if (!rows.length) { grid.innerHTML = '<div class="empty">No entries recorded yet.</div>'; return; }
-      grid.innerHTML = '<div id="logWrap"><table class="logView"><thead><tr><th>Date</th><th>Time</th><th>Driver</th><th>Dept</th><th>Item</th><th>Qty</th></tr></thead><tbody>' +
-        rows.map(r => "<tr>" + r.slice(0, 6).map(c => "<td>" + esc(c) + "</td>").join("") + "</tr>").join("") +
+      grid.innerHTML = '<div id="logWrap"><table class="logView"><thead><tr><th>Date</th><th>Time</th><th>Driver</th><th>Dept</th><th>Item</th><th>Qty</th><th></th></tr></thead><tbody>' +
+        rows.map(r => "<tr>" + r.fields.slice(0, 6).map(c => "<td>" + esc(c) + "</td>").join("") +
+          '<td><button type="button" class="delBtn" data-idx="' + r.idx + '">Delete</button></td></tr>').join("") +
         "</tbody></table></div>";
+      grid.querySelectorAll(".delBtn").forEach((btn, i) => btn.onclick = () => deleteLogRow(rows[i].idx, dataLines[rows[i].idx], btn));
     } catch (e) {
       grid.innerHTML = '<div class="empty">Could not load log: ' + esc(e.message) + "</div>";
+    }
+  }
+
+  // Deletes one row by its position in the file, re-checking right before
+  // writing that the line at that position still matches what was shown (in
+  // case the file changed in between, e.g. a new entry was logged) - if it
+  // doesn't match, the list has shifted and this aborts rather than risk
+  // deleting the wrong entry.
+  async function deleteLogRow(idx, expectedLine, btn) {
+    if (!confirm("Delete this entry? This can't be undone.")) return;
+    btn.disabled = true;
+    btn.textContent = "Deleting…";
+    try {
+      const text = await getCsvContent();
+      const lines = (text || "").split(/\r?\n/).filter(l => l.trim().length);
+      const header = lines[0];
+      const dataLines = lines.slice(1);
+      if (dataLines[idx] !== expectedLine) {
+        throw new Error("The list changed since this was loaded - refresh View Log and try again.");
+      }
+      dataLines.splice(idx, 1);
+      await putCsvContent([header, ...dataLines].join("\r\n") + "\r\n");
+      showToast("Entry deleted");
+      renderLog();
+    } catch (e) {
+      showToast("Could not delete: " + e.message, true);
+      btn.disabled = false;
+      btn.textContent = "Delete";
     }
   }
 
