@@ -985,8 +985,9 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
         const pick = (sameFolder.length ? sameFolder : amatches)
           .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1))[0];
         const cancelFlag = { cancelled: false };
+        const startedAt = Date.now();
         const timer = setTimeout(() => { cancelFlag.cancelled = true; }, ARCHIVE_TIME_LIMIT_MS);
-        let timedOutOrFailed = false;
+        let timedOutOrFailed = false, archiveError = null;
         try {
           const aItemId = pick.id;
           const asess = await graph(`/me/drive/items/${aItemId}/workbook/createSession`, "POST", { persistChanges: false });
@@ -1003,11 +1004,19 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
           }
         } catch (e) {
           timedOutOrFailed = true;
+          archiveError = e;
         } finally {
           clearTimeout(timer);
         }
         if (timedOutOrFailed) {
-          archiveWarnings.push(ARCHIVE_WORKBOOK_FILENAME + " was too slow or could not be fully read, so some older history may be missing from the 60/90 day and all-time views.");
+          // Say plainly whether this was a real error or just ran out of time -
+          // "too slow" and "could not be read" used to share one vague message,
+          // which hid which one was actually happening.
+          const elapsed = Math.round((Date.now() - startedAt) / 1000);
+          const detail = archiveError
+            ? "could not be read (" + archiveError.message + ")"
+            : "took longer than " + (ARCHIVE_TIME_LIMIT_MS / 1000) + "s to read (stopped after " + elapsed + "s)";
+          archiveWarnings.push(ARCHIVE_WORKBOOK_FILENAME + " " + detail + ", so some older history may be missing from the 60/90 day and all-time views.");
         }
       }
     } catch (e) {
