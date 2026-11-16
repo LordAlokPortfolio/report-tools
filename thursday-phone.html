@@ -121,7 +121,10 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   // loads everything else from the master and shows a warning (see
   // loadFromOneDrive/startLive) rather than falling back to demo data.
   const ARCHIVE_WORKBOOK_FILENAME = "INVENTORY_ARCHIVE.xlsx";
-  let ARCHIVE_TIME_LIMIT_MS = 45000;
+  // Runs in the background after the page is already usable (see startLive()),
+  // so a longer wait here costs nothing visible - just how long old history
+  // can take to fill in before giving up.
+  let ARCHIVE_TIME_LIMIT_MS = 180000;
 
     // =====================================================================
   // COMPUTE (JavaScript port of thursday_core.py + the per-category logic of
@@ -918,7 +921,11 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     return min;
   }
 
-  async function loadFromOneDrive(setStatus) {
+  // Phase 1: the master workbook only - everything the page needs to be fully
+  // usable. Fast, not time-limited. Returns {tables, itemId, master, candidates}
+  // - candidates are any tbl_HISTORY_* tables found still sitting inside the
+  // master itself (changeover case), already read (cheap, same session).
+  async function loadMasterFromOneDrive(setStatus) {
     setStatus("Looking for " + WORKBOOK_FILENAME + " in OneDrive...");
     const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(WORKBOOK_FILENAME)}')?$select=id,name,file,lastModifiedDateTime,parentReference`);
     const matches = found.value.filter(i => i.file && i.name === WORKBOOK_FILENAME)
@@ -950,6 +957,20 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       }
     } catch (e) { /* listing/reading archive-named tables still in the master is a bonus, never fatal */ }
 
+    // So the page is usable immediately: an empty archiveHistory until
+    // finishArchiveLoad() fills it in (see startLive()).
+    tables.archiveHistory = [];
+    tables.archiveRowCount = 0;
+    tables.archiveWarning = null;
+    return { tables, itemId, master, candidates };
+  }
+
+  // Phase 2: the optional, time-limited external archive file - run strictly
+  // after phase 1, using the master's own session id as the one to restore to
+  // afterward (sessionId must already be the master's when this is called).
+  // Mutates tables in place with the final archiveHistory/archiveRowCount/
+  // archiveWarning and returns it, so the caller can re-render once done.
+  async function finishArchiveLoad(tables, master, candidates, setStatus) {
     const archiveWarnings = [];
     const savedSessionId = sessionId;
     try {
@@ -1011,6 +1032,15 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     tables.archiveRowCount = usable.reduce((a, c) => a + c.rows.length, 0);
     tables.archiveWarning = archiveWarnings.length ? archiveWarnings.join(" ") : null;
     return tables;
+  }
+
+  // Both phases, one after the other, as a single call - kept for the test
+  // harness and anything that wants the fully-merged result in one shot.
+  // startLive() itself calls the two phases separately so the page can show
+  // master data immediately instead of waiting on the archive too.
+  async function loadFromOneDrive(setStatus) {
+    const { tables, master, candidates } = await loadMasterFromOneDrive(setStatus);
+    return finishArchiveLoad(tables, master, candidates, setStatus);
   }
 
   // =====================================================================
@@ -1316,19 +1346,31 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     });
   }
 
+  function liveLoadSummary(tables) {
+    const archiveRows = tables.archiveRowCount || 0;
+    const rows = tables.tbl_HISTORY.rows.length + archiveRows;
+    let msg = "Live data loaded " + new Date().toLocaleTimeString() + " (" + rows.toLocaleString() + " history rows" +
+      (archiveRows ? " incl. " + archiveRows.toLocaleString() + " from the archive" : "") +
+      "). Nothing was saved or changed in OneDrive.";
+    if (tables.archiveWarning) msg += " " + tables.archiveWarning;
+    return msg;
+  }
   async function startLive() {
     const setStatus = t => { $("status").textContent = t; };
     $("refresh").disabled = true;
     try {
-      const tables = await loadFromOneDrive(setStatus);
+      // Phase 1 (master) first - the page becomes fully usable (categories,
+      // search, every view) as soon as this resolves, instead of waiting on
+      // the separate, optionally slow archive-file read too. setData() is
+      // safe to call again once phase 2 finishes: the category list only
+      // depends on tbl_MASTER, which phase 2 never touches, so the user's
+      // current selection isn't reset the second time.
+      const { tables, master, candidates } = await loadMasterFromOneDrive(setStatus);
       setData(tables, true);
-      const archiveRows = tables.archiveRowCount || 0;
-      const rows = tables.tbl_HISTORY.rows.length + archiveRows;
-      let msg = "Live data loaded " + new Date().toLocaleTimeString() + " (" + rows.toLocaleString() + " history rows" +
-        (archiveRows ? " incl. " + archiveRows.toLocaleString() + " from the archive" : "") +
-        "). Nothing was saved or changed in OneDrive.";
-      if (tables.archiveWarning) msg += " " + tables.archiveWarning;
-      setStatus(msg);
+      setStatus(liveLoadSummary(tables) + " Checking for older history...");
+      await finishArchiveLoad(tables, master, candidates, setStatus);
+      setData(tables, true);
+      setStatus(liveLoadSummary(tables));
     } catch (e) {
       setStatus("Could not read OneDrive: " + e.message + " (still showing demo data)");
     }
@@ -1390,7 +1432,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     } catch (e) { /* not signed in: stay on demo data */ }
   }
 
-  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData, buildBellCards, coverTitleText: w => coverTitleText(w), liveTipText, setArchiveTimeLimitMs: ms => { ARCHIVE_TIME_LIMIT_MS = ms; } };
+  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, loadMasterFromOneDrive, finishArchiveLoad, startLive, setToken: t => { token = t; }, setData, buildBellCards, coverTitleText: w => coverTitleText(w), liveTipText, setArchiveTimeLimitMs: ms => { ARCHIVE_TIME_LIMIT_MS = ms; } };
   if (!window.__TR_TEST) {
     wire();
     setData(demoTables(new Date()), false);
