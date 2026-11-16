@@ -112,9 +112,16 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   };
   const GRAPH_SCOPES = ["User.Read", "Files.Read"];   // READ ONLY. This page can never change your workbook.
   const WORKBOOK_FILENAME = "MASTER EXCEL SHEET.xlsx";
-  const REQUIRED_TABLES = ["tbl_MASTER", "tbl_HISTORY", "tbl_HISTORY_March_2026", "tbl_OPEN_ORDERS", "tbl_UOM_CONVERSION"];
+  const REQUIRED_TABLES = ["tbl_MASTER", "tbl_HISTORY", "tbl_OPEN_ORDERS", "tbl_UOM_CONVERSION"];
   const LAYOUT_TABLES = { "PATIO VISION": "Tbl_MG_PATIO_VISION", "LTC PAINT": "Tbl_MG_PAINT" };
   const ROW_CHUNK = 2000;
+  // Old history (tbl_HISTORY_March_2026 and any other tbl_HISTORY_* table) now
+  // lives in a second workbook in the same OneDrive folder. It's optional and
+  // time-limited: if it's missing, unreadable, or too slow, the page still
+  // loads everything else from the master and shows a warning (see
+  // loadFromOneDrive/startLive) rather than falling back to demo data.
+  const ARCHIVE_WORKBOOK_FILENAME = "INVENTORY_ARCHIVE.xlsx";
+  let ARCHIVE_TIME_LIMIT_MS = 45000;
 
     // =====================================================================
   // COMPUTE (JavaScript port of thursday_core.py + the per-category logic of
@@ -184,7 +191,11 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   // ---- tables -> context (built once per load) ----
   function buildContext(tables, now) {
     const T = n => tables[n];
-    const M = T("tbl_MASTER"), H = T("tbl_HISTORY"), HM = T("tbl_HISTORY_March_2026");
+    const M = T("tbl_MASTER"), H = T("tbl_HISTORY");
+    // Old history now comes as an ordered array (oldest table first) from the
+    // archive workbook (see loadFromOneDrive) - demoTables() doesn't build that
+    // array, so fall back to its empty tbl_HISTORY_March_2026 there.
+    const archiveHistory = tables.archiveHistory || (tables.tbl_HISTORY_March_2026 ? [tables.tbl_HISTORY_March_2026] : []);
     if (!M) throw new Error("tbl_MASTER was not found in the workbook.");
     if (!H) throw new Error("tbl_HISTORY was not found in the workbook.");
     const mc = {};
@@ -249,7 +260,8 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
         });
       }
     };
-    pushRows(HM); pushRows(H);
+    for (const tbl of archiveHistory) pushRows(tbl);
+    pushRows(H);
     hist.forEach((r, i) => { r.idx = i; });
     // group by category (keeps order); movement rows kept per category too
     const histByCat = new Map();
@@ -834,7 +846,13 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   function colNum(letters) { let n = 0; for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64); return n; }
   function colLetters(n) { let s = ""; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
 
-  async function fetchTable(itemId, name, onProgress) {
+  // cancelFlag (optional): { cancelled: false } - checked by each chunk worker
+  // before it starts its next chunk, so once set, no new requests for this
+  // table go out. Used only by the archive read, which is time-limited;
+  // omitted (undefined) for every other caller, so nothing else changes.
+  // Returns null if the table doesn't exist OR if cancelled before finishing -
+  // either way, the caller treats it as "did not get this table".
+  async function fetchTable(itemId, name, onProgress, cancelFlag) {
     let meta;
     try {
       meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`);
@@ -851,7 +869,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     const results = new Array(chunks.length);
     let next = 0, done = 0;
     async function worker() {
-      while (next < chunks.length) {
+      while (next < chunks.length && !(cancelFlag && cancelFlag.cancelled)) {
         const i = next++;
         const [s, e] = chunks[i];
         const r = await graph(`${base}/range(address='${c1}${s}:${c2}${e}')?$select=values`);
@@ -860,18 +878,54 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       }
     }
     await Promise.all([worker(), worker(), worker()]);
+    // If cancelled at all during this read, discard it - even a single in-flight
+    // chunk request can still resolve after the flag was set, which would
+    // otherwise look like "all chunks done" even though it wasn't a clean read.
+    if (cancelFlag && cancelFlag.cancelled) return null;
     const all = [].concat(...results);
     const headers = all[0].map(h => String(h).trim().toUpperCase());
     return { headers, rows: all.slice(1) };
   }
 
+  // Every table name in the workbook (name only - cheap, no row data).
+  async function listTableNames(itemId) {
+    const r = await graph(`/me/drive/items/${itemId}/workbook/tables?$select=name`);
+    return (r.value || []).map(t => t.name);
+  }
+  // Archive tables are every "tbl_HISTORY_*" table - the live tbl_HISTORY
+  // itself doesn't match (no trailing underscore+something after HISTORY).
+  function isArchiveTableName(name) { return /^tbl_HISTORY_/i.test(name); }
+
+  const HIST_COLUMNS = ["ID", "DATE", "QTY", "TYPE", "BATCH_TIME"];
+  // Which of the 5 columns pushRows() needs is missing from this table, or
+  // null if none are. Used to decide whether an archive table can be used at
+  // all (pushRows() itself skips silently; this is for the warning message).
+  function missingHistColumn(tbl) {
+    for (const h of HIST_COLUMNS) if (colIndex(tbl.headers, h) < 0) return h;
+    return null;
+  }
+  // The earliest valid date in a table's DATE column, as a getDateKey() string
+  // (lexically sortable), or "" if the table has no valid date at all - used
+  // to order archive tables oldest-first. Caller must have already confirmed
+  // the table has a DATE column.
+  function earliestDateKey(tbl) {
+    const dc = colIndex(tbl.headers, "DATE");
+    let min = "";
+    for (const row of tbl.rows) {
+      const k = getDateKey(row[dc]);
+      if (k && (!min || k < min)) min = k;
+    }
+    return min;
+  }
+
   async function loadFromOneDrive(setStatus) {
     setStatus("Looking for " + WORKBOOK_FILENAME + " in OneDrive...");
-    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(WORKBOOK_FILENAME)}')?$select=id,name,file,lastModifiedDateTime`);
+    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(WORKBOOK_FILENAME)}')?$select=id,name,file,lastModifiedDateTime,parentReference`);
     const matches = found.value.filter(i => i.file && i.name === WORKBOOK_FILENAME)
       .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1));
     if (!matches.length) throw new Error('No file named "' + WORKBOOK_FILENAME + '" found. Search returned: ' + (found.value.map(i => i.name).join(", ") || "(nothing)"));
-    const itemId = matches[0].id;
+    const master = matches[0];
+    const itemId = master.id;
     sessionId = null;
     const s = await graph(`/me/drive/items/${itemId}/workbook/createSession`, "POST", { persistChanges: false });
     sessionId = s.id;
@@ -882,6 +936,80 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
       if (t) tables[n] = t;
       else if (REQUIRED_TABLES.includes(n)) throw new Error("The workbook has no table named " + n + ".");
     }
+
+    // Old history (tbl_HISTORY_March_2026 etc.) may still be sitting inside the
+    // master during the changeover - find any such tables here (cheap, same
+    // session, not time-limited) before the separate, optional archive-file
+    // read below. candidates: name(as returned) -> {headers, rows, name}.
+    const candidates = new Map();
+    try {
+      const masterTableNames = await listTableNames(itemId);
+      for (const n of masterTableNames.filter(isArchiveTableName)) {
+        const t = await fetchTable(itemId, n, (nm, got, total) => setStatus("Reading " + nm + ": " + got.toLocaleString() + " of " + total.toLocaleString() + " rows..."));
+        if (t) candidates.set(n.toUpperCase(), { name: n, headers: t.headers, rows: t.rows });
+      }
+    } catch (e) { /* listing/reading archive-named tables still in the master is a bonus, never fatal */ }
+
+    const archiveWarnings = [];
+    const savedSessionId = sessionId;
+    try {
+      setStatus("Looking for " + ARCHIVE_WORKBOOK_FILENAME + " in OneDrive...");
+      const afound = await graph(`/me/drive/root/search(q='${encodeURIComponent(ARCHIVE_WORKBOOK_FILENAME)}')?$select=id,name,file,lastModifiedDateTime,parentReference`);
+      const amatches = (afound.value || []).filter(i => i.file && i.name === ARCHIVE_WORKBOOK_FILENAME);
+      if (!amatches.length) {
+        archiveWarnings.push(ARCHIVE_WORKBOOK_FILENAME + " was not found, so history older than the master workbook is missing from the 60/90 day and all-time views.");
+      } else {
+        // Prefer the copy in the same folder as the master; otherwise the newest.
+        const sameFolder = amatches.filter(i => i.parentReference && master.parentReference && i.parentReference.id === master.parentReference.id);
+        const pick = (sameFolder.length ? sameFolder : amatches)
+          .sort((a, b) => (a.lastModifiedDateTime < b.lastModifiedDateTime ? 1 : -1))[0];
+        const cancelFlag = { cancelled: false };
+        const timer = setTimeout(() => { cancelFlag.cancelled = true; }, ARCHIVE_TIME_LIMIT_MS);
+        let timedOutOrFailed = false;
+        try {
+          const aItemId = pick.id;
+          const asess = await graph(`/me/drive/items/${aItemId}/workbook/createSession`, "POST", { persistChanges: false });
+          sessionId = asess.id;   // switch to the archive's own session for these reads only
+          const archiveTableNames = await listTableNames(aItemId);
+          for (const n of archiveTableNames.filter(isArchiveTableName)) {
+            if (cancelFlag.cancelled) { timedOutOrFailed = true; break; }
+            const t = await fetchTable(aItemId, n, (nm, got, total) => setStatus("Reading " + nm + " (archive): " + got.toLocaleString() + " of " + total.toLocaleString() + " rows..."), cancelFlag);
+            if (t) {
+              candidates.set(n.toUpperCase(), { name: n, headers: t.headers, rows: t.rows });   // archive copy replaces any master copy of the same name
+            } else if (cancelFlag.cancelled) {
+              timedOutOrFailed = true;
+            }
+          }
+        } catch (e) {
+          timedOutOrFailed = true;
+        } finally {
+          clearTimeout(timer);
+        }
+        if (timedOutOrFailed) {
+          archiveWarnings.push(ARCHIVE_WORKBOOK_FILENAME + " was too slow or could not be fully read, so some older history may be missing from the 60/90 day and all-time views.");
+        }
+      }
+    } catch (e) {
+      archiveWarnings.push("Could not check for " + ARCHIVE_WORKBOOK_FILENAME + ", so history older than the master workbook may be missing: " + e.message);
+    } finally {
+      sessionId = savedSessionId;   // restore the master's session id - the two never mix
+    }
+
+    // Validate + order: tables.archiveHistory is oldest-table-first, each one
+    // already confirmed to have the 5 columns pushRows() needs.
+    const usable = [];
+    for (const c of candidates.values()) {
+      const missing = missingHistColumn(c);
+      if (missing) {
+        archiveWarnings.push('"' + c.name + '" is missing the ' + missing + ' column, so it was skipped.');
+        continue;
+      }
+      usable.push(c);
+    }
+    usable.sort((a, b) => (earliestDateKey(a) < earliestDateKey(b) ? -1 : earliestDateKey(a) > earliestDateKey(b) ? 1 : 0));
+    tables.archiveHistory = usable.map(c => ({ name: c.name, headers: c.headers, rows: c.rows }));
+    tables.archiveRowCount = usable.reduce((a, c) => a + c.rows.length, 0);
+    tables.archiveWarning = archiveWarnings.length ? archiveWarnings.join(" ") : null;
     return tables;
   }
 
@@ -1194,8 +1322,13 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     try {
       const tables = await loadFromOneDrive(setStatus);
       setData(tables, true);
-      const rows = tables.tbl_HISTORY.rows.length + (tables.tbl_HISTORY_March_2026 ? tables.tbl_HISTORY_March_2026.rows.length : 0);
-      setStatus("Live data loaded " + new Date().toLocaleTimeString() + " (" + rows.toLocaleString() + " history rows). Nothing was saved or changed in OneDrive.");
+      const archiveRows = tables.archiveRowCount || 0;
+      const rows = tables.tbl_HISTORY.rows.length + archiveRows;
+      let msg = "Live data loaded " + new Date().toLocaleTimeString() + " (" + rows.toLocaleString() + " history rows" +
+        (archiveRows ? " incl. " + archiveRows.toLocaleString() + " from the archive" : "") +
+        "). Nothing was saved or changed in OneDrive.";
+      if (tables.archiveWarning) msg += " " + tables.archiveWarning;
+      setStatus(msg);
     } catch (e) {
       setStatus("Could not read OneDrive: " + e.message + " (still showing demo data)");
     }
@@ -1257,7 +1390,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     } catch (e) { /* not signed in: stay on demo data */ }
   }
 
-  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData, buildBellCards, coverTitleText: w => coverTitleText(w), liveTipText };
+  window.TR = { buildContext, computeCategory, getDateKey, demoTables, graph, loadFromOneDrive, setToken: t => { token = t; }, setData, buildBellCards, coverTitleText: w => coverTitleText(w), liveTipText, setArchiveTimeLimitMs: ms => { ARCHIVE_TIME_LIMIT_MS = ms; } };
   if (!window.__TR_TEST) {
     wire();
     setData(demoTables(new Date()), false);
