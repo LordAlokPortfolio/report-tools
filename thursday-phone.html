@@ -855,10 +855,16 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   // omitted (undefined) for every other caller, so nothing else changes.
   // Returns null if the table doesn't exist OR if cancelled before finishing -
   // either way, the caller treats it as "did not get this table".
-  async function fetchTable(itemId, name, onProgress, cancelFlag) {
+  // driveId (optional): /me/drive/items/{id} only resolves when the file lives
+  // in the signed-in user's own OneDrive - a file in a shared SharePoint/Team
+  // document library (like the archive workbook can be) needs the
+  // fully-qualified /drives/{driveId}/items/{id} form instead. Omitted for the
+  // master workbook, which already resolves fine via /me/drive/items.
+  async function fetchTable(itemId, name, onProgress, cancelFlag, driveId) {
+    const root = driveId ? `/drives/${driveId}/items/${itemId}` : `/me/drive/items/${itemId}`;
     let meta;
     try {
-      meta = await graph(`/me/drive/items/${itemId}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`);
+      meta = await graph(`${root}/workbook/tables('${encodeURIComponent(name)}')/range?$select=address`);
     } catch (e) { if (e.status === 404) return null; throw e; }
     const bang = meta.address.lastIndexOf("!");
     let sheet = meta.address.slice(0, bang);
@@ -866,7 +872,7 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
     const m = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/.exec(meta.address.slice(bang + 1));
     if (!m) throw new Error("Unexpected table address for " + name + ": " + meta.address);
     const c1 = m[1], c2 = m[3], r1 = +m[2], r2 = +m[4];
-    const base = `/me/drive/items/${itemId}/workbook/worksheets('${encodeURIComponent(sheet.replace(/'/g, "''"))}')`;
+    const base = `${root}/workbook/worksheets('${encodeURIComponent(sheet.replace(/'/g, "''"))}')`;
     const chunks = [];
     for (let s = r1; s <= r2; s += ROW_CHUNK) chunks.push([s, Math.min(s + ROW_CHUNK - 1, r2)]);
     const results = new Array(chunks.length);
@@ -891,8 +897,9 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
   }
 
   // Every table name in the workbook (name only - cheap, no row data).
-  async function listTableNames(itemId) {
-    const r = await graph(`/me/drive/items/${itemId}/workbook/tables?$select=name`);
+  async function listTableNames(itemId, driveId) {
+    const root = driveId ? `/drives/${driveId}/items/${itemId}` : `/me/drive/items/${itemId}`;
+    const r = await graph(`${root}/workbook/tables?$select=name`);
     return (r.value || []).map(t => t.name);
   }
   // Archive tables are every "tbl_HISTORY_*" table - the live tbl_HISTORY
@@ -990,12 +997,14 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
         let timedOutOrFailed = false, archiveError = null;
         try {
           const aItemId = pick.id;
-          const asess = await graph(`/me/drive/items/${aItemId}/workbook/createSession`, "POST", { persistChanges: false });
+          const aDriveId = pick.parentReference && pick.parentReference.driveId;
+          const aRoot = aDriveId ? `/drives/${aDriveId}/items/${aItemId}` : `/me/drive/items/${aItemId}`;
+          const asess = await graph(`${aRoot}/workbook/createSession`, "POST", { persistChanges: false });
           sessionId = asess.id;   // switch to the archive's own session for these reads only
-          const archiveTableNames = await listTableNames(aItemId);
+          const archiveTableNames = await listTableNames(aItemId, aDriveId);
           for (const n of archiveTableNames.filter(isArchiveTableName)) {
             if (cancelFlag.cancelled) { timedOutOrFailed = true; break; }
-            const t = await fetchTable(aItemId, n, (nm, got, total) => setStatus("Reading " + nm + " (archive): " + got.toLocaleString() + " of " + total.toLocaleString() + " rows..."), cancelFlag);
+            const t = await fetchTable(aItemId, n, (nm, got, total) => setStatus("Reading " + nm + " (archive): " + got.toLocaleString() + " of " + total.toLocaleString() + " rows..."), cancelFlag, aDriveId);
             if (t) {
               candidates.set(n.toUpperCase(), { name: n, headers: t.headers, rows: t.rows });   // archive copy replaces any master copy of the same name
             } else if (cancelFlag.cancelled) {
