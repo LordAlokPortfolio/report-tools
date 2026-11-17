@@ -1000,8 +1000,16 @@ select,input[type=search]{font-size:16px;padding:10px;border:1px solid #9aa7b5;b
           const aItemId = pick.id;
           const aDriveId = pick.parentReference && pick.parentReference.driveId;
           const aRoot = aDriveId ? `/drives/${aDriveId}/items/${aItemId}` : `/me/drive/items/${aItemId}`;
-          const asess = await graph(`${aRoot}/workbook/createSession`, "POST", { persistChanges: false });
-          sessionId = asess.id;   // switch to the archive's own session for these reads only
+          try {
+            const asess = await graph(`${aRoot}/workbook/createSession`, "POST", { persistChanges: false });
+            sessionId = asess.id;   // switch to the archive's own session for these reads only
+          } catch (e) {
+            // Some files refuse createSession outright (a known Excel Online quirk) even
+            // though plain reads against them work fine. Reads don't require a session -
+            // only writes do - so fall back to stateless reads for this file instead of
+            // giving up on it entirely.
+            sessionId = null;
+          }
           const archiveTableNames = await listTableNames(aItemId, aDriveId);
           for (const n of archiveTableNames.filter(isArchiveTableName)) {
             if (cancelFlag.cancelled) { timedOutOrFailed = true; break; }
