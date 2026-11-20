@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Window Extension Buggy Photos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Buggy Photos">
+<meta name="theme-color" content="#1d2733">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:0;color:#1d2733;background:#f5f6f8;font-size:16px;padding-bottom:env(safe-area-inset-bottom)}
+header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.badge{font-size:12px;padding:3px 9px;border-radius:10px;font-weight:700}
+.badge.off{background:#8a97a3;color:#fff}.badge.live{background:#2e9e5b;color:#fff}
+#auth{padding:10px 16px;background:#fff;border-bottom:1px solid #dde3ea;font-size:14px;color:#4a5a6a}
+#auth button{font-size:16px;padding:10px 16px;border:1px solid #1d2733;background:#1d2733;color:#fff;border-radius:8px;margin-top:8px}
+#toast{display:none;padding:12px 16px;background:#2e9e5b;color:#fff;font-weight:700;text-align:center;font-size:15px}
+#toast.err{background:#c0392b}
+#tabs{display:none;gap:8px;padding:10px 16px 0}
+.tabBtn{font-size:14px;font-weight:700;padding:10px 16px;border:1px solid #1d2733;background:#fff;color:#1d2733;border-radius:8px}
+.tabBtn.active{background:#1d2733;color:#fff}
+#capture,#album{display:none;padding:14px}
+#capture.show,#album.show{display:block}
+.counters{display:flex;flex-wrap:wrap;gap:8px;padding:0 0 14px}
+.counterBtn{flex:1 1 calc(25% - 8px);min-width:70px;font-size:14px;font-weight:700;padding:12px 6px;border:1px solid #9aa7b5;background:#fff;color:#1d2733;border-radius:8px}
+.counterBtn.sel{background:#1e5a96;border-color:#1e5a96;color:#fff}
+#takePhotoBtn{width:100%;font-size:17px;font-weight:700;padding:16px;min-height:48px;border:none;background:#1e5a96;color:#fff;border-radius:10px}
+.previewWrap{position:relative;margin-top:14px;border:1px solid #dde3ea;border-radius:12px;overflow:hidden;background:#000}
+.previewWrap img{display:block;width:100%;height:auto}
+.previewWrap .ghost{position:absolute;inset:0;opacity:.28;pointer-events:none}
+.hint{font-size:12px;color:#5b6b7c;text-align:center;padding:6px 0}
+.row2{display:flex;gap:10px;margin-top:10px}
+.row2 button{flex:1;font-size:15px;font-weight:700;padding:12px;min-height:44px;border:none;border-radius:8px}
+#retakeBtn{background:#fff;border:1px solid #9aa7b5 !important;color:#1d2733}
+#submitPhotoBtn{background:#2e9e5b;color:#fff}
+#submitPhotoBtn:disabled{opacity:.5}
+.empty{padding:40px 16px;text-align:center;color:#5b6b7c;width:100%}
+#lastPhoto{padding:0 0 14px;font-size:14px;font-weight:700;color:#2e9e5b}
+#lastPhoto.overdue{color:#c0392b}
+.carousel{text-align:center}
+.carousel .stage{position:relative;background:#000;border-radius:12px;overflow:hidden;min-height:220px;display:flex;align-items:center;justify-content:center}
+.carousel .stage img{max-width:100%;max-height:60vh;display:block}
+.carouselNav{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.carouselNav button{font-size:20px;font-weight:700;padding:10px 18px;border:1px solid #9aa7b5;background:#fff;border-radius:8px}
+.caption{font-size:13px;color:#5b6b7c;margin-top:8px}
+.photoListWrap{margin-top:18px;border-top:1px solid #dde3ea;padding-top:10px}
+.photoRow{display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:1px solid #eef2f6;font-size:13px}
+.photoRow .info{flex:1;cursor:pointer}
+.photoRow .cmp{font-size:12px;font-weight:700;padding:5px 10px;border:1px solid #1e5a96;color:#1e5a96;background:#fff;border-radius:6px}
+.photoRow .cmp.sel{background:#1e5a96;color:#fff}
+#compareBar{display:none;gap:10px;margin-top:10px}
+#compareBar button{flex:1;font-size:14px;font-weight:700;padding:10px;border:1px solid #1e5a96;background:#fff;color:#1e5a96;border-radius:8px}
+.compareWrap{position:relative;border-radius:12px;overflow:hidden;background:#000;min-height:220px}
+.compareWrap img{display:block;width:100%;height:auto;position:absolute;inset:0}
+.compareWrap .top{clip-path:inset(0 0 0 0)}
+.compareRange{width:100%;margin-top:10px}
+#refreshAlbumBtn{font-size:13px;padding:6px 12px;border:1px solid #9aa7b5;background:#fff;color:#1d2733;border-radius:14px}
+</style></head><body>
+<header><span>Window Extension Buggy Photos</span><span id="src" class="badge off">NOT CONNECTED</span></header>
+<div id="toast"></div>
+<div id="auth">
+  <div id="status">Loading...</div>
+  <button id="signIn" style="display:none">Sign in with Microsoft</button>
+</div>
+<div id="tabs">
+  <button type="button" class="tabBtn" id="tabCapture">Capture</button>
+  <button type="button" class="tabBtn" id="tabAlbum">Album</button>
+</div>
+<div id="capture"></div>
+<div id="album"></div>
+
+<script>
+(function () {
+  "use strict";
+  // Same app registration/tenant as the other OneDrive-connected pages in this
+  // toolkit (log/index.html, thursday-phone.html, vendor-analysis.html, the
+  // NCR Folder tab).
+  const MSAL_CONFIG = {
+    auth: {
+      clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
+      authority: "https://login.microsoftonline.com/972ad3c5-73ca-4f41-89d7-56485631c283",
+      redirectUri: window.location.href.split("?")[0].split("#")[0],
+    },
+    cache: { cacheLocation: "localStorage" },
+  };
+  const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite"];
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  const TOP_FOLDER_NAME = "WAREHOUSE AUDITS 2026";
+  const SUB_FOLDER_NAME = "WINDOW EXTENSION BUGGY PHOTOS";
+  const COUNTER_NAMES = ["SUKRITI", "SUNIT", "ALOK", "BEN"];
+  const COUNT_TIMES = ["09:00", "14:00"]; // scheduled photo times, 24h "HH:MM"
+  const MAX_WIDTH = 1600;
+  const MAX_BYTES = 500 * 1024;
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  // Direct link for purchasing (?view=album): opens straight on the Album
+  // side, Flip/Compare included - sign-in is still required either way, and
+  // nothing about the privacy model changes.
+  const INITIAL_VIEW = (new URLSearchParams(window.location.search).get("view") || "").trim().toLowerCase() === "album" ? "album" : "capture";
+
+  // =====================================================================
+  // MICROSOFT SIGN-IN (same redirect-based pattern as the rest of the toolkit)
+  // =====================================================================
+  let msalApp = null, token = null, msalReadyPromise = null, redirectResult = null;
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error("could not load " + src));
+      document.head.appendChild(s);
+    });
+  }
+  async function ensureMsal() {
+    if (window.msal) return;
+    const urls = [
+      "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js",
+      "https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js",
+    ];
+    let lastErr;
+    for (const u of urls) { try { await loadScript(u); if (window.msal) return; } catch (e) { lastErr = e; } }
+    throw lastErr || new Error("Microsoft sign-in library did not load.");
+  }
+  async function getMsalApp() {
+    if (!msalReadyPromise) {
+      msalReadyPromise = (async () => {
+        await ensureMsal();
+        msalApp = msalApp || new msal.PublicClientApplication(MSAL_CONFIG);
+        await msalApp.initialize();
+        redirectResult = await msalApp.handleRedirectPromise();
+        return msalApp;
+      })();
+    }
+    return msalReadyPromise;
+  }
+  // Signed-out / incognito / no cached session: the page must make ZERO Graph
+  // calls and show ZERO photos or filenames. Every photo-touching code path
+  // below only ever runs after this has returned true.
+  function showSignInNeeded(msg) {
+    $("status").textContent = msg;
+    $("signIn").style.display = "";
+    $("signIn").onclick = signIn;
+    $("auth").style.display = "";
+    $("tabs").style.display = "none";
+    $("capture").className = ""; $("capture").innerHTML = "";
+    $("album").className = ""; $("album").innerHTML = "";
+  }
+  async function signIn() {
+    try {
+      const app = await getMsalApp();
+      await app.loginRedirect({ scopes: GRAPH_SCOPES });
+    } catch (e) { $("status").textContent = "Sign-in failed: " + e.message; }
+  }
+  async function trySilent() {
+    try {
+      const app = await getMsalApp();
+      if (redirectResult) { token = redirectResult.accessToken; return true; }
+      if (!Object.keys(localStorage).some(k => k.includes("msal"))) return false;
+      const accounts = app.getAllAccounts();
+      if (!accounts.length) return false;
+      const tr = await app.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      token = tr.accessToken;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // =====================================================================
+  // THE ONLY NETWORK DOOR. Reads are unrestricted. Writes are hard-blocked
+  // unless the call is exactly: (a) creating the one expected subfolder
+  // inside the already-resolved WAREHOUSE AUDITS 2026 folder, or (b)
+  // uploading a photo's content into that subfolder. This page never calls
+  // any sharing/permissions endpoint (createLink, invite, permissions) - no
+  // such call exists anywhere in this file, and the privacy tests assert that.
+  // =====================================================================
+  let topFolder = null, targetFolder = null;
+  async function graph(path, method, body, kind) {
+    method = method || "GET";
+    const isFolderCreate = method === "POST" && topFolder &&
+      path === `/drives/${topFolder.driveId}/items/${topFolder.id}/children` &&
+      body && body.folder && body.name === SUB_FOLDER_NAME;
+    const isPhotoUpload = method === "PUT" && targetFolder &&
+      path.indexOf(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/`) === 0 &&
+      path.indexOf(":/content") !== -1;
+    if (method !== "GET" && !isFolderCreate && !isPhotoUpload) {
+      throw new Error("Blocked: this page can only create its own photos folder and upload photos into it.");
+    }
+    const headers = { Authorization: "Bearer " + token };
+    let sendBody;
+    if (body !== undefined && body !== null) {
+      if (body instanceof Blob) { sendBody = body; headers["Content-Type"] = body.type || "application/octet-stream"; }
+      else { sendBody = JSON.stringify(body); headers["Content-Type"] = "application/json"; }
+    }
+    const res = await fetch("https://graph.microsoft.com/v1.0" + path, { method, headers, body: sendBody });
+    if (!res.ok) {
+      const txt = await res.text();
+      const err = new Error("OneDrive said " + res.status + ": " + txt.slice(0, 300));
+      err.status = res.status;
+      throw err;
+    }
+    if (res.status === 204) return null;
+    if (kind === "blob") return res.blob();
+    return res.json();
+  }
+
+  async function findFolderByName(name) {
+    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(name)}')?$select=id,name,folder,parentReference`);
+    const match = (found.value || []).find(i => i.folder && i.name === name);
+    return match ? { id: match.id, driveId: match.parentReference.driveId } : null;
+  }
+  async function findChildFolder(parent, name) {
+    const children = await graph(`/drives/${parent.driveId}/items/${parent.id}/children?$select=id,name,folder&$top=200`);
+    const match = (children.value || []).find(i => i.folder && i.name === name);
+    return match ? { id: match.id, driveId: parent.driveId } : null;
+  }
+  // Creates SUB_FOLDER_NAME inside TOP_FOLDER_NAME the first time this is
+  // used from a fresh WAREHOUSE AUDITS 2026 that doesn't have it yet.
+  // TOP_FOLDER_NAME itself is never created - if it's missing, that's a real
+  // setup problem, not something this page should guess at.
+  async function ensureTargetFolder() {
+    if (targetFolder) return targetFolder;
+    topFolder = await findFolderByName(TOP_FOLDER_NAME);
+    if (!topFolder) throw new Error('Could not find a folder named "' + TOP_FOLDER_NAME + '".');
+    let sub = await findChildFolder(topFolder, SUB_FOLDER_NAME);
+    if (!sub) {
+      const created = await graph(`/drives/${topFolder.driveId}/items/${topFolder.id}/children`, "POST",
+        { name: SUB_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "fail" });
+      sub = { id: created.id, driveId: topFolder.driveId };
+    }
+    targetFolder = sub;
+    return targetFolder;
+  }
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function baseFilenameFor(d, name) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "_" +
+      pad2(d.getHours()) + pad2(d.getMinutes()) + "_" + name + ".jpg";
+  }
+
+  // Never overwrites: conflictBehavior=fail makes Graph itself refuse instead
+  // of silently replacing an existing file; on a 409 this tries the next
+  // "-2", "-3", ... suffix. Covers both "a file with this exact name already
+  // exists" and "two people submitted the same minute at the same time".
+  async function uploadPhoto(blob, baseName) {
+    await ensureTargetFolder();
+    for (let suffix = 0; suffix <= 20; suffix++) {
+      const filename = suffix === 0 ? baseName : baseName.replace(/\.jpg$/i, "") + "-" + (suffix + 1) + ".jpg";
+      const path = `/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=fail`;
+      try {
+        await graph(path, "PUT", blob);
+        return filename;
+      } catch (e) {
+        if (e.status === 409 && suffix < 20) continue;
+        throw e;
+      }
+    }
+  }
+
+  function parsePhotoMeta(item) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})_(.+)\.jpe?g$/i.exec(item.name);
+    if (m) {
+      return { filename: item.name, timestamp: new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime(), countedBy: m[6] };
+    }
+    return { filename: item.name, timestamp: new Date(item.lastModifiedDateTime).getTime(), countedBy: "" };
+  }
+  async function listPhotos() {
+    await ensureTargetFolder();
+    let url = `/drives/${targetFolder.driveId}/items/${targetFolder.id}/children?$select=name,file,lastModifiedDateTime&$top(200)`.replace("$top(200)", "$top=200");
+    const items = [];
+    while (url) {
+      const data = await graph(url);
+      items.push(...(data.value || []));
+      url = data["@odata.nextLink"] ? data["@odata.nextLink"].replace("https://graph.microsoft.com/v1.0", "") : null;
+    }
+    const photos = items.filter(i => i.file && /\.jpe?g$/i.test(i.name)).map(parsePhotoMeta);
+    photos.sort((a, b) => b.timestamp - a.timestamp);
+    return photos;
+  }
+  // Binary photo bytes, fetched with our own bearer token - never a public
+  // webUrl/share link, and never logged.
+  async function fetchPhotoBlob(filename) {
+    await ensureTargetFolder();
+    return graph(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:/content`, "GET", null, "blob");
+  }
+
+  // =====================================================================
+  // IMAGE RESIZE/COMPRESS (canvas only - no new dependency)
+  // =====================================================================
+  function loadImageFromFile(file) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error("Could not read that photo."));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  function canvasToBlob(canvas, quality) {
+    return new Promise(res => canvas.toBlob(res, "image/jpeg", quality));
+  }
+  async function resizeToJpeg(file) {
+    const img = await loadImageFromFile(file);
+    const scale = Math.min(1, MAX_WIDTH / img.width);
+    const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(img.src);
+    let quality = 0.85, blob = await canvasToBlob(canvas, quality);
+    while (blob.size > MAX_BYTES && quality > 0.35) {
+      quality -= 0.1;
+      blob = await canvasToBlob(canvas, quality);
+    }
+    return blob;
+  }
+
+  function showToast(msg, isErr) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.className = isErr ? "err" : "";
+    t.style.display = "block";
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(() => { t.style.display = "none"; }, 2200);
+  }
+
+  // =====================================================================
+  // STATE
+  // =====================================================================
+  let photos = [];              // newest-first, metadata only (no bytes)
+  let selectedCounter = null;
+  let capturedBlob = null;
+  let ghostObjectUrl = null;    // most recent photo overall, faint overlay while framing the next one
+  let activeTab = "capture";
+  let slideIndex = 0;
+  let slideObjectUrl = null;
+  let compareSel = [];          // up to 2 filenames
+  let compareObjectUrls = [null, null];
+
+  function nextScheduledAfter(date) {
+    const times = COUNT_TIMES.map(t => t.split(":").map(Number));
+    for (let dayOffset = 0; dayOffset < 8; dayOffset++) {
+      const day = new Date(date); day.setDate(day.getDate() + dayOffset); day.setHours(0, 0, 0, 0);
+      for (const [h, m] of times) {
+        const cand = new Date(day); cand.setHours(h, m, 0, 0);
+        if (cand > date) return cand;
+      }
+    }
+    return null;
+  }
+  function isOverdue() {
+    if (!photos.length) return true;
+    const next = nextScheduledAfter(new Date(photos[0].timestamp));
+    return !!(next && next <= new Date());
+  }
+  function agoText(ms) {
+    const mins = Math.round((Date.now() - ms) / 60000);
+    if (mins < 60) return mins <= 1 ? "just now" : mins + "m ago";
+    return Math.round(mins / 60) + "h ago";
+  }
+
+  // =====================================================================
+  // CAPTURE TAB
+  // =====================================================================
+  function renderCapture() {
+    const el = $("capture");
+    el.innerHTML =
+      '<div class="counters">' + COUNTER_NAMES.map(n =>
+        '<button type="button" class="counterBtn' + (selectedCounter === n ? " sel" : "") + '" data-name="' + esc(n) + '">' + esc(n) + "</button>"
+      ).join("") + "</div>" +
+      '<input type="file" accept="image/*" capture="environment" id="cameraInput" style="display:none">' +
+      '<button type="button" id="takePhotoBtn">Take Photo</button>' +
+      '<div id="previewArea"></div>';
+
+    el.querySelectorAll(".counterBtn").forEach(b => b.onclick = () => {
+      selectedCounter = b.dataset.name;
+      el.querySelectorAll(".counterBtn").forEach(x => x.classList.toggle("sel", x === b));
+      updateCaptureSubmitEnabled();
+    });
+    $("takePhotoBtn").onclick = () => $("cameraInput").click();
+    $("cameraInput").onchange = onPhotoChosen;
+  }
+
+  async function onPhotoChosen(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    $("takePhotoBtn").disabled = true;
+    $("takePhotoBtn").textContent = "Processing…";
+    try {
+      capturedBlob = await resizeToJpeg(file);
+      await ensureGhost();
+      renderPreview();
+    } catch (err) {
+      showToast("Could not process that photo: " + err.message, true);
+    } finally {
+      $("takePhotoBtn").disabled = false;
+      $("takePhotoBtn").textContent = "Take Photo";
+      e.target.value = "";
+    }
+  }
+
+  // Fetched once per page load and refreshed after every successful submit,
+  // never re-fetched on every single capture - there's only ever one subject,
+  // so "the most recent photo overall" is always the right reference.
+  async function ensureGhost() {
+    if (ghostObjectUrl || !photos.length) return;
+    try {
+      const blob = await fetchPhotoBlob(photos[0].filename);
+      ghostObjectUrl = URL.createObjectURL(blob);
+    } catch (e) { /* ghost overlay is a convenience only - never fatal */ }
+  }
+
+  function renderPreview() {
+    const url = URL.createObjectURL(capturedBlob);
+    $("previewArea").innerHTML =
+      '<div class="previewWrap"><img src="' + url + '">' +
+      (ghostObjectUrl ? '<img class="ghost" src="' + ghostObjectUrl + '">' : "") + "</div>" +
+      (ghostObjectUrl ? '<div class="hint">Line up with the faint reference photo above.</div>' : "") +
+      '<div class="row2"><button type="button" id="retakeBtn">Retake</button>' +
+      '<button type="button" id="submitPhotoBtn">Save Photo</button></div>';
+    $("retakeBtn").onclick = () => { capturedBlob = null; $("previewArea").innerHTML = ""; };
+    $("submitPhotoBtn").onclick = submitPhoto;
+    updateCaptureSubmitEnabled();
+  }
+  function updateCaptureSubmitEnabled() {
+    const btn = $("submitPhotoBtn");
+    if (btn) btn.disabled = !selectedCounter || !capturedBlob;
+  }
+
+  async function submitPhoto() {
+    if (!selectedCounter || !capturedBlob) { showToast("Pick who's counting and take a photo first", true); return; }
+    const btn = $("submitPhotoBtn");
+    btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const base = baseFilenameFor(new Date(), selectedCounter);
+      const filename = await uploadPhoto(capturedBlob, base);
+      photos.unshift(parsePhotoMeta({ name: filename, lastModifiedDateTime: new Date().toISOString() }));
+      if (ghostObjectUrl) URL.revokeObjectURL(ghostObjectUrl);
+      ghostObjectUrl = URL.createObjectURL(capturedBlob);
+      capturedBlob = null;
+      $("previewArea").innerHTML = "";
+      showToast("Photo saved — " + filename);
+      renderLastPhotoLine();
+    } catch (e) {
+      showToast("Could not save: " + e.message, true);
+      btn.disabled = false; btn.textContent = "Save Photo";
+    }
+  }
+
+  // =====================================================================
+  // ALBUM TAB (carousel + compare)
+  // =====================================================================
+  function renderLastPhotoLine() {
+    const el = $("lastPhoto");
+    if (!el) return;
+    const overdue = isOverdue();
+    el.className = overdue ? "overdue" : "";
+    el.textContent = photos.length ? "Last photo " + agoText(photos[0].timestamp) : "No photos yet";
+  }
+
+  function renderAlbum() {
+    const el = $("album");
+    if (!photos.length) {
+      el.innerHTML = '<div id="lastPhoto"></div><div class="empty">No photos yet.</div>';
+      renderLastPhotoLine();
+      return;
+    }
+    slideIndex = Math.min(slideIndex, photos.length - 1);
+    el.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center"><div id="lastPhoto"></div>' +
+      '<button type="button" id="refreshAlbumBtn">Refresh</button></div>' +
+      '<div class="carousel" id="carouselWrap">' +
+      '<div class="stage"><img id="slideImg"></div>' +
+      '<div class="carouselNav"><button type="button" id="prevBtn">&larr;</button>' +
+      '<span id="slidePos"></span><button type="button" id="nextBtn">&rarr;</button></div>' +
+      '<div class="caption" id="slideCaption"></div></div>' +
+      '<div id="compareStage" style="display:none"></div>' +
+      '<div class="photoListWrap"><div id="photoRows"></div>' +
+      '<div id="compareBar"><button type="button" id="compareBtn">Compare Selected</button></div></div>';
+    renderLastPhotoLine();
+    $("refreshAlbumBtn").onclick = refreshAlbum;
+    $("prevBtn").onclick = () => { slideIndex = (slideIndex - 1 + photos.length) % photos.length; showSlide(); };
+    $("nextBtn").onclick = () => { slideIndex = (slideIndex + 1) % photos.length; showSlide(); };
+    renderPhotoRows();
+    showSlide();
+    attachSwipe();
+  }
+
+  async function showSlide() {
+    const p = photos[slideIndex];
+    $("slidePos").textContent = (slideIndex + 1) + " of " + photos.length;
+    $("slideCaption").textContent = fmtCaption(p);
+    try {
+      const blob = await fetchPhotoBlob(p.filename);
+      if (slideObjectUrl) URL.revokeObjectURL(slideObjectUrl);
+      slideObjectUrl = URL.createObjectURL(blob);
+      const img = $("slideImg");
+      if (img) img.src = slideObjectUrl;
+    } catch (e) { showToast("Could not load photo: " + e.message, true); }
+  }
+  function fmtCaption(p) {
+    const d = new Date(p.timestamp);
+    return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + (p.countedBy ? " — " + p.countedBy : "");
+  }
+
+  function renderPhotoRows() {
+    const wrap = $("photoRows");
+    wrap.innerHTML = photos.map((p, i) =>
+      '<div class="photoRow"><div class="info" data-i="' + i + '">' + esc(fmtCaption(p)) + '</div>' +
+      '<button type="button" class="cmp' + (compareSel.includes(p.filename) ? " sel" : "") + '" data-f="' + esc(p.filename) + '">Compare</button></div>'
+    ).join("");
+    wrap.querySelectorAll(".info").forEach(d => d.onclick = () => { slideIndex = +d.dataset.i; showSlide(); updateRowSelectionHighlight(); });
+    wrap.querySelectorAll(".cmp").forEach(b => b.onclick = () => toggleCompareSel(b.dataset.f));
+    updateCompareBar();
+  }
+  function toggleCompareSel(filename) {
+    const i = compareSel.indexOf(filename);
+    if (i >= 0) compareSel.splice(i, 1);
+    else {
+      if (compareSel.length >= 2) compareSel.shift();
+      compareSel.push(filename);
+    }
+    renderPhotoRows();
+  }
+  function updateRowSelectionHighlight() { /* visual only, no-op placeholder for future row highlight */ }
+  function updateCompareBar() {
+    const bar = $("compareBar");
+    bar.style.display = compareSel.length === 2 ? "flex" : "none";
+    const btn = $("compareBtn");
+    if (btn) btn.onclick = openCompare;
+  }
+
+  async function openCompare() {
+    const [fa, fb] = compareSel;
+    $("carouselWrap").style.display = "none";
+    const stage = $("compareStage");
+    stage.style.display = "block";
+    stage.innerHTML = '<div class="compareWrap"><img id="cmpBottom"><img id="cmpTop" class="top"></div>' +
+      '<input type="range" class="compareRange" id="cmpRange" min="0" max="100" value="100">' +
+      '<div class="row2"><button type="button" id="flipBtn2">Flip</button><button type="button" id="exitCmpBtn">Back to Album</button></div>' +
+      '<div class="caption">A: ' + esc(fa) + ' &nbsp; B: ' + esc(fb) + '</div>';
+    const [blobA, blobB] = await Promise.all([fetchPhotoBlob(fa), fetchPhotoBlob(fb)]);
+    compareObjectUrls.forEach(u => u && URL.revokeObjectURL(u));
+    compareObjectUrls = [URL.createObjectURL(blobA), URL.createObjectURL(blobB)];
+    $("cmpBottom").src = compareObjectUrls[1];
+    $("cmpTop").src = compareObjectUrls[0];
+    const range = $("cmpRange");
+    range.oninput = () => { $("cmpTop").style.clipPath = "inset(0 " + (100 - range.value) + "% 0 0)"; };
+    let flipped = false;
+    $("flipBtn2").onclick = () => { flipped = !flipped; range.value = flipped ? 0 : 100; range.oninput(); };
+    $("exitCmpBtn").onclick = closeCompare;
+  }
+  function closeCompare() {
+    $("compareStage").style.display = "none";
+    $("compareStage").innerHTML = "";
+    $("carouselWrap").style.display = "";
+  }
+
+  function attachSwipe() {
+    const stage = document.querySelector("#album .stage");
+    if (!stage) return;
+    let startX = null;
+    stage.addEventListener("touchstart", e => { startX = e.touches[0].clientX; }, { passive: true });
+    stage.addEventListener("touchend", e => {
+      if (startX === null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      if (Math.abs(dx) > 40) { dx < 0 ? $("nextBtn").click() : $("prevBtn").click(); }
+      startX = null;
+    }, { passive: true });
+  }
+  document.addEventListener("keydown", e => {
+    if (activeTab !== "album" || !photos.length) return;
+    const tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (e.key === "ArrowLeft") $("prevBtn") && $("prevBtn").click();
+    if (e.key === "ArrowRight") $("nextBtn") && $("nextBtn").click();
+  });
+
+  async function refreshAlbum() {
+    $("album").innerHTML = '<div class="empty">Loading photos from OneDrive&hellip;</div>';
+    try {
+      photos = await listPhotos();
+      renderAlbum();
+    } catch (e) {
+      if (e.status === 401) { showSignInNeeded("Your sign-in expired. Please sign in again."); return; }
+      if (e.status === 403 || e.status === 404) {
+        $("album").innerHTML = '<div class="empty">You don\'t have access to this folder.</div>';
+        return;
+      }
+      $("album").innerHTML = '<div class="empty">Could not load photos: ' + esc(e.message) + "</div>";
+    }
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    $("tabCapture").classList.toggle("active", tab === "capture");
+    $("tabAlbum").classList.toggle("active", tab === "album");
+    $("capture").className = tab === "capture" ? "show" : "";
+    $("album").className = tab === "album" ? "show" : "";
+    if (tab === "album") refreshAlbum();
+  }
+  $("tabCapture").onclick = () => switchTab("capture");
+  $("tabAlbum").onclick = () => switchTab("album");
+
+  async function boot() {
+    const signedIn = await trySilent();
+    if (!signedIn) {
+      showSignInNeeded("Sign in with your work Microsoft account to use Buggy Photos.");
+      return;
+    }
+    $("src").textContent = "CONNECTED";
+    $("src").className = "badge live";
+    $("auth").style.display = "none";
+    $("tabs").style.display = "flex";
+    renderCapture();
+    try {
+      photos = await listPhotos();
+      await ensureGhost();
+      if (capturedBlob) renderPreview();
+    } catch (e) {
+      if (e.status === 401) { showSignInNeeded("Your sign-in expired. Please sign in again."); return; }
+      // Not fatal for the Capture tab - Album will show its own error when opened.
+    }
+    switchTab(INITIAL_VIEW);
+  }
+
+  boot();
+})();
+</script>
+</body></html>
