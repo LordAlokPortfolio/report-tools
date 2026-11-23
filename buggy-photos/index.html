@@ -54,6 +54,14 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 .compareWrap .top{clip-path:inset(0 0 0 0)}
 .compareRange{width:100%;margin-top:10px}
 #refreshAlbumBtn{font-size:13px;padding:6px 12px;border:1px solid #9aa7b5;background:#fff;color:#1d2733;border-radius:14px}
+.stagingGrid{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.stagingTile{flex:1 1 calc(50% - 8px);min-width:140px;background:#fff;border:1px solid #dde3ea;border-radius:10px;padding:10px;text-align:center}
+.stagingTile .name{font-size:12px;font-weight:700;margin-bottom:8px;min-height:30px}
+.stagingStepper{display:flex;align-items:center;justify-content:center;gap:6px}
+.stagingStepper button{width:36px;height:36px;font-size:18px;font-weight:700;border:1px solid #9aa7b5;background:#fff;border-radius:6px;flex:none}
+.stagingStepper input{width:48px;height:36px;text-align:center;font-size:15px;font-weight:700;border:1px solid #9aa7b5;border-radius:6px}
+#skipStagingBtn{background:#fff;border:1px solid #9aa7b5 !important;color:#1d2733}
+#saveStagingBtn{background:#2e9e5b;color:#fff}
 </style></head><body>
 <header><span>Window Extension Buggy Photos</span><span id="src" class="badge off">NOT CONNECTED</span></header>
 <div id="toast"></div>
@@ -93,6 +101,20 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   const COUNT_TIMES = ["09:00", "14:00"]; // scheduled photo times, 24h "HH:MM"
   const MAX_WIDTH = 1600;
   const MAX_BYTES = 500 * 1024;
+  // Staging-area counts, one per SKU - optional, asked right after a photo
+  // saves. Stored as a plain-text sidecar file (same base name as the photo,
+  // .txt instead of .jpg) rather than a CSV, so Power Automate can derive its
+  // filename directly from the photo it already filtered, no extra lookup.
+  const STAGING_NAMES = [
+    "7 1/2 x 192 Window Ext. Prime",
+    "4 9/16 x 192 Window Ext. Prime",
+    "3 3/8 x 192 Window Ext. Vinyl",
+    "4 9/16 x 192 Window Ext. Vinyl",
+    "3 3/8 x 192 Window Ext. Prime",
+    "2 3/8 x 192 Window Ext. Vinyl",
+    "7 1/2 x 192 Window Ext. Vinyl",
+    "2 3/8 x 192 Window Ext. Prime",
+  ];
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -169,9 +191,10 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   // THE ONLY NETWORK DOOR. Reads are unrestricted. Writes are hard-blocked
   // unless the call is exactly: (a) creating the one expected subfolder
   // inside the already-resolved WAREHOUSE AUDITS 2026 folder, or (b)
-  // uploading a photo's content into that subfolder. This page never calls
-  // any sharing/permissions endpoint (createLink, invite, permissions) - no
-  // such call exists anywhere in this file, and the privacy tests assert that.
+  // uploading content (a photo, or its optional staging-count .txt sidecar)
+  // into that subfolder. This page never calls any sharing/permissions
+  // endpoint (createLink, invite, permissions) - no such call exists
+  // anywhere in this file, and the privacy tests assert that.
   // =====================================================================
   let topFolder = null, targetFolder = null;
   async function graph(path, method, body, kind) {
@@ -179,10 +202,10 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     const isFolderCreate = method === "POST" && topFolder &&
       path === `/drives/${topFolder.driveId}/items/${topFolder.id}/children` &&
       body && body.folder && body.name === SUB_FOLDER_NAME;
-    const isPhotoUpload = method === "PUT" && targetFolder &&
+    const isContentUpload = method === "PUT" && targetFolder &&
       path.indexOf(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/`) === 0 &&
       path.indexOf(":/content") !== -1;
-    if (method !== "GET" && !isFolderCreate && !isPhotoUpload) {
+    if (method !== "GET" && !isFolderCreate && !isContentUpload) {
       throw new Error("Blocked: this page can only create its own photos folder and upload photos into it.");
     }
     const headers = { Authorization: "Bearer " + token };
@@ -334,6 +357,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   let slideObjectUrl = null;
   let compareSel = [];          // up to 2 filenames
   let compareObjectUrls = [null, null];
+  let stagingCounts = STAGING_NAMES.map(() => 0);
 
   function nextScheduledAfter(date) {
     const times = COUNT_TIMES.map(t => t.split(":").map(Number));
@@ -436,12 +460,64 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
       if (ghostObjectUrl) URL.revokeObjectURL(ghostObjectUrl);
       ghostObjectUrl = URL.createObjectURL(capturedBlob);
       capturedBlob = null;
-      $("previewArea").innerHTML = "";
       showToast("Photo saved — " + filename);
       renderLastPhotoLine();
+      renderStagingPrompt(filename.replace(/\.jpg$/i, ""));
     } catch (e) {
       showToast("Could not save: " + e.message, true);
       btn.disabled = false; btn.textContent = "Save Photo";
+    }
+  }
+
+  // =====================================================================
+  // STAGING COUNTS (optional, right after a photo saves) - a plain-text
+  // sidecar file sharing the photo's own base filename, so Power Automate
+  // can find it by just swapping the extension on a filename it already has.
+  // =====================================================================
+  function renderStagingPrompt(baseNoExt) {
+    stagingCounts = STAGING_NAMES.map(() => 0);
+    $("previewArea").innerHTML =
+      '<div class="hint">Optional: staging area counts for this check.</div>' +
+      '<div class="stagingGrid">' + STAGING_NAMES.map((name, i) =>
+        '<div class="stagingTile"><div class="name">' + esc(name) + '</div>' +
+        '<div class="stagingStepper" data-i="' + i + '">' +
+        '<button type="button" data-act="minus">-</button>' +
+        '<input type="number" inputmode="numeric" class="stagingQty" data-i="' + i + '" value="0" min="0">' +
+        '<button type="button" data-act="plus">+</button></div></div>'
+      ).join("") + "</div>" +
+      '<div class="row2"><button type="button" id="skipStagingBtn">Skip</button>' +
+      '<button type="button" id="saveStagingBtn">Save Staging Counts</button></div>';
+
+    $("previewArea").querySelectorAll(".stagingStepper button").forEach(b => b.onclick = () => {
+      const i = +b.closest(".stagingStepper").dataset.i;
+      setStagingCount(i, stagingCounts[i] + (b.dataset.act === "plus" ? 1 : -1));
+    });
+    $("previewArea").querySelectorAll(".stagingQty").forEach(inp => {
+      inp.oninput = () => setStagingCount(+inp.dataset.i, parseInt(inp.value, 10) || 0);
+    });
+    $("skipStagingBtn").onclick = () => { $("previewArea").innerHTML = ""; };
+    $("saveStagingBtn").onclick = () => submitStaging(baseNoExt);
+  }
+  function setStagingCount(i, v) {
+    v = Math.max(0, Math.round(v) || 0);
+    stagingCounts[i] = v;
+    const el = $("previewArea").querySelector('.stagingQty[data-i="' + i + '"]');
+    if (el && +el.value !== v) el.value = v;
+  }
+  async function submitStaging(baseNoExt) {
+    const btn = $("saveStagingBtn");
+    btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      await ensureTargetFolder();
+      const text = "Staging: " + STAGING_NAMES.map((n, i) => n + "=" + stagingCounts[i]).join(", ");
+      const filename = baseNoExt + ".txt";
+      const path = `/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=fail`;
+      await graph(path, "PUT", new Blob([text], { type: "text/plain" }));
+      showToast("Staging counts saved");
+      $("previewArea").innerHTML = "";
+    } catch (e) {
+      showToast("Could not save staging counts: " + e.message, true);
+      btn.disabled = false; btn.textContent = "Save Staging Counts";
     }
   }
 
