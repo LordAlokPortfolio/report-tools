@@ -487,10 +487,53 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     return nums.length > 1 ? nums.join("+") + "=" + total : String(total);
   }
 
+  function todayPrefix() {
+    const d = new Date();
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+  // Pulls the raw skid-list text back out of an earlier saved line, e.g.
+  // "7 1/2 x 192 Window Ext. Prime: 122+120+112+120=474" -> "122+120+112+120",
+  // or "...: 0" -> "0" - exactly what the field itself would hold if typed.
+  function parseStagingText(text) {
+    const m = /^Staging:\s*(.*)$/s.exec(String(text || "").trim());
+    if (!m) return null;
+    const byName = {};
+    m[1].split(/,\s*/).forEach(part => {
+      const idx = part.indexOf(":");
+      if (idx < 0) return;
+      const name = part.slice(0, idx).trim();
+      let value = part.slice(idx + 1).trim();
+      const eq = value.indexOf("=");
+      if (eq >= 0) value = value.slice(0, eq).trim();
+      byName[name] = value;
+    });
+    return STAGING_NAMES.map(n => (n in byName) ? byName[n] : "");
+  }
+  // Looks for an earlier staging sidecar from today (a repeat count later in
+  // the same day) so it can be copied instead of retyped. Never fatal - a
+  // missing or unreadable sidecar just means no "Same as Morning" button.
+  async function findEarlierTodayStaging(excludeBaseNoExt) {
+    const prefix = todayPrefix();
+    const candidates = photos
+      .filter(p => p.filename.startsWith(prefix) && p.filename.replace(/\.jpg$/i, "") !== excludeBaseNoExt)
+      .sort((a, b) => b.timestamp - a.timestamp);
+    for (const p of candidates) {
+      const baseNoExt = p.filename.replace(/\.jpg$/i, "");
+      try {
+        await ensureTargetFolder();
+        const blob = await graph(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(baseNoExt + ".txt")}:/content`, "GET", null, "blob");
+        const parsed = parseStagingText(await blob.text());
+        if (parsed) return parsed;
+      } catch (e) { /* no sidecar for this one - try the next candidate */ }
+    }
+    return null;
+  }
+
   function renderStagingPrompt(baseNoExt) {
     stagingCounts = STAGING_NAMES.map(() => "");
     $("previewArea").innerHTML =
       '<div class="hint">Optional: staging counts. Type each skid\'s count separated by "+" (e.g. 122+120+112).</div>' +
+      '<div id="sameAsMorningWrap"></div>' +
       '<div class="stagingGrid">' + STAGING_NAMES.map((name, i) =>
         '<div class="stagingTile"><div class="name">' + esc(name) + '</div>' +
         '<input type="text" inputmode="numeric" class="stagingQty" data-i="' + i + '" placeholder="e.g. 122+120">' +
@@ -512,6 +555,20 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     });
     $("skipStagingBtn").onclick = () => { $("previewArea").innerHTML = ""; };
     $("saveStagingBtn").onclick = () => submitStaging(baseNoExt);
+
+    // Fetched after the screen is already shown, so the fields are usable
+    // immediately - the button just appears a moment later if a match is found.
+    findEarlierTodayStaging(baseNoExt).then(prefill => {
+      const wrap = $("sameAsMorningWrap");
+      if (!prefill || !wrap) return;
+      wrap.innerHTML = '<button type="button" id="sameAsMorningBtn" class="row2" style="width:100%;margin-top:10px;background:#fff;border:1px solid #1e5a96;color:#1e5a96;font-size:14px;font-weight:700;padding:10px;border-radius:8px">Same as earlier today</button>';
+      $("sameAsMorningBtn").onclick = () => {
+        prefill.forEach((raw, i) => {
+          const inp = $("previewArea").querySelector('.stagingQty[data-i="' + i + '"]');
+          if (inp) { inp.value = raw; inp.oninput(); }
+        });
+      };
+    });
   }
   async function submitStaging(baseNoExt) {
     const btn = $("saveStagingBtn");
