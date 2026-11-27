@@ -42,11 +42,13 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 #submitPhotoBtn{background:#2e9e5b;color:#fff}
 #submitPhotoBtn:disabled{opacity:.5}
 .empty{padding:40px 16px;text-align:center;color:#5b6b7c;width:100%}
-.entryRow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #eef2f6;cursor:pointer}
-.entryRow .main{flex:1;min-width:0}
+.entryRow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #eef2f6}
+.entryRow .main{flex:1;min-width:0;cursor:pointer}
 .entryRow .loc{font-size:11px;font-weight:700;color:#1e5a96;letter-spacing:.03em}
 .entryRow .prod{font-size:14px;font-weight:600;margin-top:2px}
 .entryRow .meta{font-size:11px;color:#5b6b7c;margin-top:2px}
+.deleteEntryBtn{font-size:12px;font-weight:700;padding:7px 12px;min-height:32px;border:1px solid #c0392b;background:#fff;color:#c0392b;border-radius:6px;flex:none}
+.deleteEntryBtn:disabled{opacity:.6}
 #refreshListBtn{font-size:13px;padding:6px 12px;border:1px solid #9aa7b5;background:#fff;color:#1d2733;border-radius:14px}
 #buildInfo{padding:5px 16px;font-size:11px;color:#8a97a3;background:#fff;border-bottom:1px solid #eef2f6}
 .viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;z-index:50}
@@ -61,7 +63,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 <!-- Update this line's text with every push, so a glance at the live page
      tells you (and whoever's testing on their phone) whether it's actually
      running the latest version or a stale cached copy. -->
-<div id="buildInfo">Build: 2026-11-27 — crop step added</div>
+<div id="buildInfo">Build: 2026-11-27 — delete button added to List</div>
 <div id="toast"></div>
 <div id="auth">
   <div id="status">Loading...</div>
@@ -182,8 +184,14 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     const isContentUpload = method === "PUT" && targetFolder &&
       path.indexOf(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/`) === 0 &&
       path.indexOf(":/content") !== -1;
-    if (method !== "GET" && !isFolderCreate && !isContentUpload) {
-      throw new Error("Blocked: this page can only create its own manifest folder and upload entries into it.");
+    // Delete is scoped just as narrowly: only an item, by path, directly
+    // inside this one manifest folder - never a folder itself, never
+    // anything outside it.
+    const isEntryDelete = method === "DELETE" && targetFolder &&
+      path.indexOf(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/`) === 0 &&
+      path.endsWith(":") && path.indexOf("/", `/drives/${targetFolder.driveId}/items/${targetFolder.id}:/`.length) === -1;
+    if (method !== "GET" && !isFolderCreate && !isContentUpload && !isEntryDelete) {
+      throw new Error("Blocked: this page can only create its own manifest folder and upload or delete entries in it.");
     }
     const headers = { Authorization: "Bearer " + token };
     let sendBody;
@@ -297,6 +305,26 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   async function fetchEntryBlob(filename) {
     await ensureTargetFolder();
     return graph(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:/content`, "GET", null, "blob");
+  }
+  async function deleteFile(filename) {
+    await ensureTargetFolder();
+    try {
+      await graph(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:`, "DELETE");
+    } catch (e) {
+      if (e.status === 401 && await trySilent()) {
+        await graph(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:`, "DELETE");
+        return;
+      }
+      throw e;
+    }
+  }
+  // Deletes both halves of an entry - the photo and its text sidecar. The
+  // sidecar might already be missing (an old entry saved before it existed,
+  // or a photo-only Skip) so its own failure is never fatal to the delete.
+  async function deleteEntry(filename) {
+    await deleteFile(filename);
+    const baseNoExt = filename.replace(/\.jpe?g$/i, "");
+    try { await deleteFile(baseNoExt + ".txt"); } catch (e) { /* sidecar already gone - fine */ }
   }
 
   // =====================================================================
@@ -467,26 +495,50 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     btn.disabled = !loc || !prod || !capturedBlob;
   }
 
+  // Access tokens from Microsoft only last about an hour - a long session
+  // walking a whole zone can easily outlast that. A 401 here almost always
+  // means the token just needs a quiet refresh, not a real sign-out, so this
+  // tries that once and silently retries the save before ever bothering the
+  // user - nothing typed or captured gets lost over a routine token refresh.
+  async function saveEntryOnce(location, product) {
+    const base = baseFilenameFor(new Date());
+    const photoName = await uploadContent(capturedBlob, base, ".jpg");
+    const baseNoExt = photoName.replace(/\.jpg$/i, "");
+    const text = entryTextFor(location, product, selectedSupplier);
+    await uploadContent(new Blob([text], { type: "text/plain" }), baseNoExt, ".txt");
+    entries.unshift({ filename: photoName, timestamp: Date.now(), location, product, supplier: selectedSupplier || "" });
+    capturedBlob = null;
+    $("previewArea").innerHTML = "";
+    $("locationInput").value = "";
+    $("productInput").value = "";
+    selectedSupplier = null;
+    document.querySelectorAll(".supplierBtn").forEach(x => x.classList.remove("sel"));
+    showToast("Saved — " + location + " / " + product);
+  }
   async function submitEntry() {
     const location = $("locationInput").value.trim(), product = $("productInput").value.trim();
     if (!location || !product || !capturedBlob) { showToast("Fill in location and product name, and take a photo first", true); return; }
     const btn = $("submitPhotoBtn");
     btn.disabled = true; btn.textContent = "Saving…";
     try {
-      const base = baseFilenameFor(new Date());
-      const photoName = await uploadContent(capturedBlob, base, ".jpg");
-      const baseNoExt = photoName.replace(/\.jpg$/i, "");
-      const text = entryTextFor(location, product, selectedSupplier);
-      await uploadContent(new Blob([text], { type: "text/plain" }), baseNoExt, ".txt");
-      entries.unshift({ filename: photoName, timestamp: Date.now(), location, product, supplier: selectedSupplier || "" });
-      capturedBlob = null;
-      $("previewArea").innerHTML = "";
-      $("locationInput").value = "";
-      $("productInput").value = "";
-      selectedSupplier = null;
-      document.querySelectorAll(".supplierBtn").forEach(x => x.classList.remove("sel"));
-      showToast("Saved — " + location + " / " + product);
+      await saveEntryOnce(location, product);
     } catch (e) {
+      if (e.status === 401) {
+        const refreshed = await trySilent();
+        if (refreshed) {
+          try {
+            await saveEntryOnce(location, product);
+            return;
+          } catch (e2) {
+            showToast("Could not save: " + e2.message, true);
+            btn.disabled = false; btn.textContent = "Save";
+            return;
+          }
+        }
+        showToast("Your sign-in expired. Reload the page and sign in again, then press Save.", true);
+        btn.disabled = false; btn.textContent = "Save";
+        return;
+      }
       showToast("Could not save: " + e.message, true);
       btn.disabled = false; btn.textContent = "Save";
     }
@@ -512,10 +564,31 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
         '<div class="loc">' + esc(e.location || "(no location)") + "</div>" +
         '<div class="prod">' + esc(e.product || "(no product name)") + "</div>" +
         '<div class="meta">' + (e.supplier ? esc(e.supplier) + " &middot; " : "") + fmtWhen(e.timestamp) + "</div>" +
-        "</div></div>"
+        '</div><button type="button" class="deleteEntryBtn" data-i="' + i + '">Delete</button></div>'
       ).join("");
     $("refreshListBtn").onclick = refreshList;
-    el.querySelectorAll(".entryRow").forEach(row => row.onclick = () => openViewer(+row.dataset.i));
+    el.querySelectorAll(".entryRow .main").forEach(main => main.onclick = () => openViewer(+main.closest(".entryRow").dataset.i));
+    el.querySelectorAll(".deleteEntryBtn").forEach(btn => btn.onclick = ev => {
+      ev.stopPropagation();
+      confirmDeleteEntry(+btn.dataset.i, btn);
+    });
+  }
+  // A real mistake (wrong product, wrong photo) needs to actually go away,
+  // not just be marked - this isn't a count/level being tracked over time,
+  // it's a one-off labeling error with nothing to preserve a history of.
+  async function confirmDeleteEntry(i, btn) {
+    const e = entries[i];
+    if (!confirm('Delete this entry?\n\n' + (e.location || "(no location)") + " / " + (e.product || "(no product name)") + "\n\nThis can't be undone.")) return;
+    btn.disabled = true; btn.textContent = "Deleting…";
+    try {
+      await deleteEntry(e.filename);
+      entries.splice(i, 1);
+      renderList();
+      showToast("Entry deleted");
+    } catch (err) {
+      showToast("Could not delete: " + err.message, true);
+      btn.disabled = false; btn.textContent = "Delete";
+    }
   }
   async function refreshList() {
     $("list").innerHTML = '<div class="empty">Loading entries from OneDrive&hellip;</div>';
