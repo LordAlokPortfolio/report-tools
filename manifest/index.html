@@ -29,6 +29,13 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 #takePhotoBtn{width:100%;font-size:17px;font-weight:700;padding:16px;min-height:48px;border:none;background:#1e5a96;color:#fff;border-radius:10px}
 .previewWrap{position:relative;margin-top:14px;border:1px solid #dde3ea;border-radius:12px;overflow:hidden;background:#000}
 .previewWrap img{display:block;width:100%;height:auto}
+.hint{font-size:12px;color:#5b6b7c;text-align:center;padding:6px 0}
+.cropWrap{position:relative;margin-top:10px;border:1px solid #dde3ea;border-radius:12px;overflow:hidden;background:#000;touch-action:none}
+.cropWrap img{display:block;width:100%;height:auto;-webkit-user-drag:none;user-select:none}
+.cropBox{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.5);display:none;pointer-events:none}
+#useFullBtn{background:#fff;border:1px solid #9aa7b5 !important;color:#1d2733}
+#cropBtn{background:#2e9e5b;color:#fff}
+#cropBtn:disabled{opacity:.5}
 .row2{display:flex;gap:10px;margin-top:10px}
 .row2 button{flex:1;font-size:15px;font-weight:700;padding:12px;min-height:44px;border:none;border-radius:8px}
 #retakeBtn{background:#fff;border:1px solid #9aa7b5 !important;color:#1d2733}
@@ -288,7 +295,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   }
 
   // =====================================================================
-  // IMAGE RESIZE/COMPRESS (canvas only - no new dependency)
+  // IMAGE RESIZE/COMPRESS/CROP (canvas only - no new dependency)
   // =====================================================================
   function loadImageFromFile(file) {
     return new Promise((res, rej) => {
@@ -301,14 +308,16 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
   function canvasToBlob(canvas, quality) {
     return new Promise(res => canvas.toBlob(res, "image/jpeg", quality));
   }
-  async function resizeToJpeg(file) {
-    const img = await loadImageFromFile(file);
-    const scale = Math.min(1, MAX_WIDTH / img.width);
-    const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+  // rect is in the image's own natural pixel coordinates - {x,y,w,h}. Cropping
+  // happens BEFORE the resize/compress step, against the full-resolution
+  // source, so the cropped region keeps as much real detail as the camera
+  // captured instead of being cropped out of an already-downsized copy.
+  async function cropToJpeg(img, rect) {
+    const scale = Math.min(1, MAX_WIDTH / rect.w);
+    const w = Math.max(1, Math.round(rect.w * scale)), h = Math.max(1, Math.round(rect.h * scale));
     const canvas = document.createElement("canvas");
     canvas.width = w; canvas.height = h;
-    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-    URL.revokeObjectURL(img.src);
+    canvas.getContext("2d").drawImage(img, rect.x, rect.y, rect.w, rect.h, 0, 0, w, h);
     let quality = 0.85, blob = await canvasToBlob(canvas, quality);
     while (blob.size > MAX_BYTES && quality > 0.35) {
       quality -= 0.1;
@@ -365,8 +374,8 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
     $("takePhotoBtn").disabled = true;
     $("takePhotoBtn").textContent = "Processing…";
     try {
-      capturedBlob = await resizeToJpeg(file);
-      renderPreview();
+      const img = await loadImageFromFile(file);
+      renderCrop(img);
     } catch (err) {
       showToast("Could not process that photo: " + err.message, true);
     } finally {
@@ -375,6 +384,67 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
       e.target.value = "";
     }
   }
+
+  // Crop against the full-resolution source (there's often a lot of other
+  // product in frame, per the actual use case this was built for) - drag a
+  // rectangle over just the product, or skip straight to the full photo.
+  function renderCrop(img) {
+    $("previewArea").innerHTML =
+      '<div class="hint">Drag a box around just the product, or use the full photo.</div>' +
+      '<div class="cropWrap" id="cropWrap"><img id="cropImg" src="' + img.src + '"><div class="cropBox" id="cropBox"></div></div>' +
+      '<div class="row2"><button type="button" id="useFullBtn">Use Full Photo</button>' +
+      '<button type="button" id="cropBtn" disabled>Crop to Selection</button></div>';
+
+    const wrap = $("cropWrap"), box = $("cropBox");
+    let dragging = false, startX = 0, startY = 0;
+    function clientRectToWrapPoint(clientX, clientY) {
+      const r = wrap.getBoundingClientRect();
+      return { x: Math.max(0, Math.min(r.width, clientX - r.left)), y: Math.max(0, Math.min(r.height, clientY - r.top)) };
+    }
+    function setBox(x0, y0, x1, y1) {
+      const left = Math.min(x0, x1), top = Math.min(y0, y1);
+      box.style.left = left + "px"; box.style.top = top + "px";
+      box.style.width = Math.abs(x1 - x0) + "px"; box.style.height = Math.abs(y1 - y0) + "px";
+      box.style.display = "block";
+    }
+    wrap.addEventListener("pointerdown", ev => {
+      wrap.setPointerCapture(ev.pointerId);
+      const p = clientRectToWrapPoint(ev.clientX, ev.clientY);
+      startX = p.x; startY = p.y; dragging = true;
+      setBox(startX, startY, startX, startY);
+      $("cropBtn").disabled = true;
+    });
+    wrap.addEventListener("pointermove", ev => {
+      if (!dragging) return;
+      const p = clientRectToWrapPoint(ev.clientX, ev.clientY);
+      setBox(startX, startY, p.x, p.y);
+    });
+    wrap.addEventListener("pointerup", () => {
+      dragging = false;
+      const w = parseFloat(box.style.width), h = parseFloat(box.style.height);
+      $("cropBtn").disabled = !(w > 20 && h > 20);
+    });
+
+    $("useFullBtn").onclick = async () => {
+      capturedBlob = await cropToJpeg(img, { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight });
+      URL.revokeObjectURL(img.src);
+      renderPreview();
+    };
+    $("cropBtn").onclick = async () => {
+      const r = wrap.getBoundingClientRect();
+      const scaleX = img.naturalWidth / r.width, scaleY = img.naturalHeight / r.height;
+      const rect = {
+        x: parseFloat(box.style.left) * scaleX,
+        y: parseFloat(box.style.top) * scaleY,
+        w: parseFloat(box.style.width) * scaleX,
+        h: parseFloat(box.style.height) * scaleY,
+      };
+      capturedBlob = await cropToJpeg(img, rect);
+      URL.revokeObjectURL(img.src);
+      renderPreview();
+    };
+  }
+
   function renderPreview() {
     const url = URL.createObjectURL(capturedBlob);
     $("previewArea").innerHTML =
