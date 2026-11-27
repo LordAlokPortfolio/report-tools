@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Manifest</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Manifest">
+<meta name="theme-color" content="#1d2733">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:0;color:#1d2733;background:#f5f6f8;font-size:16px;padding-bottom:env(safe-area-inset-bottom)}
+header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.badge{font-size:12px;padding:3px 9px;border-radius:10px;font-weight:700}
+.badge.off{background:#8a97a3;color:#fff}.badge.live{background:#2e9e5b;color:#fff}
+#auth{padding:10px 16px;background:#fff;border-bottom:1px solid #dde3ea;font-size:14px;color:#4a5a6a}
+#auth button{font-size:16px;padding:10px 16px;border:1px solid #1d2733;background:#1d2733;color:#fff;border-radius:8px;margin-top:8px}
+#toast{display:none;padding:12px 16px;background:#2e9e5b;color:#fff;font-weight:700;text-align:center;font-size:15px}
+#toast.err{background:#c0392b}
+#tabs{display:none;gap:8px;padding:10px 16px 0}
+.tabBtn{font-size:14px;font-weight:700;padding:10px 16px;border:1px solid #1d2733;background:#fff;color:#1d2733;border-radius:8px}
+.tabBtn.active{background:#1d2733;color:#fff}
+#capture,#list{display:none;padding:14px}
+#capture.show,#list.show{display:block}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;font-weight:700;color:#5b6b7c;text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px}
+.field input[type=text]{width:100%;height:46px;padding:0 12px;font-size:16px;border:1px solid #9aa7b5;border-radius:8px}
+.suppliers{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.supplierBtn{flex:1 1 calc(33.333% - 8px);min-width:90px;font-size:13px;font-weight:700;padding:10px 6px;border:1px solid #9aa7b5;background:#fff;color:#1d2733;border-radius:8px}
+.supplierBtn.sel{background:#1e5a96;border-color:#1e5a96;color:#fff}
+#takePhotoBtn{width:100%;font-size:17px;font-weight:700;padding:16px;min-height:48px;border:none;background:#1e5a96;color:#fff;border-radius:10px}
+.previewWrap{position:relative;margin-top:14px;border:1px solid #dde3ea;border-radius:12px;overflow:hidden;background:#000}
+.previewWrap img{display:block;width:100%;height:auto}
+.row2{display:flex;gap:10px;margin-top:10px}
+.row2 button{flex:1;font-size:15px;font-weight:700;padding:12px;min-height:44px;border:none;border-radius:8px}
+#retakeBtn{background:#fff;border:1px solid #9aa7b5 !important;color:#1d2733}
+#submitPhotoBtn{background:#2e9e5b;color:#fff}
+#submitPhotoBtn:disabled{opacity:.5}
+.empty{padding:40px 16px;text-align:center;color:#5b6b7c;width:100%}
+.entryRow{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #eef2f6;cursor:pointer}
+.entryRow .main{flex:1;min-width:0}
+.entryRow .loc{font-size:11px;font-weight:700;color:#1e5a96;letter-spacing:.03em}
+.entryRow .prod{font-size:14px;font-weight:600;margin-top:2px}
+.entryRow .meta{font-size:11px;color:#5b6b7c;margin-top:2px}
+#refreshListBtn{font-size:13px;padding:6px 12px;border:1px solid #9aa7b5;background:#fff;color:#1d2733;border-radius:14px}
+.viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;z-index:50}
+.viewer img{flex:1;width:100%;object-fit:contain;min-height:0}
+.viewer .viewerInfo{background:#fff;padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+.viewer .viewerInfo .loc{font-size:12px;font-weight:700;color:#1e5a96}
+.viewer .viewerInfo .prod{font-size:16px;font-weight:700;margin-top:2px}
+.viewer .viewerInfo .meta{font-size:12px;color:#5b6b7c;margin-top:4px}
+#closeViewerBtn{position:absolute;top:calc(10px + env(safe-area-inset-top));right:14px;font-size:20px;font-weight:700;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:36px;height:36px}
+</style></head><body>
+<header><span>Manifest</span><span id="src" class="badge off">NOT CONNECTED</span></header>
+<div id="toast"></div>
+<div id="auth">
+  <div id="status">Loading...</div>
+  <button id="signIn" style="display:none">Sign in with Microsoft</button>
+</div>
+<div id="tabs">
+  <button type="button" class="tabBtn" id="tabCapture">Capture</button>
+  <button type="button" class="tabBtn" id="tabList">List</button>
+</div>
+<div id="capture"></div>
+<div id="list"></div>
+
+<script>
+(function () {
+  "use strict";
+  // Same app registration/tenant as the other OneDrive-connected pages in this
+  // toolkit (log/index.html, thursday-phone.html, buggy-photos/index.html).
+  const MSAL_CONFIG = {
+    auth: {
+      clientId: "99b2c3fe-cae0-4e09-b49a-5b57c7bdc2ca",
+      authority: "https://login.microsoftonline.com/972ad3c5-73ca-4f41-89d7-56485631c283",
+      redirectUri: window.location.href.split("?")[0].split("#")[0],
+    },
+    cache: { cacheLocation: "localStorage" },
+  };
+  const GRAPH_SCOPES = ["User.Read", "Files.ReadWrite"];
+
+  // =====================================================================
+  // CONFIG
+  // =====================================================================
+  const TOP_FOLDER_NAME = "WAREHOUSE AUDITS 2026";
+  const SUB_FOLDER_NAME = "MATERIAL MANIFEST";
+  const SUPPLIER_NAMES = ["Vision", "LTC", "Roll-A-Way", "De-Mar", "Capital Finishing", "Moulures Nova", "Chap Alliance"];
+  const MAX_WIDTH = 1600;
+  const MAX_BYTES = 500 * 1024;
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // =====================================================================
+  // MICROSOFT SIGN-IN (same redirect-based pattern as the rest of the toolkit)
+  // =====================================================================
+  let msalApp = null, token = null, msalReadyPromise = null, redirectResult = null;
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error("could not load " + src));
+      document.head.appendChild(s);
+    });
+  }
+  async function ensureMsal() {
+    if (window.msal) return;
+    const urls = [
+      "https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js",
+      "https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js",
+    ];
+    let lastErr;
+    for (const u of urls) { try { await loadScript(u); if (window.msal) return; } catch (e) { lastErr = e; } }
+    throw lastErr || new Error("Microsoft sign-in library did not load.");
+  }
+  async function getMsalApp() {
+    if (!msalReadyPromise) {
+      msalReadyPromise = (async () => {
+        await ensureMsal();
+        msalApp = msalApp || new msal.PublicClientApplication(MSAL_CONFIG);
+        await msalApp.initialize();
+        redirectResult = await msalApp.handleRedirectPromise();
+        return msalApp;
+      })();
+    }
+    return msalReadyPromise;
+  }
+  // Signed-out / incognito / no cached session: the page must make ZERO Graph
+  // calls and show ZERO entries. Every data-touching code path below only
+  // ever runs after this has returned true.
+  function showSignInNeeded(msg) {
+    $("status").textContent = msg;
+    $("signIn").style.display = "";
+    $("signIn").onclick = signIn;
+    $("auth").style.display = "";
+    $("tabs").style.display = "none";
+    $("capture").className = ""; $("capture").innerHTML = "";
+    $("list").className = ""; $("list").innerHTML = "";
+  }
+  async function signIn() {
+    try {
+      const app = await getMsalApp();
+      await app.loginRedirect({ scopes: GRAPH_SCOPES });
+    } catch (e) { $("status").textContent = "Sign-in failed: " + e.message; }
+  }
+  async function trySilent() {
+    try {
+      const app = await getMsalApp();
+      if (redirectResult) { token = redirectResult.accessToken; return true; }
+      if (!Object.keys(localStorage).some(k => k.includes("msal"))) return false;
+      const accounts = app.getAllAccounts();
+      if (!accounts.length) return false;
+      const tr = await app.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      token = tr.accessToken;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // =====================================================================
+  // THE ONLY NETWORK DOOR. Reads are unrestricted. Writes are hard-blocked
+  // unless the call is exactly: (a) creating the one expected subfolder
+  // inside the already-resolved WAREHOUSE AUDITS 2026 folder, or (b)
+  // uploading content (a photo, or its text sidecar) into that subfolder.
+  // This page never calls any sharing/permissions endpoint (createLink,
+  // invite, permissions) - no such call exists anywhere in this file.
+  // =====================================================================
+  let topFolder = null, targetFolder = null;
+  async function graph(path, method, body, kind) {
+    method = method || "GET";
+    const isFolderCreate = method === "POST" && topFolder &&
+      path === `/drives/${topFolder.driveId}/items/${topFolder.id}/children` &&
+      body && body.folder && body.name === SUB_FOLDER_NAME;
+    const isContentUpload = method === "PUT" && targetFolder &&
+      path.indexOf(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/`) === 0 &&
+      path.indexOf(":/content") !== -1;
+    if (method !== "GET" && !isFolderCreate && !isContentUpload) {
+      throw new Error("Blocked: this page can only create its own manifest folder and upload entries into it.");
+    }
+    const headers = { Authorization: "Bearer " + token };
+    let sendBody;
+    if (body !== undefined && body !== null) {
+      if (body instanceof Blob) { sendBody = body; headers["Content-Type"] = body.type || "application/octet-stream"; }
+      else { sendBody = JSON.stringify(body); headers["Content-Type"] = "application/json"; }
+    }
+    const res = await fetch("https://graph.microsoft.com/v1.0" + path, { method, headers, body: sendBody });
+    if (!res.ok) {
+      const txt = await res.text();
+      const err = new Error("OneDrive said " + res.status + ": " + txt.slice(0, 300));
+      err.status = res.status;
+      throw err;
+    }
+    if (res.status === 204) return null;
+    if (kind === "blob") return res.blob();
+    return res.json();
+  }
+
+  async function findFolderByName(name) {
+    const found = await graph(`/me/drive/root/search(q='${encodeURIComponent(name)}')?$select=id,name,folder,parentReference`);
+    const match = (found.value || []).find(i => i.folder && i.name === name);
+    return match ? { id: match.id, driveId: match.parentReference.driveId } : null;
+  }
+  async function findChildFolder(parent, name) {
+    const children = await graph(`/drives/${parent.driveId}/items/${parent.id}/children?$select=id,name,folder&$top=200`);
+    const match = (children.value || []).find(i => i.folder && i.name === name);
+    return match ? { id: match.id, driveId: parent.driveId } : null;
+  }
+  async function ensureTargetFolder() {
+    if (targetFolder) return targetFolder;
+    topFolder = await findFolderByName(TOP_FOLDER_NAME);
+    if (!topFolder) throw new Error('Could not find a folder named "' + TOP_FOLDER_NAME + '".');
+    let sub = await findChildFolder(topFolder, SUB_FOLDER_NAME);
+    if (!sub) {
+      const created = await graph(`/drives/${topFolder.driveId}/items/${topFolder.id}/children`, "POST",
+        { name: SUB_FOLDER_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "fail" });
+      sub = { id: created.id, driveId: topFolder.driveId };
+    }
+    targetFolder = sub;
+    return targetFolder;
+  }
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  // Timestamp-only base name (to the second) - Location/Product/Supplier are
+  // free text that can contain characters unsafe in filenames, so they live
+  // in a plain-text sidecar sharing this same base name instead of being
+  // encoded into it.
+  function baseFilenameFor(d) {
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "_" +
+      pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+  }
+
+  // Never overwrites: conflictBehavior=fail makes Graph itself refuse instead
+  // of silently replacing an existing file; on a 409 this tries the next
+  // "-2", "-3", ... suffix.
+  async function uploadContent(blob, baseName, ext) {
+    await ensureTargetFolder();
+    for (let suffix = 0; suffix <= 20; suffix++) {
+      const filename = (suffix === 0 ? baseName : baseName + "-" + (suffix + 1)) + ext;
+      const path = `/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:/content?@microsoft.graph.conflictBehavior=fail`;
+      try {
+        await graph(path, "PUT", blob);
+        return filename;
+      } catch (e) {
+        if (e.status === 409 && suffix < 20) continue;
+        throw e;
+      }
+    }
+  }
+
+  function entryTextFor(location, product, supplier) {
+    return "Location: " + location + "\nProduct: " + product + (supplier ? "\nSupplier: " + supplier : "");
+  }
+  function parseEntryText(text) {
+    const out = { location: "", product: "", supplier: "" };
+    String(text || "").split(/\r?\n/).forEach(line => {
+      const m = /^(Location|Product|Supplier):\s*(.*)$/.exec(line);
+      if (m) out[m[1].toLowerCase()] = m[2].trim();
+    });
+    return out;
+  }
+
+  async function listEntries() {
+    await ensureTargetFolder();
+    let url = `/drives/${targetFolder.driveId}/items/${targetFolder.id}/children?$select=name,file,lastModifiedDateTime&$top=200`;
+    const items = [];
+    while (url) {
+      const data = await graph(url);
+      items.push(...(data.value || []));
+      url = data["@odata.nextLink"] ? data["@odata.nextLink"].replace("https://graph.microsoft.com/v1.0", "") : null;
+    }
+    const jpgs = items.filter(i => i.file && /\.jpe?g$/i.test(i.name));
+    const texts = {};
+    items.filter(i => i.file && /\.txt$/i.test(i.name)).forEach(i => { texts[i.name.replace(/\.txt$/i, "")] = i; });
+    const entries = [];
+    for (const j of jpgs) {
+      const base = j.name.replace(/\.jpe?g$/i, "");
+      let meta = { location: "", product: "", supplier: "" };
+      if (texts[base]) {
+        try {
+          const blob = await graph(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(base + ".txt")}:/content`, "GET", null, "blob");
+          meta = parseEntryText(await blob.text());
+        } catch (e) { /* missing/unreadable sidecar - show the photo with blank fields rather than skip it */ }
+      }
+      entries.push({ filename: j.name, timestamp: new Date(j.lastModifiedDateTime).getTime(), location: meta.location, product: meta.product, supplier: meta.supplier });
+    }
+    entries.sort((a, b) => b.timestamp - a.timestamp);
+    return entries;
+  }
+  async function fetchEntryBlob(filename) {
+    await ensureTargetFolder();
+    return graph(`/drives/${targetFolder.driveId}/items/${targetFolder.id}:/${encodeURIComponent(filename)}:/content`, "GET", null, "blob");
+  }
+
+  // =====================================================================
+  // IMAGE RESIZE/COMPRESS (canvas only - no new dependency)
+  // =====================================================================
+  function loadImageFromFile(file) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = () => rej(new Error("Could not read that photo."));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  function canvasToBlob(canvas, quality) {
+    return new Promise(res => canvas.toBlob(res, "image/jpeg", quality));
+  }
+  async function resizeToJpeg(file) {
+    const img = await loadImageFromFile(file);
+    const scale = Math.min(1, MAX_WIDTH / img.width);
+    const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(img.src);
+    let quality = 0.85, blob = await canvasToBlob(canvas, quality);
+    while (blob.size > MAX_BYTES && quality > 0.35) {
+      quality -= 0.1;
+      blob = await canvasToBlob(canvas, quality);
+    }
+    return blob;
+  }
+
+  function showToast(msg, isErr) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.className = isErr ? "err" : "";
+    t.style.display = "block";
+    clearTimeout(showToast._h);
+    showToast._h = setTimeout(() => { t.style.display = "none"; }, 2200);
+  }
+
+  // =====================================================================
+  // STATE
+  // =====================================================================
+  let entries = [];
+  let capturedBlob = null;
+  let selectedSupplier = null;
+  let activeTab = "capture";
+
+  // =====================================================================
+  // CAPTURE TAB
+  // =====================================================================
+  function renderCapture() {
+    const el = $("capture");
+    el.innerHTML =
+      '<div class="field"><label>Location</label><input type="text" id="locationInput" placeholder="e.g. Z1C3"></div>' +
+      '<div class="field"><label>Product name</label><input type="text" id="productInput" placeholder="e.g. 7 1/2 x 192 Window Ext. Prime"></div>' +
+      '<div class="field"><label>Supplier (optional)</label><div class="suppliers">' + SUPPLIER_NAMES.map(n =>
+        '<button type="button" class="supplierBtn" data-name="' + esc(n) + '">' + esc(n) + "</button>"
+      ).join("") + "</div></div>" +
+      '<input type="file" accept="image/*" capture="environment" id="cameraInput" style="display:none">' +
+      '<button type="button" id="takePhotoBtn">Take Photo</button>' +
+      '<div id="previewArea"></div>';
+
+    $("locationInput").oninput = updateCaptureSubmitEnabled;
+    $("productInput").oninput = updateCaptureSubmitEnabled;
+    el.querySelectorAll(".supplierBtn").forEach(b => b.onclick = () => {
+      selectedSupplier = selectedSupplier === b.dataset.name ? null : b.dataset.name;
+      el.querySelectorAll(".supplierBtn").forEach(x => x.classList.toggle("sel", x.dataset.name === selectedSupplier));
+    });
+    $("takePhotoBtn").onclick = () => $("cameraInput").click();
+    $("cameraInput").onchange = onPhotoChosen;
+  }
+
+  async function onPhotoChosen(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    $("takePhotoBtn").disabled = true;
+    $("takePhotoBtn").textContent = "Processing…";
+    try {
+      capturedBlob = await resizeToJpeg(file);
+      renderPreview();
+    } catch (err) {
+      showToast("Could not process that photo: " + err.message, true);
+    } finally {
+      $("takePhotoBtn").disabled = false;
+      $("takePhotoBtn").textContent = "Take Photo";
+      e.target.value = "";
+    }
+  }
+  function renderPreview() {
+    const url = URL.createObjectURL(capturedBlob);
+    $("previewArea").innerHTML =
+      '<div class="previewWrap"><img src="' + url + '"></div>' +
+      '<div class="row2"><button type="button" id="retakeBtn">Retake</button>' +
+      '<button type="button" id="submitPhotoBtn">Save</button></div>';
+    $("retakeBtn").onclick = () => { capturedBlob = null; $("previewArea").innerHTML = ""; };
+    $("submitPhotoBtn").onclick = submitEntry;
+    updateCaptureSubmitEnabled();
+  }
+  function updateCaptureSubmitEnabled() {
+    const btn = $("submitPhotoBtn");
+    if (!btn) return;
+    const loc = $("locationInput").value.trim(), prod = $("productInput").value.trim();
+    btn.disabled = !loc || !prod || !capturedBlob;
+  }
+
+  async function submitEntry() {
+    const location = $("locationInput").value.trim(), product = $("productInput").value.trim();
+    if (!location || !product || !capturedBlob) { showToast("Fill in location and product name, and take a photo first", true); return; }
+    const btn = $("submitPhotoBtn");
+    btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const base = baseFilenameFor(new Date());
+      const photoName = await uploadContent(capturedBlob, base, ".jpg");
+      const baseNoExt = photoName.replace(/\.jpg$/i, "");
+      const text = entryTextFor(location, product, selectedSupplier);
+      await uploadContent(new Blob([text], { type: "text/plain" }), baseNoExt, ".txt");
+      entries.unshift({ filename: photoName, timestamp: Date.now(), location, product, supplier: selectedSupplier || "" });
+      capturedBlob = null;
+      $("previewArea").innerHTML = "";
+      $("locationInput").value = "";
+      $("productInput").value = "";
+      selectedSupplier = null;
+      document.querySelectorAll(".supplierBtn").forEach(x => x.classList.remove("sel"));
+      showToast("Saved — " + location + " / " + product);
+    } catch (e) {
+      showToast("Could not save: " + e.message, true);
+      btn.disabled = false; btn.textContent = "Save";
+    }
+  }
+
+  // =====================================================================
+  // LIST TAB
+  // =====================================================================
+  function fmtWhen(ts) {
+    const d = new Date(ts);
+    return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  function renderList() {
+    const el = $("list");
+    if (!entries.length) {
+      el.innerHTML = '<div style="display:flex;justify-content:flex-end"><button type="button" id="refreshListBtn">Refresh</button></div><div class="empty">No entries yet.</div>';
+      $("refreshListBtn").onclick = refreshList;
+      return;
+    }
+    el.innerHTML = '<div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button type="button" id="refreshListBtn">Refresh</button></div>' +
+      entries.map((e, i) =>
+        '<div class="entryRow" data-i="' + i + '"><div class="main">' +
+        '<div class="loc">' + esc(e.location || "(no location)") + "</div>" +
+        '<div class="prod">' + esc(e.product || "(no product name)") + "</div>" +
+        '<div class="meta">' + (e.supplier ? esc(e.supplier) + " &middot; " : "") + fmtWhen(e.timestamp) + "</div>" +
+        "</div></div>"
+      ).join("");
+    $("refreshListBtn").onclick = refreshList;
+    el.querySelectorAll(".entryRow").forEach(row => row.onclick = () => openViewer(+row.dataset.i));
+  }
+  async function refreshList() {
+    $("list").innerHTML = '<div class="empty">Loading entries from OneDrive&hellip;</div>';
+    try {
+      entries = await listEntries();
+      renderList();
+    } catch (e) {
+      if (e.status === 401) { showSignInNeeded("Your sign-in expired. Please sign in again."); return; }
+      if (e.status === 403 || e.status === 404) {
+        $("list").innerHTML = '<div class="empty">You don\'t have access to this folder.</div>';
+        return;
+      }
+      $("list").innerHTML = '<div class="empty">Could not load entries: ' + esc(e.message) + "</div>";
+    }
+  }
+  async function openViewer(i) {
+    const e = entries[i];
+    const viewer = document.createElement("div");
+    viewer.className = "viewer";
+    viewer.innerHTML = '<button type="button" id="closeViewerBtn">&times;</button><img id="viewerImg">' +
+      '<div class="viewerInfo"><div class="loc">' + esc(e.location || "(no location)") + '</div>' +
+      '<div class="prod">' + esc(e.product || "(no product name)") + '</div>' +
+      '<div class="meta">' + (e.supplier ? esc(e.supplier) + " &middot; " : "") + esc(fmtWhen(e.timestamp)) + "</div></div>";
+    document.body.appendChild(viewer);
+    viewer.querySelector("#closeViewerBtn").onclick = () => viewer.remove();
+    try {
+      const blob = await fetchEntryBlob(e.filename);
+      viewer.querySelector("#viewerImg").src = URL.createObjectURL(blob);
+    } catch (err) { showToast("Could not load photo: " + err.message, true); }
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    $("tabCapture").classList.toggle("active", tab === "capture");
+    $("tabList").classList.toggle("active", tab === "list");
+    $("capture").className = tab === "capture" ? "show" : "";
+    $("list").className = tab === "list" ? "show" : "";
+    if (tab === "list") refreshList();
+  }
+  $("tabCapture").onclick = () => switchTab("capture");
+  $("tabList").onclick = () => switchTab("list");
+
+  async function boot() {
+    const signedIn = await trySilent();
+    if (!signedIn) {
+      showSignInNeeded("Sign in with your work Microsoft account to use Manifest.");
+      return;
+    }
+    $("src").textContent = "CONNECTED";
+    $("src").className = "badge live";
+    $("auth").style.display = "none";
+    $("tabs").style.display = "flex";
+    renderCapture();
+    switchTab("capture");
+  }
+
+  boot();
+})();
+</script>
+</body></html>
