@@ -48,6 +48,7 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 .entryRow .prod{font-size:14px;font-weight:600;margin-top:2px}
 .entryRow .meta{font-size:11px;color:#5b6b7c;margin-top:2px}
 #refreshListBtn{font-size:13px;padding:6px 12px;border:1px solid #9aa7b5;background:#fff;color:#1d2733;border-radius:14px}
+#buildInfo{padding:5px 16px;font-size:11px;color:#8a97a3;background:#fff;border-bottom:1px solid #eef2f6}
 .viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;z-index:50}
 .viewer img{flex:1;width:100%;object-fit:contain;min-height:0}
 .viewer .viewerInfo{background:#fff;padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
@@ -57,6 +58,10 @@ header{background:#1d2733;color:#fff;padding:calc(10px + env(safe-area-inset-top
 #closeViewerBtn{position:absolute;top:calc(10px + env(safe-area-inset-top));right:14px;font-size:20px;font-weight:700;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:36px;height:36px}
 </style></head><body>
 <header><span>Manifest</span><span id="src" class="badge off">NOT CONNECTED</span></header>
+<!-- Update this line's text with every push, so a glance at the live page
+     tells you (and whoever's testing on their phone) whether it's actually
+     running the latest version or a stale cached copy. -->
+<div id="buildInfo">Build: 2026-11-27 — crop step added</div>
 <div id="toast"></div>
 <div id="auth">
   <div id="status">Loading...</div>
